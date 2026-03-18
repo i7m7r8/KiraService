@@ -1,15 +1,10 @@
-plugins {
-    id 'com.android.application'
-}
+plugins { id 'com.android.application' }
 
-// Compute versionCode OUTSIDE android block so Groovy resolves it correctly
-// Minutes since 2024-01-01 00:00:00 UTC - always increases each build
 def buildVersionCode = (int) ((System.currentTimeMillis() - 1704067200000L) / 60000L)
 
 android {
     compileSdk 34
     namespace 'com.kira.service'
-
     defaultConfig {
         applicationId "com.kira.service"
         minSdk 26
@@ -19,34 +14,25 @@ android {
         ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         externalNativeBuild { cmake { cppFlags "" } }
     }
-
     externalNativeBuild {
         cmake { path "src/main/jni/CMakeLists.txt"; version "3.22.1" }
     }
-
     buildTypes {
         debug   { debuggable true }
         release { minifyEnabled false; signingConfig signingConfigs.debug }
     }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
-
     packagingOptions {
         jniLibs { useLegacyPackaging true }
         resources {
-            excludes += ['META-INF/INDEX.LIST',
-                         'META-INF/io.netty.versions.properties',
-                         'META-INF/DEPENDENCIES',
-                         'META-INF/LICENSE.md',
-                         'META-INF/NOTICE.md',
-                         'META-INF/LICENSE',
-                         'META-INF/NOTICE']
+            excludes += ['META-INF/INDEX.LIST','META-INF/io.netty.versions.properties',
+                         'META-INF/DEPENDENCIES','META-INF/LICENSE.md','META-INF/NOTICE.md',
+                         'META-INF/LICENSE','META-INF/NOTICE']
         }
     }
-
     configurations.all {
         exclude group: 'org.jetbrains', module: 'annotations-java5'
         resolutionStrategy { force 'org.jetbrains:annotations:23.0.0' }
@@ -54,27 +40,54 @@ android {
 }
 
 dependencies {
+    // Core Android Agent
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
+
+    // HTTP (AI APIs + web)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+
+    // JSON
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Markdown rendering
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
     implementation 'io.noties.markwon:ext-tables:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
+
+    // Background work
     implementation 'androidx.work:work-runtime:2.9.0'
+
+    // Local database (conversation history, task logs)
     implementation 'androidx.room:room-runtime:2.6.1'
     annotationProcessor 'androidx.room:room-compiler:2.6.1'
+
+    // HTML parsing / web scraping
     implementation 'org.jsoup:jsoup:1.17.2'
+
+    // Utilities
     implementation 'commons-io:commons-io:2.15.1'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
+
+    // OpenClaw EventBus (component messaging)
     implementation 'org.greenrobot:eventbus:3.3.1'
-    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
-    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+
+    // Security: AES256-GCM credential storage
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // Settings and preferences
     implementation 'androidx.preference:preference:1.2.1'
+
+    // Biometric auth gate
     implementation 'androidx.biometric:biometric:1.1.0'
+
+    // On-device OCR (ZeroClaw vision without internet)
     implementation 'com.google.mlkit:text-recognition:16.0.1'
+
+    // Memory leak detection (debug only)
     debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.12'
 }

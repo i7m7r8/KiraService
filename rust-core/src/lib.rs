@@ -121,6 +121,15 @@ struct KiraState {
     task_log:          VecDeque<TaskStep>,
     checkpoints:       HashMap<String, String>,
 
+    // Rou Bao: streaming
+    stream_chunks:     VecDeque<StreamChunk>,
+    stream_sessions:   HashMap<String, StreamSession>,
+    // ZeroClaw: response cache
+    response_cache:    HashMap<String, CacheEntry>,
+    // OpenClaw: knowledge base
+    knowledge_base:    Vec<KbEntry>,
+    // OpenClaw: event feed
+    event_feed:        VecDeque<EventFeedEntry>,
     // Stats
     uptime_start:      u128,
     request_count:     u64,
@@ -246,6 +255,22 @@ struct TaskStep {
 }
 
 // ??? Global State ?????????????????????????????????????????????????????????????
+
+
+// Rou Bao streaming structs
+#[derive(Clone, Default)]
+struct StreamChunk { session_id: String, text: String, done: bool, ts: u128 }
+#[derive(Clone, Default)]
+struct StreamSession { id: String, active: bool, started: u128, chunks: u32 }
+// ZeroClaw cache
+#[derive(Clone)]
+struct CacheEntry { value: String, expires_at: u128 }
+// OpenClaw knowledge base
+#[derive(Clone)]
+struct KbEntry { id: String, title: String, content: String, tags: Vec<String>, ts: u128 }
+// OpenClaw event feed
+#[derive(Clone)]
+struct EventFeedEntry { event: String, data: String, ts: u128 }
 
 lazy_static::lazy_static! {
     static ref STATE: Arc<Mutex<KiraState>> = Arc::new(Mutex::new(KiraState {
@@ -866,6 +891,129 @@ fn get_credential(body: &str) -> String {
         }
         None => format!(r#"{{"error":"credential '{}' not found"}}"#, esc(&name))
     }
+}
+
+
+// --- Rou Bao streaming ---
+fn stream_poll() -> String {
+    let mut s = STATE.lock().unwrap();
+    let chunks: Vec<String> = s.stream_chunks.drain(..)
+        .map(|c| format!(r#"{{"session_id":"{}","text":"{}","done":{},"ts":{}}}"#, esc(&c.session_id), esc(&c.text), c.done, c.ts))
+        .collect();
+    format!("[{}]", chunks.join(","))
+}
+fn push_stream_chunk(text: &str) {
+    let mut s = STATE.lock().unwrap();
+    let sid = s.active_session.clone();
+    s.stream_chunks.push_back(StreamChunk { session_id: sid, text: text.to_string(), done: false, ts: now_ms() });
+    if s.stream_chunks.len() > 1000 { s.stream_chunks.pop_front(); }
+}
+fn begin_stream(sid: &str) {
+    STATE.lock().unwrap().stream_sessions.insert(sid.to_string(), StreamSession { id: sid.to_string(), active: true, started: now_ms(), chunks: 0 });
+}
+fn end_stream(sid: &str) {
+    let mut s = STATE.lock().unwrap();
+    s.stream_chunks.push_back(StreamChunk { session_id: sid.to_string(), text: String::new(), done: true, ts: now_ms() });
+    if let Some(sess) = s.stream_sessions.get_mut(sid) { sess.active = false; }
+}
+// --- OpenClaw relay ---
+fn relay_msg(body: &str) -> String {
+    let ch  = extract_json_str(body,"channel").unwrap_or_default();
+    let msg = extract_json_str(body,"message").unwrap_or_default();
+    let ts  = now_ms();
+    STATE.lock().unwrap().webhook_events.push_back(format!(r#"{{"type":"relay","channel":"{}","message":"{}","ts":{}}}"#, esc(&ch), esc(&msg), ts));
+    r#"{"ok":true}"#.to_string()
+}
+// --- ZeroClaw cache ---
+fn cache_get(path: &str) -> String {
+    let key = path.find("key=").map(|i| &path[i+4..]).unwrap_or("").split('&').next().unwrap_or("");
+    let s = STATE.lock().unwrap();
+    let now = now_ms();
+    match s.response_cache.get(key) {
+        Some(e) if e.expires_at > now => format!(r#"{{"key":"{}","value":"{}","ttl":{}}}"#, esc(key), esc(&e.value), e.expires_at - now),
+        Some(_) => r#"{"error":"expired"}"#.to_string(),
+        None    => r#"{"error":"not_found"}"#.to_string(),
+    }
+}
+fn cache_post(body: &str) -> String {
+    let k   = extract_json_str(body,"key").unwrap_or_default();
+    let v   = extract_json_str(body,"value").unwrap_or_default();
+    let ttl = extract_json_str(body,"ttl_ms").and_then(|s| s.parse::<u128>().ok()).unwrap_or(300000);
+    let exp = now_ms() + ttl;
+    STATE.lock().unwrap().response_cache.insert(k, CacheEntry { value: v, expires_at: exp });
+    r#"{"ok":true}"#.to_string()
+}
+// --- NanoClaw budget ---
+fn get_budget_json() -> String {
+    let s = STATE.lock().unwrap();
+    let items: Vec<String> = s.tool_iterations.iter()
+        .map(|(k,v)| format!(r#"{{"session":"{}","used":{},"remaining":{}}}"#, esc(k), v, s.max_tool_iters.saturating_sub(*v)))
+        .collect();
+    format!(r#"{{"max":{},"sessions":[{}]}}"#, s.max_tool_iters, items.join(","))
+}
+// --- OpenClaw knowledge base ---
+fn get_kb_json() -> String {
+    let s = STATE.lock().unwrap();
+    let items: Vec<String> = s.knowledge_base.iter()
+        .map(|e| format!(r#"{{"id":"{}","title":"{}","snippet":"{}","tags":[{}],"ts":{}}}"#,
+            esc(&e.id), esc(&e.title),
+            esc(&e.content[..e.content.len().min(100)]),
+            e.tags.iter().map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(","),
+            e.ts))
+        .collect();
+    format!("[{}]", items.join(","))
+}
+fn add_kb_entry(body: &str) {
+    let id      = extract_json_str(body,"id").unwrap_or_else(gen_id);
+    let title   = extract_json_str(body,"title").unwrap_or_default();
+    let content = extract_json_str(body,"content").unwrap_or_default();
+    let tags_s  = extract_json_str(body,"tags").unwrap_or_default();
+    let tags: Vec<String> = tags_s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+    let mut s   = STATE.lock().unwrap();
+    s.knowledge_base.retain(|e| e.id != id);
+    s.knowledge_base.push(KbEntry { id, title, content, tags, ts: now_ms() });
+    if s.knowledge_base.len() > 10000 { s.knowledge_base.remove(0); }
+}
+fn kb_search(path: &str) -> String {
+    let query = path.find("q=").map(|i| &path[i+2..]).unwrap_or("").to_lowercase();
+    let s = STATE.lock().unwrap();
+    let mut results: Vec<(u32, &KbEntry)> = s.knowledge_base.iter().filter_map(|e| {
+        let mut score = 0u32;
+        if e.title.to_lowercase().contains(&query) { score += 10; }
+        if e.content.to_lowercase().contains(&query) { score += 5; }
+        for tag in &e.tags { if tag.to_lowercase().contains(&query) { score += 3; } }
+        if score > 0 { Some((score, e)) } else { None }
+    }).collect();
+    results.sort_by(|a,b| b.0.cmp(&a.0));
+    let items: Vec<String> = results.iter().take(10).map(|(sc,e)|
+        format!(r#"{{"id":"{}","title":"{}","content":"{}","score":{}}}"#,
+            esc(&e.id), esc(&e.title), esc(&e.content[..e.content.len().min(300)]), sc))
+        .collect();
+    format!("[{}]", items.join(","))
+}
+// --- ZeroClaw Prometheus metrics ---
+fn get_metrics_text() -> String {
+    let s = STATE.lock().unwrap();
+    format!(
+        "kira_uptime_ms {}\nkira_requests_total {}\nkira_tool_calls {}\nkira_notifications {}\nkira_memory_entries {}\nkira_battery {}\nkira_skills {}\nkira_kb_entries {}\nkira_event_feed {}\n",
+        now_ms()-s.uptime_start, s.request_count, s.tool_call_count,
+        s.notifications.len(), s.memory_index.len(), s.battery_pct,
+        s.skills.len(), s.knowledge_base.len(), s.event_feed.len()
+    )
+}
+// --- OpenClaw event feed ---
+fn get_event_feed() -> String {
+    let s = STATE.lock().unwrap();
+    let skip = s.event_feed.len().saturating_sub(100);
+    let items: Vec<String> = s.event_feed.iter().skip(skip)
+        .map(|e| format!(r#"{{"event":"{}","data":"{}","ts":{}}}"#, esc(&e.event), esc(&e.data), e.ts))
+        .collect();
+    format!("[{}]", items.join(","))
+}
+fn push_event_feed(event: &str, data: &str) {
+    let mut s = STATE.lock().unwrap();
+    s.event_feed.push_back(EventFeedEntry { event: event.to_string(), data: data.to_string(), ts: now_ms() });
+    if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
 }
 
 fn make_providers() -> Vec<Provider> {

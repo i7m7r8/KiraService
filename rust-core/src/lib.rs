@@ -163,8 +163,8 @@ fn route(method: &str, path: &str, body: &str) -> String {
             let s = STATE.lock().unwrap();
             format!("[{}]", s.notifications.iter().cloned().collect::<Vec<_>>().join(","))
         },
-        // All accessibility commands → queue to Java
-        ("POST", _) | ("GET", _)   => {
+        // All other commands → queue to Java
+        (_, _)   => {
             let endpoint = &path[1..];
             let id = gen_id();
             let cmd_body = if body.is_empty() { "{}".to_string() } else { body.to_string() };

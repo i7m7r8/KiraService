@@ -1,32 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#0f0f0f">
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#0a0a0a">
 
-    <FrameLayout
-        android:id="@+id/contentFrame"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+    <FrameLayout android:id="@+id/contentFrame"
+        android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1"/>
 
-    <!-- Bottom Nav -->
-    <LinearLayout
-        android:id="@+id/bottomNav"
-        android:layout_width="match_parent"
-        android:layout_height="68dp"
-        android:orientation="horizontal"
-        android:background="#1a1a1a"
-        android:paddingBottom="4dp"
-        android:paddingTop="4dp">
+    <LinearLayout android:id="@+id/bottomNav"
+        android:layout_width="match_parent" android:layout_height="68dp"
+        android:orientation="horizontal" android:background="#141414"
+        android:paddingBottom="4dp" android:paddingTop="4dp">
 
         <LinearLayout android:id="@+id/navHome"
             android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
             android:orientation="vertical" android:gravity="center"
             android:clickable="true" android:focusable="true">
             <TextView android:layout_width="28dp" android:layout_height="28dp"
-                android:text="*" android:textSize="20sp" android:gravity="center"
+                android:text="&#x2302;" android:textSize="20sp" android:gravity="center"
                 android:textColor="#ff8c00" android:id="@+id/navHomeIcon"/>
             <TextView android:id="@+id/navHomeText" android:layout_width="wrap_content"
                 android:layout_height="wrap_content" android:text="Kira"
@@ -38,7 +29,7 @@
             android:orientation="vertical" android:gravity="center"
             android:clickable="true" android:focusable="true">
             <TextView android:layout_width="28dp" android:layout_height="28dp"
-                android:text="*" android:textSize="20sp" android:gravity="center"
+                android:text="&#x2605;" android:textSize="20sp" android:gravity="center"
                 android:textColor="#666666" android:id="@+id/navAbilitiesIcon"/>
             <TextView android:id="@+id/navAbilitiesText" android:layout_width="wrap_content"
                 android:layout_height="wrap_content" android:text="Tools"
@@ -50,7 +41,7 @@
             android:orientation="vertical" android:gravity="center"
             android:clickable="true" android:focusable="true">
             <TextView android:layout_width="28dp" android:layout_height="28dp"
-                android:text="*" android:textSize="20sp" android:gravity="center"
+                android:text="&#x2630;" android:textSize="20sp" android:gravity="center"
                 android:textColor="#666666" android:id="@+id/navHistoryIcon"/>
             <TextView android:id="@+id/navHistoryText" android:layout_width="wrap_content"
                 android:layout_height="wrap_content" android:text="History"
@@ -62,7 +53,7 @@
             android:orientation="vertical" android:gravity="center"
             android:clickable="true" android:focusable="true">
             <TextView android:layout_width="28dp" android:layout_height="28dp"
-                android:text="*" android:textSize="20sp" android:gravity="center"
+                android:text="&#x2699;" android:textSize="20sp" android:gravity="center"
                 android:textColor="#666666" android:id="@+id/navSettingsIcon"/>
             <TextView android:id="@+id/navSettingsText" android:layout_width="wrap_content"
                 android:layout_height="wrap_content" android:text="Settings"

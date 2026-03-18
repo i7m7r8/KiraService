@@ -10,8 +10,8 @@ android {
         applicationId "com.kira.service"
         minSdk 26
         targetSdk 34
-        versionCode 6
-        versionName "6.0.0"
+        versionCode 7
+        versionName "7.0.0"
         ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         externalNativeBuild { cmake { cppFlags "" } }
     }
@@ -33,12 +33,11 @@ android {
     packagingOptions {
         jniLibs { useLegacyPackaging true }
         resources {
-            excludes += ['META-INF/INDEX.LIST','META-INF/io.netty.versions.properties',
-                         'META-INF/DEPENDENCIES','META-INF/LICENSE','META-INF/NOTICE']
+            excludes += ['META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
+                         'META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/NOTICE']
         }
     }
 
-    // Nuke the duplicate annotations-java5 globally
     configurations.all {
         exclude group: 'org.jetbrains', module: 'annotations-java5'
         resolutionStrategy {
@@ -48,28 +47,43 @@ android {
 }
 
 dependencies {
-    // Shizuku
+    // Shizuku - ADB-level shell access (no root needed)
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
 
-    // OkHttp
+    // OkHttp - reliable HTTP for AI API + Telegram + web requests
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
 
-    // Gson
+    // Gson - JSON serialization
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // Markwon — core only, no syntax-highlight (that pulls annotations-java5)
+    // Markwon - full Markdown rendering in chat
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
     implementation 'io.noties.markwon:ext-tables:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
 
-    // WorkManager
+    // WorkManager - background scheduled tasks
     implementation 'androidx.work:work-runtime:2.9.0'
 
-    // Jsoup
+    // Room - local SQLite database (conversation history, task logs)
+    implementation 'androidx.room:room-runtime:2.6.1'
+    annotationProcessor 'androidx.room:room-compiler:2.6.1'
+
+    // Jsoup - web scraping / HTML parsing
     implementation 'org.jsoup:jsoup:1.17.2'
 
-    // Commons IO
+    // Commons IO - file utilities
     implementation 'commons-io:commons-io:2.15.1'
+
+    // Apache Commons Lang - string utils
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
+
+    // EventBus - component communication (NanoBot event system)
+    implementation 'org.greenrobot:eventbus:3.3.1'
+
+    // Retrofit - type-safe HTTP (for structured API calls)
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
 }

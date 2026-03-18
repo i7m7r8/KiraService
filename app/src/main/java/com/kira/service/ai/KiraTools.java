@@ -208,6 +208,46 @@ public class KiraTools {
                 case "list_watches":  { return ShizukuShell.exec("echo watches active"); }
                 case "stop_watch":    { RustBridge.removeTrigger(args.getString("id")); return "stopped watch: " + args.getString("id"); }
 
+
+                // OpenClaw event system
+                case "post_event":    { com.kira.service.KiraEventBus.post(new com.kira.service.KiraEventBus.AgentStarted(args.optString("goal","custom"))); return "event posted"; }
+                // NanoBot context tools
+                case "set_context":   { memory.remember("_agent_context", args.getString("text")); com.kira.service.RustBridge.updateAgentContext(args.getString("text")); return "context set"; }
+                case "get_context":   return memory.recall("_agent_context");
+                case "task_log":      return getTaskLog();
+                case "task_status":   return getTaskLog();
+                // Extended shell
+                case "sh_broadcast":  return ShizukuShell.exec("am broadcast -a " + args.getString("action") + " " + args.optString("extras","") + " 2>&1");
+                case "sh_service":    return ShizukuShell.exec("am startservice " + args.optString("pkg","") + "/" + args.getString("class") + " 2>&1");
+                case "sh_activity":   return ShizukuShell.exec("am start -n " + args.getString("component") + " 2>&1");
+                case "sh_input_text": return ShizukuShell.exec("input text '" + args.getString("text").replace("'","").replace(" ","%s") + "'");
+                case "sh_back":       return ShizukuShell.exec("input keyevent 4");
+                case "sh_home":       return ShizukuShell.exec("input keyevent 3");
+                case "sh_recents":    return ShizukuShell.exec("input keyevent 187");
+                case "sh_lock":       return ShizukuShell.exec("input keyevent 26");
+                case "sh_wakeup":     return ShizukuShell.exec("input keyevent 224");
+                case "sh_vol_up":     return ShizukuShell.exec("input keyevent 24");
+                case "sh_vol_down":   return ShizukuShell.exec("input keyevent 25");
+                case "sh_mute":       return ShizukuShell.exec("input keyevent 164");
+                case "sh_brightness": return ShizukuShell.exec("settings put system screen_brightness " + (int)(args.optInt("level",50) * 2.55));
+                case "sh_dnd":        return ShizukuShell.exec("cmd notification set_dnd " + (args.optBoolean("on",true) ? "on" : "off") + " 2>&1");
+                case "sh_rotation":   return ShizukuShell.exec("settings put system accelerometer_rotation " + (args.optBoolean("auto",true) ? "1" : "0"));
+                case "sh_font_scale": return ShizukuShell.exec("settings put system font_scale " + args.optString("scale","1.0"));
+                case "sh_battery_saver": return ShizukuShell.exec("settings put global low_power " + (args.optBoolean("on",true) ? "1" : "0"));
+                case "sh_wifi_scan":  return ShizukuShell.exec("cmd wifi start-scan && sleep 1 && cmd wifi list-scan-results 2>&1 | head -20");
+                case "sh_bluetooth":  return ShizukuShell.exec("svc bluetooth " + (args.optBoolean("on",true) ? "enable" : "disable") + " 2>&1");
+                case "sh_nfc":        return ShizukuShell.exec("svc nfc " + (args.optBoolean("on",true) ? "enable" : "disable") + " 2>&1");
+                case "sh_hotspot":    return ShizukuShell.exec("cmd connectivity tether wifi " + (args.optBoolean("on",true) ? "start" : "stop") + " 2>&1");
+                case "sh_clear_app":  return ShizukuShell.exec("pm clear " + args.getString("package") + " 2>&1");
+                case "sh_app_info":   return ShizukuShell.exec("dumpsys package " + args.getString("package") + " | grep -E 'versionName|firstInstallTime|lastUpdateTime|dataDir' | head -8");
+                case "sh_cpu_info":   return ShizukuShell.exec("cat /proc/cpuinfo | grep -E 'processor|model name|Hardware' | head -10");
+                case "sh_ram_info":   return ShizukuShell.exec("cat /proc/meminfo | head -8");
+                case "sh_storage":    return ShizukuShell.exec("df -h 2>&1 | head -8");
+                case "sh_netstat":    return ShizukuShell.exec("ss -tuln 2>/dev/null || netstat -tuln 2>/dev/null | head -15");
+                case "sh_ps":         return ShizukuShell.exec("ps -A 2>/dev/null | head -20 || ps | head -20");
+                case "sh_ifconfig":   return ShizukuShell.exec("ifconfig 2>/dev/null || ip addr show 2>/dev/null | head -20");
+                case "sh_crontab":    { String cmd = "echo '" + args.getString("cmd") + "' >> /sdcard/kira_cron.sh && chmod +x /sdcard/kira_cron.sh"; return ShizukuShell.exec(cmd); }
+
                 // Vision (ZeroClaw-style)
                 case "analyze_screen": return analyzeScreen(args.optString("question", ""));
                 case "find_element":   return findAndTapVisual(args.getString("description"));
@@ -681,6 +721,18 @@ public class KiraTools {
             return "found and tapped: " + description + " at (" + coords[0] + "," + coords[1] + ")";
         }
         return "element not found visually: " + description;
+    }
+
+
+    private String getTaskLog() {
+        try {
+            String result = new okhttp3.OkHttpClient().newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070/task_log").build()
+            ).execute().body().string();
+            return result.length() > 500 ? result.substring(0, 500) + "..." : result;
+        } catch (Exception e) {
+            return "task log unavailable: " + e.getMessage();
+        }
     }
 
     public String getToolList() {

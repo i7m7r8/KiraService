@@ -46,7 +46,6 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="message kira..."
-            android:hintTextColor="#555555"
             android:textColor="#ffffff"
             android:background="#1a1a1a"
             android:padding="10dp"

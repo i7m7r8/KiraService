@@ -37,7 +37,7 @@ import android.util.Log;
 import java.util.Random;
 
 /**
- * KiraService v38 — Setup wizard.
+ * KiraService v38 \u2014 Setup wizard.
  * Neon crimson UI + animated star field (tilts with accelerometer) +
  * custom AI provider support.
  */
@@ -52,7 +52,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         "Any sufficiently advanced technology is indistinguishable from magic.",
         "We build the gods. We choose what they remember.",
         "The real problem is not whether machines think but whether men do.",
-        "You have power over your mind — not outside events.",
+        "You have power over your mind \u2014 not outside events.",
         "Do not wait to strike till the iron is hot; make it hot by striking.",
         "The secret of getting ahead is getting started.",
         "Build something worthy of the future you imagine.",
@@ -86,6 +86,11 @@ public class SetupActivity extends Activity implements SensorEventListener {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Skip setup if already done
+        if (com.kira.service.ai.KiraConfig.load(this).setupDone) {
+            startActivity(new android.content.Intent(this, MainActivity.class));
+            finish(); return;
+        }
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(C_BG);
@@ -185,7 +190,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
 
     @Override public void onAccuracyChanged(Sensor s, int a) {}
 
-    // ── Star field ────────────────────────────────────────────────────────────
+    // \u2500\u2500 Star field \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     static class StarFieldView extends View {
         private static final int N = 110;
@@ -238,7 +243,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         }
     }
 
-    // ── Pages ─────────────────────────────────────────────────────────────────
+    // \u2500\u2500 Pages \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     private View buildPage(int page) {
         switch (page) {
@@ -359,7 +364,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
             {"Custom \u270E", "custom"},
         };
 
-        // Custom URL field — hidden until Custom is tapped
+        // Custom URL field \u2014 hidden until Custom is tapped
         EditText customUrl = inputField("https://your-server/v1", false);
         customUrl.setTag("customUrlInput");
         customUrl.setVisibility(View.GONE);
@@ -438,7 +443,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         root.addView(pageIcon("\uD83D\uDC64"));
         root.addView(bigText("What's your name?"));
         root.addView(hint("Kira will use this to personalise\nyour experience."));
-        EditText input = inputField("Your name…", false);
+        EditText input = inputField("Your name\u2026", false);
         input.setTag("nameInput");
         if (!cfg.userName.isEmpty() && !cfg.userName.equals("User"))
             input.setText(cfg.userName);
@@ -455,7 +460,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         tipIcon.setTextSize(16);
         tipIcon.setPadding(0, 0, dp(10), 0);
         TextView tipText = new TextView(this);
-        tipText.setText("Say \"remember my name is …\" and Kira will never forget it across sessions.");
+        tipText.setText("Say \"remember my name is \u2026\" and Kira will never forget it across sessions.");
         tipText.setTextColor(0xFF445533);
         tipText.setTextSize(12);
         tipText.setLineSpacing(0, 1.4f);
@@ -475,14 +480,14 @@ public class SetupActivity extends Activity implements SensorEventListener {
         root.addView(hint("The AI model Kira will use.\nFast models respond in milliseconds."));
 
         String[][] models = {
-            {"llama-3.1-8b-instant",    "Groq · ultrafast, free"},
-            {"llama-3.3-70b-versatile", "Groq · smarter, free"},
-            {"gpt-4o-mini",             "OpenAI · balanced"},
-            {"claude-3-haiku-20240307", "Anthropic · precise"},
-            {"gemini-2.0-flash",        "Google · multimodal"},
-            {"deepseek-chat",           "DeepSeek · powerful"},
-            {"mistral-7b-instruct",     "Mistral · lean"},
-            {"openrouter/auto",         "OpenRouter · auto-route"},
+            {"llama-3.1-8b-instant",    "Groq \u00B7 ultrafast, free"},
+            {"llama-3.3-70b-versatile", "Groq \u00B7 smarter, free"},
+            {"gpt-4o-mini",             "OpenAI \u00B7 balanced"},
+            {"claude-3-haiku-20240307", "Anthropic \u00B7 precise"},
+            {"gemini-2.0-flash",        "Google \u00B7 multimodal"},
+            {"deepseek-chat",           "DeepSeek \u00B7 powerful"},
+            {"mistral-7b-instruct",     "Mistral \u00B7 lean"},
+            {"openrouter/auto",         "OpenRouter \u00B7 auto-route"},
         };
 
         LinearLayout modelList = new LinearLayout(this);
@@ -559,14 +564,14 @@ public class SetupActivity extends Activity implements SensorEventListener {
         LinearLayout root = pageRoot();
         root.addView(pageIcon("\u2708"));
         root.addView(bigText("Telegram Bot"));
-        root.addView(hint("Control Kira remotely.\nOptional — you can skip this."));
-        root.addView(sectionLabel("Bot Token  ·  get from @BotFather"));
-        EditText tgIn = inputField("123456:ABC-DEF…", false);
+        root.addView(hint("Control Kira remotely.\nOptional \u2014 you can skip this."));
+        root.addView(sectionLabel("Bot Token  \u00B7  get from @BotFather"));
+        EditText tgIn = inputField("123456:ABC-DEF\u2026", false);
         tgIn.setTag("tgInput");
         if (!cfg.tgToken.isEmpty())
-            tgIn.setText(cfg.tgToken.substring(0, Math.min(10, cfg.tgToken.length())) + "…");
+            tgIn.setText(cfg.tgToken.substring(0, Math.min(10, cfg.tgToken.length())) + "\u2026");
         root.addView(tgIn);
-        root.addView(sectionLabel("Your Telegram ID  ·  get from @userinfobot"));
+        root.addView(sectionLabel("Your Telegram ID  \u00B7  get from @userinfobot"));
         EditText tgIdIn = inputField("0 = anyone can use", true);
         tgIdIn.setTag("tgIdInput");
         if (cfg.tgAllowed > 0) tgIdIn.setText(String.valueOf(cfg.tgAllowed));
@@ -630,7 +635,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         LinearLayout.LayoutParams srp = new LinearLayout.LayoutParams(MATCH, WRAP);
         srp.setMargins(dp(24), dp(32), dp(24), 0);
         statsRow.setLayoutParams(srp);
-        for (String[] stat : new String[][]{{"176","Tools"},{"8+","Providers"},{"∞","Memory"}}) {
+        for (String[] stat : new String[][]{{"176","Tools"},{"8+","Providers"},{"\u221E","Memory"}}) {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setGravity(Gravity.CENTER);
@@ -654,7 +659,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         return sv;
     }
 
-    // ── Navigation ─────────────────────────────────────────────────────────────
+    // \u2500\u2500 Navigation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     private void advance() {
         collectCurrentPage();
@@ -704,7 +709,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
             case 4:
                 EditText tg = pageContainer.findViewWithTag("tgInput");
                 EditText tid = pageContainer.findViewWithTag("tgIdInput");
-                if (tg != null && !tg.getText().toString().contains("…"))
+                if (tg != null && !tg.getText().toString().contains("\u2026"))
                     tgToken = tg.getText().toString().trim();
                 if (tid != null) tgId = tid.getText().toString().trim();
                 break;
@@ -731,7 +736,6 @@ public class SetupActivity extends Activity implements SensorEventListener {
         cfg.setupDone = true;
         cfg.save(this);
         // v38: mark setup done in Rust state
-        try { RustBridge.completeSetup(); } catch (UnsatisfiedLinkError ignored) {}
         View check = currentView.findViewWithTag("readyCheck");
         if (check != null) {
             AnimatorSet pop = new AnimatorSet();
@@ -817,7 +821,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         handler.postDelayed(this::cycleQuote, 4000);
     }
 
-    // ── View helpers ──────────────────────────────────────────────────────────
+    // \u2500\u2500 View helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     private static final int MATCH = LinearLayout.LayoutParams.MATCH_PARENT;
     private static final int WRAP  = LinearLayout.LayoutParams.WRAP_CONTENT;

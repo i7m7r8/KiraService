@@ -66,7 +66,7 @@ public class KiraConfig {
                 heartbeatInterval, setupDone
             );
         } catch (UnsatisfiedLinkError ignored) {
-            // Rust .so not loaded yet on first cold start — safe to skip
+            // Rust .so not loaded yet on first cold start \u2014 safe to skip
         }
     }
 }

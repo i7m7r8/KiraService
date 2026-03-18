@@ -3,70 +3,70 @@ package com.kira.service;
 /**
  * JNI bridge to Kira Rust Core v8 (v38 edition).
  *
- * v38 additions — all previously-Java logic now in Rust:
- *   syncConfig          — push KiraConfig to Rust on every save
- *   getConfig           — read config JSON from Rust
- *   updateSetupPage     — wizard page state lives in Rust
- *   completeSetup       — mark setup done in Rust
- *   isSetupDone         — check setup flag from Rust
- *   setCustomProvider   — register custom URL/model in Rust provider registry
- *   setActiveProvider   — switch provider by ID, Rust returns new base_url+model
- *   getProviders        — full provider list JSON from Rust (17+ entries)
- *   updateShizukuStatus — push Shizuku binder/permission state to Rust
- *   getShizukuJson      — read Shizuku status JSON
- *   updateTilt          — push accelerometer → Rust smooths parallax
- *   getStarParallax     — read smoothed parallax for star field drawing
- *   getTheme            — read crimson neon colour constants from Rust
- *   getStatsJson        — local stats (replaces all localhost:7070 UI calls)
+ * v38 additions \u2014 all previously-Java logic now in Rust:
+ *   syncConfig          \u2014 push KiraConfig to Rust on every save
+ *   getConfig           \u2014 read config JSON from Rust
+ *   updateSetupPage     \u2014 wizard page state lives in Rust
+ *   completeSetup       \u2014 mark setup done in Rust
+ *   isSetupDone         \u2014 check setup flag from Rust
+ *   setCustomProvider   \u2014 register custom URL/model in Rust provider registry
+ *   setActiveProvider   \u2014 switch provider by ID, Rust returns new base_url+model
+ *   getProviders        \u2014 full provider list JSON from Rust (17+ entries)
+ *   updateShizukuStatus \u2014 push Shizuku binder/permission state to Rust
+ *   getShizukuJson      \u2014 read Shizuku status JSON
+ *   updateTilt          \u2014 push accelerometer \u2192 Rust smooths parallax
+ *   getStarParallax     \u2014 read smoothed parallax for star field drawing
+ *   getTheme            \u2014 read crimson neon colour constants from Rust
+ *   getStatsJson        \u2014 local stats (replaces all localhost:7070 UI calls)
  */
 public class RustBridge {
     static { System.loadLibrary("kira_core"); }
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // \u2500\u2500 Lifecycle \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void startServer(int port);
 
-    // ── Device state ──────────────────────────────────────────────────────────
+    // \u2500\u2500 Device state \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void pushNotification(String pkg, String title, String text);
     public static native void updateScreenNodes(String json);
     public static native void updateScreenPackage(String pkg);
     public static native void updateBattery(int pct, boolean charging);
     public static native void updateAgentContext(String context);
 
-    // ── Context engine ────────────────────────────────────────────────────────
+    // \u2500\u2500 Context engine \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void pushContextTurn(String role, String content);
 
-    // ── Memory ────────────────────────────────────────────────────────────────
+    // \u2500\u2500 Memory \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void indexMemory(String key, String value, String tags);
 
-    // ── Credentials ───────────────────────────────────────────────────────────
+    // \u2500\u2500 Credentials \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void storeCredential(String name, String value);
 
-    // ── Skills ────────────────────────────────────────────────────────────────
+    // \u2500\u2500 Skills \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void registerSkill(String name, String description, String trigger, String content);
 
-    // ── Heartbeat ─────────────────────────────────────────────────────────────
+    // \u2500\u2500 Heartbeat \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void addHeartbeatItem(String id, String check, String action, long intervalMs);
 
-    // ── Tool iteration counter ────────────────────────────────────────────────
+    // \u2500\u2500 Tool iteration counter \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native int  incrementToolIter(String sessionId);
     public static native void resetToolIter(String sessionId);
 
-    // ── Task log ──────────────────────────────────────────────────────────────
+    // \u2500\u2500 Task log \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void logTaskStep(String taskId, int step, String action, String result, boolean success);
 
-    // ── Command queue ─────────────────────────────────────────────────────────
+    // \u2500\u2500 Command queue \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native String nextCommand();
     public static native void   pushResult(String id, String result);
 
-    // ── Triggers ──────────────────────────────────────────────────────────────
+    // \u2500\u2500 Triggers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void   addTrigger(String id, String type, String value, String action, boolean repeat);
     public static native void   removeTrigger(String id);
     public static native String nextFiredTrigger();
 
-    // ── Memory ────────────────────────────────────────────────────────────────
+    // \u2500\u2500 Memory \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void   freeString(String s);
 
-    // ── v38: Config sync (Java SharedPrefs ↔ Rust state) ─────────────────────
+    // \u2500\u2500 v38: Config sync (Java SharedPrefs \u2194 Rust state) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     /**
      * Push all KiraConfig fields to Rust after every cfg.save().
      * Rust becomes source of truth for /config, /providers, /appstats.
@@ -80,7 +80,7 @@ public class RustBridge {
     /** Returns JSON: {user_name, api_key_set, base_url, model, ...} */
     public static native String getConfig();
 
-    // ── v38: Setup wizard state ───────────────────────────────────────────────
+    // \u2500\u2500 v38: Setup wizard state \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     /**
      * Called on each wizard page advance. Rust stores intermediate values.
      * Pass empty strings for fields not yet collected.
@@ -94,9 +94,9 @@ public class RustBridge {
     /** True if Rust state has setup_done = true. */
     public static native boolean isSetupDone();
 
-    // ── v38: Custom provider ──────────────────────────────────────────────────
+    // \u2500\u2500 v38: Custom provider \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     /**
-     * Register a custom provider URL (from the "Custom ✎" chip in setup).
+     * Register a custom provider URL (from the "Custom \u270E" chip in setup).
      * Rust updates the "custom" entry in the provider registry and
      * sets it as active provider, returning updated JSON.
      */
@@ -109,7 +109,7 @@ public class RustBridge {
     /** Returns JSON array of all providers (17+) with active flag. */
     public static native String getProviders();
 
-    // ── v38: Shizuku status reporting ─────────────────────────────────────────
+    // \u2500\u2500 v38: Shizuku status reporting \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     /**
      * Called from MainActivity after every Shizuku check.
      * Rust stores the status; /shizuku HTTP endpoint and /appstats read it.
@@ -118,7 +118,7 @@ public class RustBridge {
     /** Returns JSON: {installed, permission_granted, status, last_checked_ms} */
     public static native String getShizukuJson();
 
-    // ── v38: Sensor / star field parallax ────────────────────────────────────
+    // \u2500\u2500 v38: Sensor / star field parallax \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     /**
      * Called from SetupActivity.onSensorChanged (TYPE_ACCELEROMETER).
      * Rust applies EMA smoothing and stores the parallax offset.
@@ -132,7 +132,7 @@ public class RustBridge {
     /** Returns theme colour JSON: {accent, bg, card, muted, star_count} */
     public static native String getTheme();
 
-    // ── v38: Local stats (replaces localhost:7070/health in UI) ──────────────
+    // \u2500\u2500 v38: Local stats (replaces localhost:7070/health in UI) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     /**
      * Returns a JSON stats snapshot sourced entirely from Rust state.
      * Used by MainActivity's "refresh stats" panel instead of HTTP.

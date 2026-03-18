@@ -104,7 +104,8 @@
         <!-- Floating window controller -->
         <service
             android:name=".FloatingWindowService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
 
 
         <service

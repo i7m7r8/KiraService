@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
             if (grantResult == PackageManager.PERMISSION_GRANTED) {
                 uiHandler.post(() -> {
                     android.widget.Toast.makeText(this,
-                        "Shizuku active — god mode enabled!", android.widget.Toast.LENGTH_SHORT).show();
+                        "Shizuku active \u2014 god mode enabled!", android.widget.Toast.LENGTH_SHORT).show();
                     updateShizukuStatus();
                 });
             } else {
@@ -116,11 +116,6 @@ public class MainActivity extends Activity {
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
 
-        if (!cfg.setupDone) {
-            startActivity(new android.content.Intent(this, SetupActivity.class));
-            finish();
-            return;
-        }
 
         ai = new KiraAI(this);
         agent = new com.kira.service.ai.KiraAgent(this);
@@ -401,7 +396,7 @@ public class MainActivity extends Activity {
         // Agent mode: prefix with /agent or /auto
         if (text.startsWith("/kb ")) {
             String query = text.substring(4).trim();
-            addSystemNotice("KB search: " + query + "\n(tip: ask Kira directly — say \'remember: ...\'  to store facts)");
+            addSystemNotice("KB search: " + query + "\n(tip: ask Kira directly \u2014 say \'remember: ...\'  to store facts)");
             return;
         }
         if (text.equals("/events")) {
@@ -871,7 +866,7 @@ public class MainActivity extends Activity {
         } catch (UnsatisfiedLinkError e) {
             providersJson = "[]";
         }
-        // Parse the JSON array from Rust — extract id and name fields
+        // Parse the JSON array from Rust \u2014 extract id and name fields
         java.util.List<String> ids   = new java.util.ArrayList<>();
         java.util.List<String> names = new java.util.ArrayList<>();
         try {
@@ -879,7 +874,7 @@ public class MainActivity extends Activity {
             for (int i = 0; i < arr.length(); i++) {
                 org.json.JSONObject p = arr.getJSONObject(i);
                 ids.add(p.getString("id"));
-                names.add(p.getString("name") + (p.optBoolean("active") ? " ✔" : ""));
+                names.add(p.getString("name") + (p.optBoolean("active") ? " \u2714" : ""));
             }
         } catch (Exception e) {
             android.widget.Toast.makeText(this, "Provider list error: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
@@ -904,7 +899,7 @@ public class MainActivity extends Activity {
                             cfg.baseUrl = res.optString("base_url", cfg.baseUrl);
                             cfg.model   = res.optString("model",    cfg.model);
                             cfg.save(this); updateSettingsUI();
-                            if (providerHint != null) providerHint.setText(nameArr[w].replace(" ✔",""));
+                            if (providerHint != null) providerHint.setText(nameArr[w].replace(" \u2714",""));
                             android.widget.Toast.makeText(this, "Provider: " + nameArr[w], android.widget.Toast.LENGTH_SHORT).show();
                         }
                     } catch (Exception e) {

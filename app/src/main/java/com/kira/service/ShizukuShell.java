@@ -8,11 +8,11 @@ import java.io.InputStreamReader;
 import java.util.concurrent.TimeUnit;
 
 /**
- * v38 — Fixed Shizuku detection:
- *  • pingBinder() is wrapped correctly with IllegalStateException catch
+ * v38 \u2014 Fixed Shizuku detection:
+ *  \u2022 pingBinder() is wrapped correctly with IllegalStateException catch
  *    (Shizuku throws ISE if the binder was never set, not just on disconnect).
- *  • isInstalled() no longer conflates "binder present" with "permission granted".
- *  • requestPermission now properly guards shouldShowRequestPermissionRationale.
+ *  \u2022 isInstalled() no longer conflates "binder present" with "permission granted".
+ *  \u2022 requestPermission now properly guards shouldShowRequestPermissionRationale.
  */
 public class ShizukuShell {
     private static final String TAG = "ShizukuShell";
@@ -26,7 +26,7 @@ public class ShizukuShell {
             if (!Shizuku.pingBinder()) return false;
             return Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
         } catch (IllegalStateException e) {
-            // Shizuku service not connected yet — normal on cold start
+            // Shizuku service not connected yet \u2014 normal on cold start
             return false;
         } catch (Exception e) {
             Log.w(TAG, "isAvailable check failed: " + e.getMessage());
@@ -55,7 +55,7 @@ public class ShizukuShell {
     public static void requestPermission(int requestCode) {
         try {
             // On some Shizuku versions, shouldShowRequestPermissionRationale
-            // throws when the binder isn't ready — catch separately.
+            // throws when the binder isn't ready \u2014 catch separately.
             boolean shouldShow = false;
             try { shouldShow = Shizuku.shouldShowRequestPermissionRationale(); }
             catch (Exception ignored) {}
@@ -143,7 +143,7 @@ public class ShizukuShell {
             return "opened " + packageName + " (shell)";
         result = exec("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + packageName + " 2>&1");
         if (result.contains("Starting")) return "opened " + packageName + " (am)";
-        return "could not open " + packageName + " — not installed or no launcher activity";
+        return "could not open " + packageName + " \u2014 not installed or no launcher activity";
     }
 
     public static String screenshot(String outputPath) {

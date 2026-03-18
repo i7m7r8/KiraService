@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v38: Setup built entirely in SetupActivity.java — this layout is not used but kept for R id references -->
+<!-- v38: Setup built entirely in SetupActivity.java ? this layout is not used but kept for R id references -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:background="#050508">

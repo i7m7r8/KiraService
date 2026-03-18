@@ -1,4 +1,4 @@
-// Kira Rust Core v8 — v38 edition
+// Kira Rust Core v8 -- v38 edition
 //
 // All v38 changes live here in Rust:
 //   - Setup wizard state (pages, collected values, provider selection)
@@ -6,10 +6,10 @@
 //   - Shizuku status tracking (set from Java, read from HTTP + JNI)
 //   - UI theme config (accent colour, star field settings)
 //   - Star field physics state (star positions, tilt offset, twinkle phases)
-//   - Sensor data ingestion (accelerometer → star parallax)
+//   - Sensor data ingestion (accelerometer ? star parallax)
 //   - App-level config (KiraConfig equivalent, persisted in Rust state)
 //   - All localhost:7070 endpoints now backed by real Rust state
-//   + Everything from v7 (sessions, memory, audit, triggers, cron, skills…)
+//   + Everything from v7 (sessions, memory, audit, triggers, cron, skills...)
 
 #![allow(non_snake_case, dead_code)]
 
@@ -20,29 +20,29 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-// ─── v38: Setup Wizard State ─────────────────────────────────────────────────
+// --- v38: Setup Wizard State -------------------------------------------------
 
 #[derive(Default, Clone)]
 struct SetupState {
     current_page:    u8,           // 0-5
     done:            bool,
-    // Page 1 — API key + provider
+    // Page 1 -- API key + provider
     api_key:         String,
     base_url:        String,
     selected_provider_id: String,
     custom_url:      String,       // populated when provider == "custom"
-    // Page 2 — user name
+    // Page 2 -- user name
     user_name:       String,
-    // Page 3 — model
+    // Page 3 -- model
     model:           String,
-    // Page 4 — Telegram
+    // Page 4 -- Telegram
     tg_token:        String,
     tg_allowed_id:   i64,
     // Quote cycling index
     quote_index:     usize,
 }
 
-// ─── v38: UI Theme Config ─────────────────────────────────────────────────────
+// --- v38: UI Theme Config -----------------------------------------------------
 
 #[derive(Clone)]
 struct ThemeConfig {
@@ -76,7 +76,7 @@ impl Default for ThemeConfig {
     }
 }
 
-// ─── v38: KiraConfig (replaces Java SharedPreferences as source of truth) ─────
+// --- v38: KiraConfig (replaces Java SharedPreferences as source of truth) -----
 
 #[derive(Clone)]
 struct KiraConfig {
@@ -113,7 +113,7 @@ impl Default for KiraConfig {
     }
 }
 
-// ─── v38: Shizuku Status ─────────────────────────────────────────────────────
+// --- v38: Shizuku Status -----------------------------------------------------
 
 #[derive(Clone, Default)]
 struct ShizukuStatus {
@@ -123,7 +123,7 @@ struct ShizukuStatus {
     error_msg:         String,
 }
 
-// ─── Core State (v7 + v38 additions) ─────────────────────────────────────────
+// --- Core State (v7 + v38 additions) -----------------------------------------
 
 #[derive(Default)]
 struct KiraState {
@@ -217,14 +217,14 @@ struct KiraState {
     request_count:     u64,
     tool_call_count:   u64,
 
-    // ── v38 additions ──────────────────────────────────────────────────────
+    // -- v38 additions ------------------------------------------------------
     setup:             SetupState,
     theme:             ThemeConfig,
     config:            KiraConfig,
     shizuku:           ShizukuStatus,
 }
 
-// ─── Sub-structs ──────────────────────────────────────────────────────────────
+// --- Sub-structs --------------------------------------------------------------
 
 #[derive(Clone, Default)]
 struct Session {
@@ -282,7 +282,7 @@ struct KbEntry { id: String, title: String, content: String, tags: Vec<String>, 
 struct EventFeedEntry { event: String, data: String, ts: u128 }
 struct Notif { pkg: String, title: String, text: String, time: u128 }
 
-// ─── Global State ─────────────────────────────────────────────────────────────
+// --- Global State -------------------------------------------------------------
 
 lazy_static::lazy_static! {
     static ref STATE: Arc<Mutex<KiraState>> = Arc::new(Mutex::new(KiraState {
@@ -299,7 +299,7 @@ lazy_static::lazy_static! {
     }));
 }
 
-// ─── JNI Bridge ───────────────────────────────────────────────────────────────
+// --- JNI Bridge ---------------------------------------------------------------
 
 mod jni_bridge {
     use super::*;
@@ -311,7 +311,7 @@ mod jni_bridge {
         unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() }
     }
 
-    // ── Lifecycle ────────────────────────────────────────────────────────────
+    // -- Lifecycle ------------------------------------------------------------
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_startServer(
@@ -330,7 +330,7 @@ mod jni_bridge {
         thread::spawn(run_cron_scheduler);
     }
 
-    // ── v38: KiraConfig sync (Java → Rust on every save) ────────────────────
+    // -- v38: KiraConfig sync (Java ? Rust on every save) --------------------
 
     /// Java calls this whenever SharedPreferences are saved.
     /// Rust becomes the single source of truth for config.
@@ -380,7 +380,7 @@ mod jni_bridge {
         CString::new(json).unwrap_or_default().into_raw()
     }
 
-    // ── v38: Setup wizard state ──────────────────────────────────────────────
+    // -- v38: Setup wizard state ----------------------------------------------
 
     /// Called by SetupActivity on each page advance with collected values.
     #[no_mangle]
@@ -422,7 +422,7 @@ mod jni_bridge {
         STATE.lock().unwrap().config.setup_done
     }
 
-    // ── v38: Custom provider ─────────────────────────────────────────────────
+    // -- v38: Custom provider -------------------------------------------------
 
     /// Register or update a custom provider URL from the setup wizard.
     #[no_mangle]
@@ -483,7 +483,7 @@ mod jni_bridge {
         CString::new(json).unwrap_or_default().into_raw()
     }
 
-    // ── v38: Shizuku status (set from Java, read by Rust for stats) ──────────
+    // -- v38: Shizuku status (set from Java, read by Rust for stats) ----------
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateShizukuStatus(
@@ -508,7 +508,7 @@ mod jni_bridge {
         CString::new(json).unwrap_or_default().into_raw()
     }
 
-    // ── v38: Sensor / star field ─────────────────────────────────────────────
+    // -- v38: Sensor / star field ---------------------------------------------
 
     /// Called by SetupActivity's SensorEventListener on accelerometer change.
     /// Rust smooths the parallax and stores it; Java reads it back for drawing.
@@ -520,7 +520,7 @@ mod jni_bridge {
         let mut s = STATE.lock().unwrap();
         s.theme.star_tilt_x = ax;
         s.theme.star_tilt_y = ay;
-        // Smooth the parallax (EMA, α=0.08)
+        // Smooth the parallax (EMA, ?=0.08)
         let target_x = -ax * s.theme.star_speed;
         let target_y =  ay * s.theme.star_speed;
         s.theme.star_parallax_x += (target_x - s.theme.star_parallax_x) * 0.08;
@@ -553,7 +553,7 @@ mod jni_bridge {
         CString::new(json).unwrap_or_default().into_raw()
     }
 
-    // ── v38: App stats (replaces localhost:7070/health call in MainActivity) ──
+    // -- v38: App stats (replaces localhost:7070/health call in MainActivity) --
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getStatsJson(
@@ -564,11 +564,11 @@ mod jni_bridge {
             r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{}}}"#,
             s.memory_index.len(),
             s.context_turns.len(),
-            if s.shizuku.permission_granted { "active ✓" }
+            if s.shizuku.permission_granted { "active ?" }
             else if s.shizuku.installed     { "no permission" }
             else                            { "not running" },
             // accessibility state tracked via updateAgentContext from KiraAccessibilityService
-            if !s.agent_context.is_empty()  { "enabled ✓" } else { "disabled" },
+            if !s.agent_context.is_empty()  { "enabled ?" } else { "disabled" },
             esc(&s.config.model),
             esc(&s.config.base_url),
             now_ms().saturating_sub(s.uptime_start)
@@ -576,7 +576,7 @@ mod jni_bridge {
         CString::new(json).unwrap_or_default().into_raw()
     }
 
-    // ── v7: Device state (unchanged) ─────────────────────────────────────────
+    // -- v7: Device state (unchanged) -----------------------------------------
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushNotification(
@@ -758,7 +758,7 @@ mod jni_bridge {
     ) { if !s.is_null() { unsafe { drop(CString::from_raw(s)); } } }
 }
 
-// ─── HTTP Server ──────────────────────────────────────────────────────────────
+// --- HTTP Server --------------------------------------------------------------
 
 fn run_http(port: u16) {
     let listener = match TcpListener::bind(format!("0.0.0.0:{}", port)) {
@@ -792,7 +792,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
     let path_clean = path.split('?').next().unwrap_or(path);
     match (method, path_clean) {
 
-        // ── Health & stats ──────────────────────────────────────────────────
+        // -- Health & stats --------------------------------------------------
         ("GET", "/health") | ("GET", "/status") => {
             let s = STATE.lock().unwrap();
             format!(r#"{{"status":"ok","version":"8.0","uptime_ms":{},"requests":{},"tool_calls":{},"battery":{},"charging":{},"notifications":{},"skills":{},"triggers":{},"memory_entries":{},"total_tokens":{},"sessions":{},"setup_done":{}}}"#,
@@ -812,7 +812,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 s.tool_call_count, s.total_tokens, now_ms()-s.uptime_start)
         }
 
-        // ── v38: Config endpoints ───────────────────────────────────────────
+        // -- v38: Config endpoints -------------------------------------------
         ("GET",  "/config")        => { let s = STATE.lock().unwrap(); config_to_json(&s.config) }
         ("POST", "/config")        => update_config_from_http(body),
         ("GET",  "/setup")         => {
@@ -835,7 +835,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             r#"{"ok":true}"#.to_string()
         }
 
-        // ── v38: Theme + star field ─────────────────────────────────────────
+        // -- v38: Theme + star field -----------------------------------------
         ("GET",  "/theme")         => {
             let s = STATE.lock().unwrap();
             format!(r#"{{"accent":{},"bg":{},"card":{},"muted":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6}}}"#,
@@ -855,7 +855,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x, s.theme.star_parallax_y)
         }
 
-        // ── v38: Shizuku status ─────────────────────────────────────────────
+        // -- v38: Shizuku status ---------------------------------------------
         ("GET",  "/shizuku")       => { let s = STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }
         ("POST", "/shizuku")       => {
             let installed   = body.contains(r#""installed":true"#);
@@ -869,22 +869,22 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             r#"{"ok":true}"#.to_string()
         }
 
-        // ── v38: App stats (replaces all localhost calls from MainActivity) ─
+        // -- v38: App stats (replaces all localhost calls from MainActivity) -
         ("GET", "/appstats")       => {
             let s = STATE.lock().unwrap();
             format!(r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{}}}"#,
                 s.memory_index.len(),
                 s.context_turns.len(),
-                if s.shizuku.permission_granted { "active ✓" }
+                if s.shizuku.permission_granted { "active ?" }
                 else if s.shizuku.installed     { "no permission" }
                 else                            { "not running" },
-                if !s.agent_context.is_empty()  { "enabled ✓" } else { "disabled" },
+                if !s.agent_context.is_empty()  { "enabled ?" } else { "disabled" },
                 esc(&s.config.model),
                 esc(&s.config.base_url),
                 now_ms().saturating_sub(s.uptime_start))
         }
 
-        // ── v38: Provider management ────────────────────────────────────────
+        // -- v38: Provider management ----------------------------------------
         ("GET",  "/providers")     => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.providers.iter().map(|p|
@@ -923,13 +923,13 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             r#"{"ok":true}"#.to_string()
         }
 
-        // ── v7: Device state ────────────────────────────────────────────────
+        // -- v7: Device state ------------------------------------------------
         ("GET", "/screen")        => STATE.lock().unwrap().screen_nodes.clone(),
         ("GET", "/screen_pkg")    => { let p = STATE.lock().unwrap().screen_pkg.clone(); format!(r#"{{"package":"{}"}}"#, esc(&p)) }
         ("GET", "/battery")       => { let s = STATE.lock().unwrap(); format!(r#"{{"percentage":{},"charging":{}}}"#, s.battery_pct, s.battery_charging) }
         ("GET", "/notifications") => { let s = STATE.lock().unwrap(); let items: Vec<String> = s.notifications.iter().map(|n| format!(r#"{{"pkg":"{}","title":"{}","text":"{}","time":{}}}"#, esc(&n.pkg),esc(&n.title),esc(&n.text),n.time)).collect(); format!("[{}]", items.join(",")) }
 
-        // ── v7: Memory ──────────────────────────────────────────────────────
+        // -- v7: Memory ------------------------------------------------------
         ("GET", "/memory")        => { let s = STATE.lock().unwrap(); format!(r#"{{"memory_md":{},"entries":{}}}"#, json_str(&s.memory_md), s.memory_index.len()) }
         ("GET", "/memory/search") => search_memory(path),
         ("GET", "/memory/full")   => { let s = STATE.lock().unwrap(); let items: Vec<String> = s.memory_index.iter().map(|e| format!(r#"{{"key":"{}","value":"{}","tags":{},"relevance":{:.2},"access_count":{}}}"#, esc(&e.key),esc(&e.value),json_str_arr(&e.tags),e.relevance,e.access_count)).collect(); format!("[{}]", items.join(",")) }
@@ -938,44 +938,44 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET", "/soul")          => { let s = STATE.lock().unwrap(); format!(r#"{{"soul":{}}}"#, json_str(&s.soul_md)) }
         ("POST","/soul")          => { let val = extract_json_str(body, "content").unwrap_or_default(); if !val.is_empty() { STATE.lock().unwrap().soul_md = val; } r#"{"ok":true}"#.to_string() }
 
-        // ── v7: Skills ──────────────────────────────────────────────────────
+        // -- v7: Skills ------------------------------------------------------
         ("GET", "/skills")             => get_skills_json(),
         ("POST","/skills/register")    => { register_skill(body); r#"{"ok":true}"#.to_string() }
         ("POST","/skills/enable")      => { let name = extract_json_str(body,"name").unwrap_or_default(); if let Some(sk) = STATE.lock().unwrap().skills.get_mut(&name) { sk.enabled=true; } r#"{"ok":true}"#.to_string() }
         ("POST","/skills/disable")     => { let name = extract_json_str(body,"name").unwrap_or_default(); if let Some(sk) = STATE.lock().unwrap().skills.get_mut(&name) { sk.enabled=false; } r#"{"ok":true}"#.to_string() }
 
-        // ── v7: Sessions ────────────────────────────────────────────────────
+        // -- v7: Sessions ----------------------------------------------------
         ("GET",  "/sessions")     => { let s = STATE.lock().unwrap(); let items: Vec<String> = s.sessions.values().map(|sess| format!(r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"last_msg":{}}}"#, sess.id,sess.channel,sess.turns,sess.tokens,sess.last_msg)).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/sessions/new") => new_session(body),
 
-        // ── v7: Triggers ────────────────────────────────────────────────────
+        // -- v7: Triggers ----------------------------------------------------
         ("GET",  "/triggers")          => { let s = STATE.lock().unwrap(); let items: Vec<String> = s.triggers.iter().map(|t| format!(r#"{{"id":"{}","type":"{}","value":"{}","fired":{},"repeat":{}}}"#, t.id,t.trigger_type,esc(&t.value),t.fired,t.repeat)).collect(); format!("[{}]", items.join(",")) }
         ("GET",  "/fired_triggers")    => { let mut s = STATE.lock().unwrap(); let items: Vec<String> = s.fired_triggers.drain(..).collect(); format!("[{}]", items.join(",")) }
         ("GET",  "/webhook_events")    => { let mut s = STATE.lock().unwrap(); let items: Vec<String> = s.webhook_events.drain(..).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/triggers/add")      => { add_trigger(body); r#"{"ok":true}"#.to_string() }
         ("POST", "/webhook")           => { let ts = now_ms(); STATE.lock().unwrap().webhook_events.push_back(format!(r#"{{"body":{},"ts":{}}}"#, if body.is_empty(){"{}"} else {body}, ts)); r#"{"ok":true}"#.to_string() }
 
-        // ── v7: Heartbeat ────────────────────────────────────────────────────
+        // -- v7: Heartbeat ----------------------------------------------------
         ("GET", "/heartbeat_log") => { let s = STATE.lock().unwrap(); let items: Vec<String> = s.heartbeat_log.iter().cloned().collect(); format!("[{}]", items.join(",")) }
         ("POST","/heartbeat/add") => { add_heartbeat(body); r#"{"ok":true}"#.to_string() }
 
-        // ── v7: Cron ─────────────────────────────────────────────────────────
+        // -- v7: Cron ---------------------------------------------------------
         ("GET",  "/cron")         => { let s = STATE.lock().unwrap(); let items: Vec<String> = s.cron_jobs.iter().map(|j| format!(r#"{{"id":"{}","action":"{}","interval_ms":{},"enabled":{}}}"#, j.id,esc(&j.action),j.interval_ms,j.enabled)).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/cron/add")     => { add_cron(body); r#"{"ok":true}"#.to_string() }
         ("POST", "/cron/remove")  => { let id = extract_json_str(body,"id").unwrap_or_default(); STATE.lock().unwrap().cron_jobs.retain(|j| j.id != id); r#"{"ok":true}"#.to_string() }
 
-        // ── v7: Audit + task logs ─────────────────────────────────────────
+        // -- v7: Audit + task logs -----------------------------------------
         ("GET", "/task_log")      => get_task_log_json(),
         ("GET", "/audit_log")     => get_audit_log_json(),
         ("GET", "/checkpoints")   => { let s = STATE.lock().unwrap(); let items: Vec<String> = s.checkpoints.iter().map(|(k,v)| format!(r#"{{{}:{}}}"#, json_str(k), json_str(v))).collect(); format!("[{}]", items.join(",")) }
         ("POST","/checkpoint")    => { let k = extract_json_str(body,"id").unwrap_or_default(); let v = extract_json_str(body,"data").unwrap_or_default(); if !k.is_empty() { STATE.lock().unwrap().checkpoints.insert(k,v); } r#"{"ok":true}"#.to_string() }
 
-        // ── v7: KB ───────────────────────────────────────────────────────────
+        // -- v7: KB -----------------------------------------------------------
         ("GET",  "/kb")           => get_kb_json(),
         ("GET",  "/kb/search")    => kb_search(path),
         ("POST", "/kb/add")       => { add_kb_entry(body); r#"{"ok":true}"#.to_string() }
 
-        // ── v7: Events + metrics ─────────────────────────────────────────────
+        // -- v7: Events + metrics ---------------------------------------------
         ("GET", "/events")        => get_event_feed(),
         ("POST","/events")        => { let e = extract_json_str(body,"event").unwrap_or_default(); let d = extract_json_str(body,"data").unwrap_or_default(); push_event_feed(&e,&d); r#"{"ok":true}"#.to_string() }
         ("GET", "/metrics")       => get_metrics_text(),
@@ -992,12 +992,12 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET", "/nodes")         => get_nodes_json(),
         ("POST","/credentials/get")=> get_credential(body),
 
-        // ── fallthrough → Java command queue ─────────────────────────────────
+        // -- fallthrough ? Java command queue ---------------------------------
         _ => queue_to_java(path_clean.trim_start_matches('/'), body),
     }
 }
 
-// ─── v38: Config HTTP helpers ─────────────────────────────────────────────────
+// --- v38: Config HTTP helpers -------------------------------------------------
 
 fn config_to_json(c: &KiraConfig) -> String {
     format!(
@@ -1037,7 +1037,7 @@ fn update_config_from_http(body: &str) -> String {
     r#"{"ok":true}"#.to_string()
 }
 
-// ─── Background threads ───────────────────────────────────────────────────────
+// --- Background threads -------------------------------------------------------
 
 fn run_trigger_watcher() {
     loop {
@@ -1075,7 +1075,7 @@ fn run_cron_scheduler() {
     }
 }
 
-// ─── Feature implementations ─────────────────────────────────────────────────
+// --- Feature implementations -------------------------------------------------
 
 fn search_memory(path: &str) -> String {
     let query = path.find("q=").map(|i| &path[i+2..]).unwrap_or("").replace('+', " ");
@@ -1233,7 +1233,7 @@ fn wait_result(id: &str, ms: u64) -> Option<String> {
     }
 }
 
-// ─── Provider registry (17+, now includes "custom") ──────────────────────────
+// --- Provider registry (17+, now includes "custom") --------------------------
 
 fn make_providers() -> Vec<Provider> {
     vec![
@@ -1253,12 +1253,12 @@ fn make_providers() -> Vec<Provider> {
         Provider { id:"fireworks".into(),    name:"Fireworks".into(),      base_url:"https://api.fireworks.ai/inference/v1".into(),                      model:"accounts/fireworks/models/llama-v3p1-8b-instruct".into() },
         Provider { id:"sambanova".into(),    name:"SambaNova".into(),      base_url:"https://api.sambanova.ai/v1".into(),                                model:"Meta-Llama-3.1-8B-Instruct".into() },
         Provider { id:"novita".into(),       name:"Novita AI".into(),      base_url:"https://api.novita.ai/v3/openai".into(),                            model:"llama-3.1-8b-instruct".into() },
-        // v38: custom provider — base_url set by user at runtime
+        // v38: custom provider -- base_url set by user at runtime
         Provider { id:"custom".into(),       name:"Custom".into(),         base_url:String::new(),                                                       model:String::new() },
     ]
 }
 
-// ─── Misc feature helpers (unchanged from v7) ─────────────────────────────────
+// --- Misc feature helpers (unchanged from v7) ---------------------------------
 
 fn get_policy_json() -> String {
     let s = STATE.lock().unwrap();
@@ -1366,7 +1366,7 @@ fn push_event_feed(event: &str, data: &str) {
     if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
 }
 
-// ─── Crypto (ZeroClaw) ────────────────────────────────────────────────────────
+// --- Crypto (ZeroClaw) --------------------------------------------------------
 
 fn derive_key(name: &str) -> Vec<u8> {
     let mut key = vec![0u8; 32];
@@ -1378,7 +1378,7 @@ fn xor_crypt(data: &[u8], key: &[u8]) -> Vec<u8> {
     data.iter().enumerate().map(|(i, &b)| b ^ key[i % key.len()]).collect()
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
+// --- Utilities ----------------------------------------------------------------
 
 fn now_ms() -> u128 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() }
 fn gen_id()  -> String { format!("k{}", now_ms()) }

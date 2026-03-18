@@ -25,6 +25,7 @@ public class KiraAI {
     private final KiraMemory  memory;
     private final KiraTools   tools;
     private final List<JSONObject> history = new ArrayList<>();
+    private final KiraSkillEngine skillEngine;
 
     public interface Callback {
         void onThinking();

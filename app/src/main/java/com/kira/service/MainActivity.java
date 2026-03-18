@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     private Handler uiHandler;
     private KiraAI  ai;
     private com.kira.service.ai.KiraAgent agent;
+    private com.kira.service.ai.KiraChain chain;
     private KiraConfig cfg;
     private int currentTab = 0;
 
@@ -97,6 +98,7 @@ public class MainActivity extends Activity {
 
         ai = new KiraAI(this);
         agent = new com.kira.service.ai.KiraAgent(this);
+        chain = new com.kira.service.ai.KiraChain(this);
         initViews();
         showTab(0);
 
@@ -304,6 +306,10 @@ public class MainActivity extends Activity {
         suggestionsScroll.setVisibility(View.GONE);
 
         // Agent mode: prefix with /agent or /auto
+        if (text.startsWith("/chain ")) {
+            runChain(text.substring(7));
+            return;
+        }
         if (text.startsWith("/agent ") || text.startsWith("/auto ")) {
             String goal = text.replaceFirst("^/(?:agent|auto)\\s+", "");
             runAgent(goal);
@@ -653,6 +659,41 @@ public class MainActivity extends Activity {
     }
 
 
+
+    private void runChain(String goal) {
+        ConvTurn userTurn = new ConvTurn("user", "/chain " + goal);
+        conversation.add(userTurn);
+        addUserBubble(userTurn);
+        headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
+        sendBtn.setEnabled(false);
+        addSystemNotice("\uD83E\uDDE0 ReAct mode: reason + act loop");
+
+        chain.run(goal, new com.kira.service.ai.KiraChain.ChainCallback() {
+            @Override public void onThought(String t) {
+                uiHandler.post(() -> addSystemNotice("\uD83E\uDDE0 " + t));
+            }
+            @Override public void onAction(String tool, String args) {
+                uiHandler.post(() -> addToolBubble(new ConvTurn("tool", "\u26A1 " + tool + ": " + args.substring(0, Math.min(60, args.length())))));
+            }
+            @Override public void onObservation(String obs) {
+                uiHandler.post(() -> addSystemNotice("\uD83D\uDC41 " + obs.substring(0, Math.min(80, obs.length()))));
+            }
+            @Override public void onFinal(String answer) {
+                uiHandler.post(() -> {
+                    ConvTurn t2 = new ConvTurn("kira", answer);
+                    conversation.add(t2);
+                    addKiraBubble(t2);
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("done.");
+                    scrollToBottom();
+                });
+            }
+            @Override public void onError(String e) {
+                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); sendBtn.setEnabled(true); headerSubtitle.setText("chain error"); });
+            }
+        });
+    }
+
     private void runAgent(String goal) {
         ConvTurn userTurn = new ConvTurn("user", "/agent " + goal);
         conversation.add(userTurn);
@@ -717,13 +758,19 @@ public class MainActivity extends Activity {
 
     private void buildSuggestions() {
         String[][] s = {
-            {"?","Open YouTube"}, {"?","Check notifications"}, {"?","Battery status"},
-            {"?","Take screenshot"}, {"?","Search web for news"}, {"?","Read my screen"},
-            {"?","Show recent SMS"}, {"?","Running apps"},
+            {"\uD83D\uDCF1 Open YouTube",    "Open YouTube"},
+            {"\uD83D\uDD14 Notifications",   "Check notifications"},
+            {"\uD83D\uDD0B Battery",         "Battery status"},
+            {"\uD83D\uDCF8 Screenshot",      "Take screenshot"},
+            {"\uD83C\uDF10 Search web",      "Search web for news"},
+            {"\uD83D\uDDBC Read screen",     "Read my screen"},
+            {"\uD83D\uDCEC SMS",             "Show recent SMS"},
+            {"\u26A1 Running apps",          "Running apps"},
+            {"\u26A1 Agent",                 "/agent open youtube"},
         };
         for (String[] item : s) {
             TextView chip = new TextView(this);
-            chip.setText(item[0] + " " + item[1]);
+            chip.setText(item[0]);
             chip.setTextSize(12);
             chip.setTextColor(0xFFcccccc);
             chip.setBackgroundColor(0xFF222222);
@@ -741,26 +788,24 @@ public class MainActivity extends Activity {
     private void buildToolsList() {
         LinearLayout list = toolsFragment.findViewById(R.id.toolsList);
         Object[][] tools = {
-            {"?","open_app {package}","Open any app -- use names like 'youtube', 'whatsapp'"},
-            {"?","read_screen {}","Read all text on current screen"},
-            {"?","tap_screen {x,y}","Tap coordinates"},
-            {"?","tap_text {text}","Find and tap element by text"},
-            {"?","type_text {text}","Type into focused field"},
-            {"?","get_notifications {}","All recent notifications"},
-            {"?","send_sms {number,message}","Send SMS"},
-            {"?","web_search {query}","Search DuckDuckGo"},
-            {"?","sh_run {cmd}","Run any shell command"},
-            {"?","sh_screenshot {}","Take screenshot"},
-            {"?","remember {key,value}","Store a fact permanently"},
-            {"?","call_number {number}","Make phone call"},
-            {"?","http_get {url}","HTTP GET request"},
-            {"?","list_files {path}","List directory"},
-            {"?","read_file {path}","Read file content"},
-            {"?","get_setting {namespace,key}","Read system setting"},
-            {"?","set_setting {namespace,key,value}","Write system setting"},
-            {"?","wifi_on {on}","Toggle WiFi"},
-            {"?","mobile_data {on}","Toggle mobile data"},
-            {"?","battery_info {}","Battery status"},
+            {"\uD83D\uDCF1","open_app {package}","Open any app by name"},
+            {"\uD83D\uDC41","read_screen {}","Read all visible text"},
+            {"\uD83D\uDC46","tap_screen {x,y}","Tap coordinates"},
+            {"\uD83D\uDD0D","tap_text {text}","Find and tap by text"},
+            {"\u2328","type_text {text}","Type into focused field"},
+            {"\uD83D\uDD14","get_notifications {}","All notifications"},
+            {"\uD83D\uDCAC","send_sms {number,message}","Send SMS"},
+            {"\uD83C\uDF10","web_search {query}","Search DuckDuckGo"},
+            {"\uD83D\uDD2D","analyze_screen {question}","Vision AI"},
+            {"\u26A1","sh_run {cmd}","Shell command (Shizuku)"},
+            {"\uD83D\uDCF8","sh_screenshot {}","Screenshot"},
+            {"\uD83E\uDDE0","remember {key,value}","Store fact"},
+            {"\uD83D\uDD0B","battery_info {}","Battery level"},
+            {"\uD83D\uDCC2","list_files {path}","List directory"},
+            {"\uD83D\uDCF6","get_wifi_info {}","WiFi info"},
+            {"\uD83D\uDD14","watch_notif {keyword,action}","Watch notifications"},
+            {"\u23F0","schedule_task {task,minutes}","Schedule task"},
+            {"\uD83D\uDD2D","find_element {description}","Vision: tap by description"},
         };
         for (Object[] t : tools) {
             LinearLayout row = new LinearLayout(this);

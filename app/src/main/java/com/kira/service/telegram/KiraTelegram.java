@@ -177,6 +177,21 @@ public class KiraTelegram {
                 return;
             }
 
+            if (text.startsWith("/chain ")) {
+                String goal = text.substring(7);
+                sendTyping(cfg.tgToken, chatId);
+                final long fChatId2 = chatId;
+                final String fToken2 = cfg.tgToken;
+                new com.kira.service.ai.KiraChain(ctx).run(goal, new com.kira.service.ai.KiraChain.ChainCallback() {
+                    StringBuilder log = new StringBuilder();
+                    @Override public void onThought(String t) { log.append("Think: ").append(t).append("\n"); }
+                    @Override public void onAction(String tool, String a) { log.append("Act: ").append(tool).append("\n"); }
+                    @Override public void onObservation(String o) { log.append("Obs: ").append(o.substring(0,Math.min(60,o.length()))).append("\n"); }
+                    @Override public void onFinal(String answer) { sendMessage(fToken2, fChatId2, log.toString().trim() + "\n\nResult: " + answer, false); }
+                    @Override public void onError(String e) { sendMessage(fToken2, fChatId2, "chain error: " + e, false); }
+                });
+                return;
+            }
             if (text.startsWith("/run ")) {
                 String cmd = text.substring(5);
                 String result = com.kira.service.ShizukuShell.exec(cmd);

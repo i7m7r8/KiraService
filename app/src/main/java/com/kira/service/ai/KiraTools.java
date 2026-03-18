@@ -197,6 +197,13 @@ public class KiraTools {
                 case "curl":          return httpGet(args.getString("url"));
                 case "scrape_web":    return scrapeWeb(args.getString("url"), args.optString("selector", ""));
 
+
+                // Vision (ZeroClaw-style)
+                case "analyze_screen": return analyzeScreen(args.optString("question", ""));
+                case "find_element":   return findAndTapVisual(args.getString("description"));
+                case "read_image":     return analyzeScreen("Extract and return all text from this image.");
+                case "describe_screen":return analyzeScreen("Describe every UI element visible.");
+
                 // Proactive
                 case "schedule_task": KiraProactive.scheduleReminder(ctx, args.getString("task"), args.optLong("minutes", 1)); return "scheduled: " + args.getString("task");
                 case "watch_battery": KiraProactive.watchBattery(ctx, args.optInt("threshold", 20)); return "watching battery";
@@ -650,6 +657,22 @@ public class KiraTools {
             case "right":       return "22";
             default:            return key;
         }
+    }
+
+
+    private String analyzeScreen(String question) {
+        KiraConfig cfg = KiraConfig.load(ctx);
+        return new KiraVision(ctx).analyzeScreen(question, cfg);
+    }
+
+    private String findAndTapVisual(String description) {
+        KiraConfig cfg = KiraConfig.load(ctx);
+        int[] coords = new KiraVision(ctx).findElementCoords(description, cfg);
+        if (coords != null) {
+            tap(coords[0], coords[1]);
+            return "found and tapped: " + description + " at (" + coords[0] + "," + coords[1] + ")";
+        }
+        return "element not found visually: " + description;
     }
 
     public String getToolList() {

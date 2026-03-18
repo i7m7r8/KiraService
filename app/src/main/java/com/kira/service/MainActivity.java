@@ -64,7 +64,7 @@ public class MainActivity extends Activity {
     private TextView     historyCount;
 
     // Settings
-    private TextView    apiKeyHint, modelHint, baseUrlHint, tgTokenHint, tgIdHint;
+    private TextView    apiKeyHint, visionHint, modelHint, baseUrlHint, tgTokenHint, tgIdHint;
     private LinearLayout shizukuStatus;
     private TextView    shizukuStatusTitle, shizukuStatusIcon;
     private TextView    floatingToggle;
@@ -246,6 +246,11 @@ public class MainActivity extends Activity {
             editSetting("Your Telegram ID", cfg.tgAllowed == 0 ? "" : String.valueOf(cfg.tgAllowed), true, val -> {
                 try { cfg.tgAllowed = val.isEmpty() ? 0 : Long.parseLong(val.trim()); cfg.save(this); updateSettingsUI(); } catch (Exception ignored) {}
             }));
+        visionHint = settingsFragment.findViewById(R.id.visionHint);
+        View settingVision = settingsFragment.findViewById(R.id.settingVision);
+        if (settingVision != null) settingVision.setOnClickListener(v ->
+            editSetting("Vision Model", cfg.visionModel, false, val -> { cfg.visionModel = val; cfg.save(this); if (visionHint != null) visionHint.setText(val.isEmpty() ? "not set" : val); }));
+
         settingsFragment.findViewById(R.id.settingAccessibility).setOnClickListener(v ->
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         shizukuStatus.setOnClickListener(v -> checkShizuku());
@@ -905,6 +910,7 @@ public class MainActivity extends Activity {
         baseUrlHint.setText(cfg.baseUrl.isEmpty() ? "Not set" : cfg.baseUrl);
         tgTokenHint.setText(cfg.tgToken.isEmpty() ? "Not set" : "? Configured");
         tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
+        if (visionHint != null) visionHint.setText(cfg.visionModel.isEmpty() ? "not set" : cfg.visionModel);
         updateShizukuStatus();
     }
 

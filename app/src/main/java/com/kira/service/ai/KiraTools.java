@@ -209,6 +209,27 @@ public class KiraTools {
                 case "stop_watch":    { RustBridge.removeTrigger(args.getString("id")); return "stopped watch: " + args.getString("id"); }
 
 
+
+                // OpenClaw: Agent coordination
+                case "agent_handoff":  { String to = args.optString("to","main"); String msg = args.getString("message"); com.kira.service.RustBridge.pushContextTurn("system","handoff->"+to+": "+msg); return "handed off to " + to; }
+                case "post_skill":     { com.kira.service.RustBridge.registerSkill(args.getString("name"),args.optString("description",""),args.optString("trigger",""),args.getString("content")); return "skill registered: " + args.getString("name"); }
+                case "list_skills":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/skills").build()).execute().body().string(); } catch(Exception e){ return "error: "+e.getMessage(); } }
+                // NanoClaw: Session management
+                case "new_session":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/sessions/new").post(okhttp3.RequestBody.create(args.toString(),okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error: "+e.getMessage(); } }
+                case "save_checkpoint":{ com.kira.service.RustBridge.logTaskStep("checkpoint_"+System.currentTimeMillis(),0,args.getString("id"),args.getString("data"),true); return "checkpoint saved"; }
+                // AndyClaw: Policy
+                case "allow_tool":     { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/policy/allow").post(okhttp3.RequestBody.create("{\"tool\":\""+args.getString("tool")+"\"}",okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                case "deny_tool":      { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/policy/deny").post(okhttp3.RequestBody.create("{\"tool\":\""+args.getString("tool")+"\"}",okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                // ZeroClaw: Credentials
+                case "store_credential":{ com.kira.service.RustBridge.storeCredential(args.getString("name"),args.getString("value")); return "credential stored: " + args.getString("name"); }
+                case "get_credential": { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/credentials/get").post(okhttp3.RequestBody.create("{\"name\":\""+args.getString("name")+"\"}",okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                // OpenClaw: SOUL.md (agent identity)
+                case "set_soul":       { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/soul").post(okhttp3.RequestBody.create("{\"content\":\""+args.getString("content")+"\"}",okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                case "get_soul":       { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/soul").build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                // Audit
+                case "audit_log":      { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/audit_log").build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                case "memory_search":  { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/memory/search?q="+java.net.URLEncoder.encode(args.getString("query"),"UTF-8")).build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+
                 // OpenClaw event system
                 case "post_event":    { com.kira.service.KiraEventBus.post(new com.kira.service.KiraEventBus.AgentStarted(args.optString("goal","custom"))); return "event posted"; }
                 // NanoBot context tools

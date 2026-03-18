@@ -363,7 +363,7 @@ mod jni_bridge {
         // Also update MEMORY.md equivalent
         let fact = format!("- {}: {}", key, value);
         if !s.memory_md.contains(&fact) { s.memory_md.push_str(&format!("\n{}", fact)); }
-        s.memory_index.push_back(MemoryEntry { key, value, tags, ts: now_ms(), relevance: 1.0, access_count: 0 });
+        s.memory_index.push(MemoryEntry { key, value, tags, ts: now_ms(), relevance: 1.0, access_count: 0 });
         if s.memory_index.len() > 10000 {
             s.memory_index.sort_by(|a, b| a.relevance.partial_cmp(&b.relevance).unwrap_or(std::cmp::Ordering::Equal));
             s.memory_index.remove(0);
@@ -412,11 +412,14 @@ mod jni_bridge {
     ) -> i32 {
         let id = cs(session_id);
         let mut s = STATE.lock().unwrap();
-        let count = s.tool_iterations.entry(id).or_insert(0);
-        *count += 1;
+        let count = {
+            let c = s.tool_iterations.entry(id).or_insert(0);
+            *c += 1;
+            *c
+        };
         s.tool_call_count += 1;
         let max = s.max_tool_iters;
-        if *count > max { -1 } else { *count as i32 }
+        if count > max { -1 } else { count as i32 }
     }
 
     #[no_mangle]
@@ -796,6 +799,75 @@ fn wait_result(id: &str, ms: u64) -> Option<String> {
 }
 
 // ??? ZeroClaw: 17 providers ???????????????????????????????????????????????????
+
+fn get_policy_json() -> String {
+    let s = STATE.lock().unwrap();
+    format!(r#"{{"allowlist":[{}],"denylist":[{}]}}"#,
+        s.tool_allowlist.iter().map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(","),
+        s.tool_denylist.iter().map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(","))
+}
+
+fn check_tool_policy(body: &str) -> String {
+    let tool = extract_json_str(body, "tool").unwrap_or_default();
+    let s = STATE.lock().unwrap();
+    let blocked = s.tool_denylist.iter().any(|d| d == &tool || tool.starts_with(d.as_str()));
+    let allowed = s.tool_allowlist.is_empty() || s.tool_allowlist.iter().any(|a| a == &tool);
+    format!(r#"{{"tool":"{}","blocked":{},"allowed":{}}}"#, esc(&tool), blocked, allowed && !blocked)
+}
+
+fn get_nodes_json() -> String {
+    let s = STATE.lock().unwrap();
+    let now = now_ms();
+    let items: Vec<String> = s.node_caps.values().map(|n|
+        format!(r#"{{"id":"{}","platform":"{}","caps":[{}],"online":{},"last_seen":{}}}"#,
+            esc(&n.node_id), esc(&n.platform),
+            n.caps.iter().map(|c| format!("\"{}\"",esc(c))).collect::<Vec<_>>().join(","),
+            n.online && now - n.last_seen < 30000, n.last_seen)
+    ).collect();
+    format!("[{}]", items.join(","))
+}
+
+fn register_node(body: &str) {
+    let id       = extract_json_str(body, "node_id").unwrap_or_else(|| gen_id());
+    let platform = extract_json_str(body, "platform").unwrap_or_else(|| "android".to_string());
+    let caps_str = extract_json_str(body, "caps").unwrap_or_default();
+    let caps: Vec<String> = caps_str.split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
+    STATE.lock().unwrap().node_caps.insert(id.clone(), NodeCapability { node_id: id, caps, platform, online: true, last_seen: now_ms() });
+}
+
+fn get_stream_json() -> String {
+    let mut s = STATE.lock().unwrap();
+    let chunks: Vec<String> = s.webhook_events.iter()
+        .filter(|e| e.contains("stream_chunk"))
+        .cloned()
+        .collect();
+    s.webhook_events.retain(|e| !e.contains("stream_chunk"));
+    format!("[{}]", chunks.join(","))
+}
+
+fn new_session(body: &str) -> String {
+    let id      = extract_json_str(body, "id").unwrap_or_else(|| gen_id());
+    let channel = extract_json_str(body, "channel").unwrap_or_else(|| "kira".to_string());
+    let ts = now_ms();
+    let sess = Session { id: id.clone(), channel, turns: 0, tokens: 0, created: ts, last_msg: ts };
+    STATE.lock().unwrap().sessions.insert(id.clone(), sess);
+    format!(r#"{{"ok":true,"id":"{}"}}"#, id)
+}
+
+fn get_credential(body: &str) -> String {
+    let name = extract_json_str(body, "name").unwrap_or_default();
+    let s = STATE.lock().unwrap();
+    match s.credentials.get(&name) {
+        Some(enc) => {
+            let key = derive_key(&name);
+            let dec = xor_crypt(enc, &key);
+            let val = String::from_utf8_lossy(&dec).to_string();
+            format!(r#"{{"name":"{}","value":"{}"}}"#, esc(&name), esc(&val))
+        }
+        None => format!(r#"{{"error":"credential '{}' not found"}}"#, esc(&name))
+    }
+}
+
 fn make_providers() -> Vec<Provider> {
     vec![
         Provider { id:"groq".into(),       name:"Groq".into(),          base_url:"https://api.groq.com/openai/v1".into(),                              model:"llama-3.1-8b-instant".into() },

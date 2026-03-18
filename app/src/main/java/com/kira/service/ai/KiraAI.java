@@ -279,6 +279,16 @@ public class KiraAI {
         } catch (Exception e) { return new JSONObject(); }
     }
 
+
+    // Quick tool call without AI — for direct Telegram commands
+    public String quickTool(String toolName, org.json.JSONObject args) {
+        try {
+            return tools.execute(toolName, args);
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
+    }
+
     public void clearHistory() {
         history.clear();
         memory.clearHistory();

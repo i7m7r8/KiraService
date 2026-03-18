@@ -53,33 +53,35 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
 
-      - name: List rust-libs (debug)
+      - name: List rust-libs
         run: find app/src/main/rust-libs -type f | sort
 
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # gradlew uses gradle-wrapper.properties which pins Gradle 8.4
+      # No manual gradle install needed — wrapper downloads it automatically
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx2g"
 
-      - name: Build Release APK (unsigned)
+      - name: Build Release APK (unsigned, signed with debug key)
         run: ./gradlew assembleRelease --stacktrace --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx2g"
 
-      - name: List APK outputs (debug)
+      - name: List APK outputs
         run: find app/build/outputs/apk -type f | sort
 
-      - name: Upload Debug APK artifact
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: Kira-v40-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      - name: Upload Release APK artifact
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
           name: Kira-v40-release-unsigned
@@ -96,20 +98,23 @@ jobs:
           tag_name: v40-${{ steps.ts.outputs.TS }}
           name: Kira v40 — ${{ steps.ts.outputs.TS }}
           body: |
-            ## Kira v40 — Full AI Automation Agent
+            ## Kira v40 — World's Most Powerful Android AI Automation Agent
 
-            ### What's new in v40
-            - **Tasker/MacroDroid-equivalent automation engine** (pure Rust)
-              - IF/THEN/ELSE macro chains with 40+ trigger types
-              - 60+ action types: HTTP, shell, media, torch, TTS, brightness, open app...
-              - Variable engine with math/string expressions
-              - Named profiles: Work / Home / Sleep / Car with auto-switch
-              - Flow control: loops, delays, condition branches
-            - Rust automation engine v9 (all v39 features preserved)
+            ### What's new
+            - Full Tasker/MacroDroid-equivalent engine in **pure Rust**
+              - 40+ trigger types: screen, battery, WiFi/BT, shake, SMS, call, NFC,
+                geofence, app launch, clipboard, cron, time interval...
+              - 60+ action types: HTTP, shell, volume, torch, brightness, TTS,
+                open app, send SMS, notifications, variables, if/loop/wait...
+              - Variable engine with %VAR% tokens + math ops
+              - Named profiles: Default / Work / Home / Sleep / Car
+              - Per-macro conditions (eq/gt/contains/matches...)
+              - Macro run log + dedicated 500ms engine thread
+            - **Fixed**: APK now correctly attached to every release
+            - All v39 features preserved
 
-            ### Installation
-            Install **app-debug.apk** (no signing required).
-            Enable "Install from unknown sources" in Android settings.
+            ### Install
+            Download **app-debug.apk** → enable "Install unknown apps" → install.
           files: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk

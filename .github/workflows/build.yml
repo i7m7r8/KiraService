@@ -1,8 +1,8 @@
-name: Build KiraService APK
+name: Build Kira APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -10,37 +10,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── Checkout ─────────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Setup Java ───────────────────────────────────────────────────────────
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── Setup Android SDK ────────────────────────────────────────────────────
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK
+      - name: Install NDK and CMake
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "ndk;27.0.12077973" \
             "cmake;3.22.1" \
-            "build-tools;34.0.0" \
-            "platforms;android-34"
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
-      # ── Setup Rust ───────────────────────────────────────────────────────────
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: >
-            aarch64-linux-android,
-            armv7-linux-androideabi,
-            x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Cache Rust
         uses: actions/cache@v4
@@ -50,82 +43,64 @@ jobs:
             ~/.cargo/git
             rust-core/target
           key: ${{ runner.os }}-rust-${{ hashFiles('rust-core/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-rust-
 
-      # ── Build Rust for all Android targets ───────────────────────────────────
       - name: Install cargo-ndk
-        run: cargo install cargo-ndk
+        run: cargo install cargo-ndk --locked
 
-      - name: Build Rust (arm64-v8a)
+      - name: Build Rust arm64
         working-directory: rust-core
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973
-          cargo ndk -t arm64-v8a -o ../app/src/main/rust-libs build --release
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: cargo ndk -t arm64-v8a -o ../app/src/main/rust-libs build --release
 
-      - name: Build Rust (armeabi-v7a)
+      - name: Build Rust armv7
         working-directory: rust-core
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973
-          cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
 
-      - name: Build Rust (x86_64)
-        working-directory: rust-core
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973
-          cargo ndk -t x86_64 -o ../app/src/main/rust-libs build --release
+      - name: List Rust libs
+        run: find app/src/main/rust-libs -name "*.so" -exec ls -lh {} \;
 
-      - name: Verify Rust libs
-        run: |
-          find app/src/main/rust-libs -name "*.so" -exec ls -lh {} \;
-
-      # ── Build APK ────────────────────────────────────────────────────────────
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build Debug APK
+      - name: Build APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --stacktrace
-
-      # ── Upload APK artifacts ─────────────────────────────────────────────────
-      - name: Upload Debug APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KiraService-debug
+          name: Kira-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
 
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: KiraService-release
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
-
-      # ── Auto-release on main push ─────────────────────────────────────────
-      - name: Get version
-        id: version
-        run: echo "VERSION=$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+      - name: Get timestamp
+        id: ts
+        run: echo "TS=$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.VERSION }}
-          name: KiraService v${{ steps.version.outputs.VERSION }}
+          tag_name: v${{ steps.ts.outputs.TS }}
+          name: Kira v${{ steps.ts.outputs.TS }}
           body: |
-            ## KiraService — Rust-powered Android automation
+            ## Kira — Full AI Agent APK (no Termux needed)
+
+            ### Features
+            - Full AI chat (Groq/OpenAI/Anthropic/OpenRouter)
+            - Phone control via Accessibility Service
+            - Shizuku ADB-level control
+            - Built-in Telegram bot
+            - Persistent memory
+            - Web search, SMS, calls
 
             ### Install
-            1. Download `KiraService-debug.apk`
-            2. Enable "Install unknown apps" for your browser
-            3. Install the APK
-            4. Open KiraService → Enable Accessibility Service
-            5. Install Shizuku → Start it → Grant permission to KiraService
-
-            ### What's included
-            - 🦀 Rust HTTP server (localhost:7070) — ultra fast, <1ms response
-            - ♿ Accessibility Service — screen read, tap, type, notifications
-            - ⚡ Shizuku bridge — full ADB-level control, no root
-          files: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/release/app-release-unsigned.apk
+            1. Download app-debug.apk
+            2. Enable unknown sources, install
+            3. Open Kira, complete setup
+            4. Enable Accessibility Service
+          files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,55 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mainLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="24dp"
     android:background="#0a0a0a">
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🦀 KiraService"
-        android:textSize="28sp"
+        android:text="🦀 Kira"
         android:textColor="#00ff88"
+        android:textSize="18sp"
         android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
+        android:padding="12dp"
+        android:background="#111111" />
 
-    <TextView
+    <ScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/chatLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#cccccc"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="2dp" />
+    </ScrollView>
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Rust-powered Android automation"
-        android:textSize="14sp"
-        android:textColor="#888888"
-        android:layout_marginBottom="32dp" />
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:background="#111111">
 
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:textColor="#cccccc"
-        android:fontFamily="monospace"
-        android:background="#111111"
-        android:padding="16dp"
-        android:layout_marginBottom="32dp"
-        android:text="Loading..." />
+        <EditText
+            android:id="@+id/inputField"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="message kira..."
+            android:hintTextColor="#555555"
+            android:textColor="#ffffff"
+            android:background="#1a1a1a"
+            android:padding="10dp"
+            android:imeOptions="actionSend"
+            android:inputType="textMultiLine|textCapSentences"
+            android:maxLines="4" />
 
-    <Button
-        android:id="@+id/btnAccessibility"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Enable Accessibility Service"
-        android:layout_marginBottom="12dp"
-        android:backgroundTint="#1a3a2a"
-        android:textColor="#00ff88" />
-
-    <Button
-        android:id="@+id/btnShizuku"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Open Shizuku"
-        android:backgroundTint="#1a1a3a"
-        android:textColor="#8888ff" />
-
+        <Button
+            android:id="@+id/sendBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="→"
+            android:textSize="18sp"
+            android:backgroundTint="#00ff88"
+            android:textColor="#000000"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
 </LinearLayout>

@@ -1,10 +1,7 @@
 package com.kira.service;
 
 public class RustBridge {
-    static {
-        System.loadLibrary("kira_core");
-    }
-
+    static { System.loadLibrary("kira_core"); }
     public static native void startServer(int port);
     public static native void pushNotification(String pkg, String title, String text);
     public static native void updateScreenNodes(String json);

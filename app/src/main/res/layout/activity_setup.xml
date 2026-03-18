@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0a0a0a">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🦀 Kira Setup"
+            android:textColor="#00ff88"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Your name" android:textColor="#888888" android:layout_marginBottom="4dp"/>
+        <EditText android:id="@+id/setupName" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:hint="Imran"
+            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="API Key" android:textColor="#888888" android:layout_marginBottom="4dp"/>
+        <EditText android:id="@+id/setupApiKey" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:hint="gsk_... or sk-..."
+            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
+            android:inputType="textPassword" android:layout_marginBottom="16dp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="API Base URL" android:textColor="#888888" android:layout_marginBottom="4dp"/>
+        <EditText android:id="@+id/setupBaseUrl" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textColor="#ffffff"
+            android:background="#1a1a1a" android:padding="10dp" android:layout_marginBottom="16dp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Model" android:textColor="#888888" android:layout_marginBottom="4dp"/>
+        <EditText android:id="@+id/setupModel" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textColor="#ffffff"
+            android:background="#1a1a1a" android:padding="10dp" android:layout_marginBottom="16dp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Telegram Bot Token (optional)" android:textColor="#888888"
+            android:layout_marginBottom="4dp"/>
+        <EditText android:id="@+id/setupTgToken" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:hint="1234567:ABC..."
+            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Your Telegram ID (get from @userinfobot)" android:textColor="#888888"
+            android:layout_marginBottom="4dp"/>
+        <EditText android:id="@+id/setupTgId" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:hint="123456789"
+            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
+            android:inputType="number" android:layout_marginBottom="32dp"/>
+
+        <Button android:id="@+id/setupSave" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="Start Kira"
+            android:backgroundTint="#00ff88" android:textColor="#000000"
+            android:textStyle="bold" android:padding="14dp"/>
+
+    </LinearLayout>
+</ScrollView>

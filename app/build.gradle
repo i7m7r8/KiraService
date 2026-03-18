@@ -10,7 +10,7 @@ android {
         applicationId "com.kira.service"
         minSdk 26
         targetSdk 34
-        versionCode 7
+        versionCode 8
         versionName "7.0.0"
         ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         externalNativeBuild { cmake { cppFlags "" } }
@@ -33,8 +33,13 @@ android {
     packagingOptions {
         jniLibs { useLegacyPackaging true }
         resources {
-            excludes += ['META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
-                         'META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/NOTICE']
+            excludes += ['META-INF/INDEX.LIST',
+                         'META-INF/io.netty.versions.properties',
+                         'META-INF/DEPENDENCIES',
+                         'META-INF/LICENSE.md',
+                         'META-INF/NOTICE.md',
+                         'META-INF/LICENSE',
+                         'META-INF/NOTICE']
         }
     }
 
@@ -47,43 +52,55 @@ android {
 }
 
 dependencies {
-    // Shizuku - ADB-level shell access (no root needed)
+    // ── Shizuku: ADB-level shell without root
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
 
-    // OkHttp - reliable HTTP for AI API + Telegram + web requests
+    // ── OkHttp: HTTP for AI API + Telegram + web
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
 
-    // Gson - JSON serialization
+    // ── Gson: JSON serialization
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // Markwon - full Markdown rendering in chat
+    // ── Markwon: full Markdown rendering in chat
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
     implementation 'io.noties.markwon:ext-tables:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
 
-    // WorkManager - background scheduled tasks
+    // ── AndroidX WorkManager: background scheduled tasks
     implementation 'androidx.work:work-runtime:2.9.0'
 
-    // Room - local SQLite database (conversation history, task logs)
+    // ── Room: local SQLite (conversation history, task logs)
     implementation 'androidx.room:room-runtime:2.6.1'
     annotationProcessor 'androidx.room:room-compiler:2.6.1'
 
-    // Jsoup - web scraping / HTML parsing
+    // ── Jsoup: web scraping / HTML parsing
     implementation 'org.jsoup:jsoup:1.17.2'
 
-    // Commons IO - file utilities
+    // ── Commons IO: file utilities
     implementation 'commons-io:commons-io:2.15.1'
 
-    // Apache Commons Lang - string utils
+    // ── Commons Lang: string utilities
     implementation 'org.apache.commons:commons-lang3:3.14.0'
 
-    // EventBus - component communication (NanoBot event system)
+    // ── EventBus: OpenClaw-style decoupled component messaging
     implementation 'org.greenrobot:eventbus:3.3.1'
 
-    // Retrofit - type-safe HTTP (for structured API calls)
+    // ── Retrofit: type-safe structured HTTP (ZeroClaw provider calls)
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+
+    // ── Security Crypto: AES256-GCM for credential storage (AndyClaw)
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // ── Preference: settings persistence
+    implementation 'androidx.preference:preference:1.2.1'
+
+    // ── Biometric: fingerprint/face auth gate
+    implementation 'androidx.biometric:biometric:1.1.0'
+
+    // ── LeakCanary: memory leak detection (debug only)
+    debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.12'
 }

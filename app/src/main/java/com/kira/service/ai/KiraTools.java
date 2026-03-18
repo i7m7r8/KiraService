@@ -200,6 +200,7 @@ public class KiraTools {
 
 
 
+                case "schedule_task": { RustBridge.addTrigger("sched_" + System.currentTimeMillis(), "time", String.valueOf(System.currentTimeMillis() + args.optLong("minutes",1)*60000), args.getString("task"), false); return "scheduled in " + args.optLong("minutes",1) + "m: " + args.getString("task"); }
                 case "watch_screen":  { String keyword = args.getString("keyword"); String action = args.getString("action"); memory.remember("watch_screen_" + System.currentTimeMillis(), keyword + "|" + action); return "watching screen for: " + keyword; }
                 case "watch_app":     { RustBridge.addTrigger("app_" + args.getString("package"), "app_notif", args.getString("package"), args.getString("action"), args.optBoolean("repeat", false)); return "watching app: " + args.getString("package"); }
                 case "watch_battery": { RustBridge.addTrigger("bat_" + args.optInt("threshold",20), "battery_low", String.valueOf(args.optInt("threshold",20)), args.getString("action"), args.optBoolean("repeat", true)); return "watching battery < " + args.optInt("threshold",20) + "%"; }
@@ -214,8 +215,6 @@ public class KiraTools {
                 case "describe_screen":return analyzeScreen("Describe every UI element visible.");
 
                 // Proactive
-                case "schedule_task": KiraProactive.scheduleReminder(ctx, args.getString("task"), args.optLong("minutes", 1)); return "scheduled: " + args.getString("task");
-                case "watch_battery": KiraProactive.watchBattery(ctx, args.optInt("threshold", 20)); return "watching battery";
 
                 // Location
                 case "location":      return getLocation();

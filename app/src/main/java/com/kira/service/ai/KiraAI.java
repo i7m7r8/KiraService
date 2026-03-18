@@ -280,6 +280,40 @@ public class KiraAI {
     }
 
 
+
+    // Single-turn chat without tool loop - for agent planning/reflection
+    public String simpleChat(String prompt) {
+        try {
+            KiraConfig cfg = KiraConfig.load(ctx);
+            org.json.JSONArray messages = new org.json.JSONArray();
+            org.json.JSONObject msg = new org.json.JSONObject();
+            msg.put("role", "user");
+            msg.put("content", prompt);
+            messages.put(msg);
+            org.json.JSONObject body = new org.json.JSONObject();
+            body.put("model", cfg.model.isEmpty() ? "llama-3.1-8b-instant" : cfg.model);
+            body.put("max_tokens", 500);
+            body.put("messages", messages);
+            String baseUrl = cfg.baseUrl.isEmpty() ? "https://api.groq.com/openai/v1" : cfg.baseUrl;
+            okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build();
+            okhttp3.Request req = new okhttp3.Request.Builder()
+                .url(baseUrl + "/chat/completions")
+                .addHeader("Authorization", "Bearer " + cfg.apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(okhttp3.RequestBody.create(body.toString(), okhttp3.MediaType.parse("application/json")))
+                .build();
+            okhttp3.Response resp = client.newCall(req).execute();
+            if (resp.body() == null) return "(no response)";
+            org.json.JSONObject respJson = new org.json.JSONObject(resp.body().string());
+            return respJson.getJSONArray("choices").getJSONObject(0)
+                .getJSONObject("message").getString("content");
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
+    }
+
     // Quick tool call without AI -- for direct Telegram commands
     public String quickTool(String toolName, org.json.JSONObject args) {
         try {

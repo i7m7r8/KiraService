@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
 
     private Handler uiHandler;
     private KiraAI  ai;
+    private com.kira.service.ai.KiraAgent agent;
     private KiraConfig cfg;
     private int currentTab = 0;
 
@@ -95,6 +96,7 @@ public class MainActivity extends Activity {
         if (!cfg.setupDone) { showFirstSetup(); return; }
 
         ai = new KiraAI(this);
+        agent = new com.kira.service.ai.KiraAgent(this);
         initViews();
         showTab(0);
 
@@ -295,6 +297,13 @@ public class MainActivity extends Activity {
         if (text.isEmpty()) return;
         inputField.setText("");
         suggestionsScroll.setVisibility(View.GONE);
+
+        // Agent mode: prefix with /agent or /auto
+        if (text.startsWith("/agent ") || text.startsWith("/auto ")) {
+            String goal = text.replaceFirst("^/(?:agent|auto)\\s+", "");
+            runAgent(goal);
+            return;
+        }
 
         ConvTurn userTurn = new ConvTurn("user", text);
         conversation.add(userTurn);
@@ -636,6 +645,57 @@ public class MainActivity extends Activity {
                 case "error": addErrorBubble(turn); break;
             }
         }
+    }
+
+
+    private void runAgent(String goal) {
+        ConvTurn userTurn = new ConvTurn("user", "/agent " + goal);
+        conversation.add(userTurn);
+        addUserBubble(userTurn);
+        headerSubtitle.setText("agent running...");
+        sendBtn.setEnabled(false);
+
+        addSystemNotice("Agent mode: planning task...");
+
+        agent.execute(goal, new com.kira.service.ai.KiraAgent.AgentCallback() {
+            @Override public void onPlan(String plan) {
+                uiHandler.post(() -> addSystemNotice("Plan:\n" + plan));
+            }
+            @Override public void onStep(int step, String action, String result) {
+                uiHandler.post(() -> addToolBubble(new ConvTurn("tool", "Step " + step + ": " + action + "\n-> " + result.substring(0, Math.min(100, result.length())))));
+            }
+            @Override public void onDone(String summary) {
+                uiHandler.post(() -> {
+                    ConvTurn turn = new ConvTurn("kira", summary);
+                    conversation.add(turn);
+                    addKiraBubble(turn);
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("done.");
+                    scrollToBottom();
+                });
+            }
+            @Override public void onError(String error) {
+                uiHandler.post(() -> {
+                    addErrorBubble(new ConvTurn("error", error));
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("agent error");
+                });
+            }
+        });
+    }
+
+    private void addSystemNotice(String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextColor(0xFF888888);
+        tv.setTextSize(12);
+        tv.setPadding(dp(12), dp(6), dp(12), dp(6));
+        tv.setBackgroundColor(0xFF111111);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
+        p.setMargins(0, dp(2), 0, dp(2));
+        tv.setLayoutParams(p);
+        chatContainer.addView(tv);
+        scrollToBottom();
     }
 
     private void scrollToBottom() {

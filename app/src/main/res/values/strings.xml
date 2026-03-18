@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kira</string>
-    <string name="accessibility_description">Gives Kira AI full phone control: screen reading, tapping, typing, and notifications.</string>
+    <string name="accessibility_description">Gives Kira AI full phone control including screen reading, tapping, typing, and notifications.</string>
 
-    <style name="AppTheme" parent="android:Theme.NoTitleBar">
+    <style name="AppTheme" parent="android:Theme.Holo.NoActionBar">
         <item name="android:windowBackground">#0a0a0a</item>
         <item name="android:statusBarColor">#0a0a0a</item>
         <item name="android:navigationBarColor">#0a0a0a</item>
+        <item name="android:textColorPrimary">#ffffff</item>
     </style>
 </resources>

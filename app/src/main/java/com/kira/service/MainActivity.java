@@ -62,6 +62,9 @@ public class MainActivity extends Activity {
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
 
+        // Start persistent foreground service immediately
+        KiraForegroundService.start(this);
+
         if (!cfg.setupDone) {
             showFirstSetup();
             return;

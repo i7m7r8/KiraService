@@ -142,21 +142,37 @@ public class KiraTools {
         // Resolve common name to package
         String pkg = APP_PACKAGES.getOrDefault(input.toLowerCase().trim(), input);
 
-        // Try KiraService first
-        String result = ks("POST", "/open", "{\"package\":\"" + pkg + "\"}");
-        if (result != null && result.contains("ok")) return "opened " + pkg;
-
-        // Fallback: monkey via shell
-        String monkeyResult = shRun("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1 2>&1");
-        if (!monkeyResult.contains("error") && !monkeyResult.contains("No activities")) {
-            return "opened " + pkg + " via shell";
+        // Method 1: Direct Intent from application context (most reliable)
+        try {
+            android.content.pm.PackageManager pm = ctx.getPackageManager();
+            android.content.Intent intent = pm.getLaunchIntentForPackage(pkg);
+            if (intent != null) {
+                intent.addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK |
+                    android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED |
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                );
+                ctx.startActivity(intent);
+                try { Thread.sleep(800); } catch (Exception ignored) {}
+                return "opened " + pkg;
+            }
+        } catch (Exception e) {
+            android.util.Log.e("KiraTools", "direct launch failed: " + e.getMessage());
         }
 
-        // Fallback: am start
-        String amResult = shRun("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER $(pm resolve-activity --brief -c android.intent.category.LAUNCHER -a android.intent.action.MAIN " + pkg + " 2>/dev/null | tail -1) 2>&1");
-        if (amResult.contains("Starting")) return "opened " + pkg;
+        // Method 2: am start shell command (bypasses context issues)
+        String amResult = shRun("am start -n $(pm resolve-activity --brief -c android.intent.category.LAUNCHER " + pkg + " 2>/dev/null | tail -1) 2>&1");
+        if (amResult.contains("Starting") || amResult.contains("Activity")) {
+            return "opened " + pkg + " via am";
+        }
 
-        return "could not open " + pkg + " — try sh_run to find exact package name: pm list packages | grep " + input.toLowerCase();
+        // Method 3: monkey
+        String monkeyResult = shRun("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1 2>&1");
+        if (!monkeyResult.contains("error") && !monkeyResult.contains("No activities")) {
+            return "opened " + pkg + " via monkey";
+        }
+
+        return "could not open " + pkg + " — try: sh_run with cmd \"pm list packages | grep " + input.toLowerCase() + "\"";
     }
 
     // ── KiraService HTTP calls ────────────────────────────────────────────────

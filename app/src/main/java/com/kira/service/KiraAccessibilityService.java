@@ -42,6 +42,9 @@ public class KiraAccessibilityService extends AccessibilityService {
         instance = this;
         handler  = new Handler(Looper.getMainLooper());
 
+        // Start persistent foreground service to keep process alive
+        KiraForegroundService.start(this);
+
         // Start Rust HTTP server (localhost:7070)
         RustBridge.startServer(7070);
 
@@ -252,11 +255,34 @@ public class KiraAccessibilityService extends AccessibilityService {
     // ── Apps ──────────────────────────────────────────────────────────────────
 
     private String openApp(String pkg) {
-        Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
-        if (intent == null) return "{\"error\":\"not found: " + pkg + "\"}";
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        startActivity(intent);
-        return "{\"ok\":true}";
+        // Run on main thread to avoid crash
+        final boolean[] success = {false};
+        android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+        h.post(() -> {
+            try {
+                Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    startActivity(intent);
+                    success[0] = true;
+                }
+            } catch (Exception e) {
+                android.util.Log.e("KiraService", "openApp error: " + e.getMessage());
+            }
+        });
+        try { Thread.sleep(600); } catch (Exception ignored) {}
+        if (success[0]) return "{\"ok\":true}";
+        // Fallback: am start
+        try {
+            Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c",
+                "am start -n $(pm resolve-activity --brief -c android.intent.category.LAUNCHER " + pkg + " 2>/dev/null | tail -1)"});
+            p.waitFor();
+            return "{\"ok\":true}";
+        } catch (Exception e2) {
+            return "{\"error\":\"not found: " + pkg + "\"}";
+        }
     }
 
     private String getInstalledApps() throws Exception {

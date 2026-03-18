@@ -1,10 +1,18 @@
 package com.kira.service;
+
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        // Accessibility service auto-restarts — nothing needed here
+        String action = intent.getAction();
+        if (Intent.ACTION_BOOT_COMPLETED.equals(action)
+         || "android.intent.action.QUICKBOOT_POWERON".equals(action)
+         || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+            // Start foreground service on boot
+            KiraForegroundService.start(context);
+        }
     }
 }

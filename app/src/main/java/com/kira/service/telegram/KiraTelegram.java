@@ -3,6 +3,7 @@ package com.kira.service.telegram;
 import android.content.Context;
 import android.util.Log;
 
+import com.kira.service.KiraForegroundService;
 import com.kira.service.ai.KiraAI;
 import com.kira.service.ai.KiraConfig;
 
@@ -54,6 +55,9 @@ public class KiraTelegram {
             try {
                 KiraConfig cfg = KiraConfig.load(ctx);
                 if (cfg.tgToken.isEmpty()) { Thread.sleep(5000); continue; }
+
+                // Keep foreground service alive
+                try { KiraForegroundService.start(ctx); } catch (Exception ignored) {}
 
                 JSONObject updates = getUpdates(cfg.tgToken, lastUpdateId + 1);
                 if (updates == null) { Thread.sleep(2000); continue; }

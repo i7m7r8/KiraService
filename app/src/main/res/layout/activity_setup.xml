@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🦀 Kira Setup"
+            android:text="? Kira Setup"
             android:textColor="#00ff88"
             android:textSize="24sp"
             android:textStyle="bold"

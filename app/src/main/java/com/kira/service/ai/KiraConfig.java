@@ -13,6 +13,7 @@ public class KiraConfig {
     public String  model       = "llama-3.1-8b-instant";
     // Vision model (ZeroClaw) - e.g. meta-llama/llama-4-scout-17b-16e-instruct
     public String  visionModel = "";
+    public String  persona     = "";
     // Telegram
     public String  tgToken     = "";
     public long    tgAllowed   = 0;
@@ -31,6 +32,7 @@ public class KiraConfig {
         c.baseUrl          = p.getString("baseUrl",     "https://api.groq.com/openai/v1");
         c.model            = p.getString("model",       "llama-3.1-8b-instant");
         c.visionModel      = p.getString("visionModel", "");
+        c.persona          = p.getString("persona", "");
         c.tgToken          = p.getString("tgToken",     "");
         c.tgAllowed        = p.getLong("tgAllowed",     0);
         c.agentMaxSteps    = p.getInt("agentMaxSteps",  25);
@@ -47,6 +49,7 @@ public class KiraConfig {
             .putString("baseUrl",           baseUrl)
             .putString("model",             model)
             .putString("visionModel",       visionModel)
+            .putString("persona",           persona)
             .putString("tgToken",           tgToken)
             .putLong("tgAllowed",           tgAllowed)
             .putInt("agentMaxSteps",        agentMaxSteps)

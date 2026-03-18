@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+// Compute versionCode OUTSIDE android block so Groovy resolves it correctly
+// Minutes since 2024-01-01 00:00:00 UTC - always increases each build
+def buildVersionCode = (int) ((System.currentTimeMillis() - 1704067200000L) / 60000L)
+
 android {
     compileSdk 34
     namespace 'com.kira.service'
@@ -10,8 +14,7 @@ android {
         applicationId "com.kira.service"
         minSdk 26
         targetSdk 34
-        // Auto-increment: minutes since 2024-01-01 (always increases, fixes reinstall conflict)
-        versionCode (int)((System.currentTimeMillis() - 1704067200000L) / 60000L)
+        versionCode buildVersionCode
         versionName "7.0.0"
         ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         externalNativeBuild { cmake { cppFlags "" } }
@@ -51,70 +54,27 @@ android {
 }
 
 dependencies {
-    // ── Shizuku: ADB-level shell without root
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
-
-    // ── OkHttp: HTTP for AI API + Telegram + web
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
-
-    // ── Gson: JSON serialization
     implementation 'com.google.code.gson:gson:2.10.1'
-
-    // ── Markwon: full Markdown rendering in chat
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
     implementation 'io.noties.markwon:ext-tables:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
-
-    // ── WorkManager: background scheduled tasks
     implementation 'androidx.work:work-runtime:2.9.0'
-
-    // ── Room: local SQLite (conversation history, task logs)
     implementation 'androidx.room:room-runtime:2.6.1'
     annotationProcessor 'androidx.room:room-compiler:2.6.1'
-
-    // ── Jsoup: web scraping / HTML parsing
     implementation 'org.jsoup:jsoup:1.17.2'
-
-    // ── Commons IO + Lang: file and string utilities
     implementation 'commons-io:commons-io:2.15.1'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
-
-    // ── EventBus: OpenClaw-style decoupled component messaging
     implementation 'org.greenrobot:eventbus:3.3.1'
-
-    // ── Retrofit: type-safe structured HTTP (ZeroClaw provider calls)
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
-
-    // ── Security Crypto: AES256-GCM (AndyClaw credential storage)
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
-
-    // ── Preference: settings persistence
     implementation 'androidx.preference:preference:1.2.1'
-
-    // ── Biometric: fingerprint/face auth gate for credentials
     implementation 'androidx.biometric:biometric:1.1.0'
-
-    // ── CameraX: vision capture for ZeroClaw (screenshot + camera analysis)
-    implementation 'androidx.camera:camera-core:1.3.1'
-    implementation 'androidx.camera:camera-camera2:1.3.1'
-    implementation 'androidx.camera:camera-lifecycle:1.3.1'
-
-    // ── MLKit: on-device text recognition (ZeroClaw OCR without internet)
     implementation 'com.google.mlkit:text-recognition:16.0.1'
-
-    // ── Coil: async image loading (for screenshots in chat)
-    implementation 'io.coil-kt:coil:2.5.0'
-
-    // ── Kotlin stdlib (needed by Coil + MLKit)
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.22'
-
-    // ── Coroutines (needed by Coil)
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-
-    // ── LeakCanary: memory leak detection
     debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.12'
 }

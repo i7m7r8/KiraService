@@ -68,6 +68,7 @@ public class MainActivity extends Activity {
     private TextView    shizukuStatusTitle, shizukuStatusIcon;
     private TextView    floatingToggle;
     private boolean     floatingActive = false;
+    private TextView    memoryHint, memoryContent, clearHistoryBtn, historySettingHint;
 
     // Nav
     private TextView[]     navIcons, navTexts;
@@ -250,6 +251,18 @@ public class MainActivity extends Activity {
 
         buildToolsList();
         updateSettingsUI();
+        loadMemorySection();
+
+        // Memory section wiring
+        memoryHint        = settingsFragment.findViewById(R.id.memoryHint);
+        memoryContent     = settingsFragment.findViewById(R.id.memoryContent);
+        clearHistoryBtn   = settingsFragment.findViewById(R.id.clearHistoryBtn);
+        historySettingHint= settingsFragment.findViewById(R.id.historySettingHint);
+        TextView memoryClearBtn = settingsFragment.findViewById(R.id.memoryClearBtn);
+
+        settingsFragment.findViewById(R.id.settingMemory).setOnClickListener(v -> toggleMemoryContent());
+        if (memoryClearBtn != null) memoryClearBtn.setOnClickListener(v -> clearMemory());
+        if (clearHistoryBtn != null) clearHistoryBtn.setOnClickListener(v -> clearHistory());
     }
 
     // ── Tab nav ───────────────────────────────────────────────────────────────
@@ -833,6 +846,53 @@ public class MainActivity extends Activity {
         tgTokenHint.setText(cfg.tgToken.isEmpty() ? "Not set" : "✅ Configured");
         tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
         updateShizukuStatus();
+    }
+
+    private void loadMemorySection() {
+        try {
+            KiraMemory mem = new KiraMemory(this);
+            String all = mem.listAll();
+            int count = all.isEmpty() || all.equals("(empty)") ? 0 : all.split("\n").length;
+            JSONArray hist = mem.loadHistory();
+            if (memoryHint != null) memoryHint.setText(count + " facts · " + hist.length() + " conversations");
+            if (historySettingHint != null) historySettingHint.setText(hist.length() + " conversations stored");
+        } catch (Exception e) {
+            if (memoryHint != null) memoryHint.setText("tap to view");
+        }
+    }
+
+    private void toggleMemoryContent() {
+        if (memoryContent == null) return;
+        if (memoryContent.getVisibility() == View.GONE) {
+            try {
+                KiraMemory mem = new KiraMemory(this);
+                String all = mem.listAll();
+                memoryContent.setText(all.isEmpty() ? "(no facts stored yet)" : all);
+            } catch (Exception e) { memoryContent.setText("error reading memory"); }
+            memoryContent.setVisibility(View.VISIBLE);
+        } else {
+            memoryContent.setVisibility(View.GONE);
+        }
+    }
+
+    private void clearMemory() {
+        new AlertDialog.Builder(this)
+            .setTitle("Clear Memory")
+            .setMessage("Delete all stored facts? Conversation history is kept.")
+            .setPositiveButton("Clear", (d, w) -> {
+                try { new KiraMemory(this).clearFacts(); loadMemorySection(); Toast.makeText(this,"Facts cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
+            })
+            .setNegativeButton("Cancel", null).show();
+    }
+
+    private void clearHistory() {
+        new AlertDialog.Builder(this)
+            .setTitle("Clear Conversation History")
+            .setMessage("Delete all conversation history?")
+            .setPositiveButton("Clear", (d, w) -> {
+                try { new KiraMemory(this).clearHistory(); loadMemorySection(); Toast.makeText(this,"History cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
+            })
+            .setNegativeButton("Cancel", null).show();
     }
 
     private void updateShizukuStatus() {

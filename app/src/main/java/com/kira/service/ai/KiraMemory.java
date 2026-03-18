@@ -110,4 +110,18 @@ public class KiraMemory {
         ctx.getSharedPreferences(PREFS_CONV, Context.MODE_PRIVATE)
             .edit().remove("history").apply();
     }
+
+    public void clearFacts() {
+        android.content.SharedPreferences.Editor ed = prefs.edit();
+        java.util.Map<String, ?> all = prefs.getAll();
+        for (String key : all.keySet()) {
+            if (!key.equals("history")) ed.remove(key);
+        }
+        ed.apply();
+    }
+
+    public void clearHistory() {
+        prefs.edit().remove("history").apply();
+    }
+
 }

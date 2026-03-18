@@ -1,0 +1,18 @@
+[package]
+name = "kira-core"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "kira_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+lazy_static = "1.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KiraService</string>
+    <string name="accessibility_description">Gives Kira AI agent full phone control including screen reading, tapping, typing, and notifications.</string>
+
+    <style name="AppTheme" parent="android:Theme.Material.NoTitleBar">
+        <item name="android:windowBackground">#0a0a0a</item>
+        <item name="android:colorPrimary">#00ff88</item>
+        <item name="android:statusBarColor">#0a0a0a</item>
+    </style>
+</resources>

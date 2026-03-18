@@ -254,7 +254,7 @@ public class KiraAccessibilityService extends AccessibilityService {
     private String openApp(String pkg) {
         Intent intent = getPackageManager().getLaunchIntentForPackage(pkg);
         if (intent == null) return "{\"error\":\"not found: " + pkg + "\"}";
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         startActivity(intent);
         return "{\"ok\":true}";
     }

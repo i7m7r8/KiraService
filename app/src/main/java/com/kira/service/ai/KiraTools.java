@@ -60,10 +60,10 @@ public class KiraTools {
                 case "clipboard_set":   return ks("POST", "/clipboard_set", args.toString());
                 case "get_notifications": return ks("GET", "/notifications", null);
 
-                // Navigation
+                // Apps
+                case "open_app":        return openAppSmart(args.getString("package"));
                 case "press_back":      return ks("GET", "/back", null);
                 case "press_home":      return ks("GET", "/home", null);
-                case "open_app":        return ks("POST", "/open", args.toString());
                 case "installed_apps":  return ks("GET", "/installed_apps", null);
 
                 // System
@@ -109,6 +109,54 @@ public class KiraTools {
             Log.e(TAG, "tool error: " + name, e);
             return "error in " + name + ": " + e.getMessage();
         }
+    }
+
+    // ── Smart app opener ──────────────────────────────────────────────────────
+
+    private static final java.util.Map<String, String> APP_PACKAGES = new java.util.HashMap<String, String>() {{
+        put("youtube",    "com.google.android.youtube");
+        put("whatsapp",   "com.whatsapp");
+        put("instagram",  "com.instagram.android");
+        put("facebook",   "com.facebook.katana");
+        put("telegram",   "org.telegram.messenger");
+        put("chrome",     "com.android.chrome");
+        put("gmail",      "com.google.android.gm");
+        put("maps",       "com.google.android.apps.maps");
+        put("camera",     "com.android.camera2");
+        put("settings",   "com.android.settings");
+        put("calculator", "com.google.android.calculator");
+        put("calendar",   "com.google.android.calendar");
+        put("clock",      "com.google.android.deskclock");
+        put("files",      "com.google.android.documentsui");
+        put("photos",     "com.google.android.apps.photos");
+        put("spotify",    "com.spotify.music");
+        put("twitter",    "com.twitter.android");
+        put("tiktok",     "com.zhiliaoapp.musically");
+        put("snapchat",   "com.snapchat.android");
+        put("netflix",    "com.netflix.mediaclient");
+        put("play store", "com.android.vending");
+        put("playstore",  "com.android.vending");
+    }};
+
+    private String openAppSmart(String input) {
+        // Resolve common name to package
+        String pkg = APP_PACKAGES.getOrDefault(input.toLowerCase().trim(), input);
+
+        // Try KiraService first
+        String result = ks("POST", "/open", "{\"package\":\"" + pkg + "\"}");
+        if (result != null && result.contains("ok")) return "opened " + pkg;
+
+        // Fallback: monkey via shell
+        String monkeyResult = shRun("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1 2>&1");
+        if (!monkeyResult.contains("error") && !monkeyResult.contains("No activities")) {
+            return "opened " + pkg + " via shell";
+        }
+
+        // Fallback: am start
+        String amResult = shRun("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER $(pm resolve-activity --brief -c android.intent.category.LAUNCHER -a android.intent.action.MAIN " + pkg + " 2>/dev/null | tail -1) 2>&1");
+        if (amResult.contains("Starting")) return "opened " + pkg;
+
+        return "could not open " + pkg + " — try sh_run to find exact package name: pm list packages | grep " + input.toLowerCase();
     }
 
     // ── KiraService HTTP calls ────────────────────────────────────────────────

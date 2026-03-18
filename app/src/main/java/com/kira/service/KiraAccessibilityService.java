@@ -293,6 +293,17 @@ public class KiraAccessibilityService extends AccessibilityService {
         }
     }
 
+
+    public void restartTelegram() {
+        if (telegram != null) telegram.stop();
+        ai = new KiraAI(this);
+        KiraConfig cfg = KiraConfig.load(this);
+        if (!cfg.tgToken.isEmpty()) {
+            telegram = new com.kira.service.telegram.KiraTelegram(this, ai);
+            telegram.start();
+        }
+    }
+
     @Override public void onInterrupt() {}
 
     @Override

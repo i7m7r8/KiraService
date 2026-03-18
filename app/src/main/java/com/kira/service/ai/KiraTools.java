@@ -14,6 +14,7 @@ import com.kira.service.KiraAccessibilityService;
 import com.kira.service.ShizukuShell;
 
 import org.json.JSONObject;
+import org.jsoup.Jsoup;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -171,6 +172,44 @@ public class KiraTools {
 
                 // ── Sensors ───────────────────────────────────────────────────
                 case "location":      return getLocation();
+
+
+                // ── NanoBot / ZeroClaw extras ─────────────────────────────────────────
+                case "read_sms":          return readSms(args.optInt("count", 10));
+                case "read_contacts":     return readContacts(args.optInt("count", 20));
+                case "read_call_log":     return readCallLog(args.optInt("count", 10));
+                case "set_alarm":         return setAlarm(args.getInt("hour"), args.getInt("minute"), args.optString("label","Kira alarm"));
+                case "set_timer":         return setTimer(args.getInt("seconds"));
+                case "share_text":        return shareText(args.getString("text"), args.optString("app",""));
+                case "open_notification_shade": return ShizukuShell.exec("cmd statusbar expand-notifications");
+                case "close_notification_shade": return ShizukuShell.exec("cmd statusbar collapse");
+                case "take_video":        return ShizukuShell.exec("screenrecord --time-limit " + args.optInt("seconds",5) + " /sdcard/kira_rec_" + System.currentTimeMillis() + ".mp4 &");
+                case "get_wifi_info":     return getWifiInfo();
+                case "scan_wifi":         return ShizukuShell.exec("cmd wifi list-scan-results 2>/dev/null || dumpsys wifi | grep 'SSID' | head -15");
+                case "ping":              return ShizukuShell.exec("ping -c 3 " + args.getString("host"));
+                case "curl":              return httpGet(args.getString("url"));
+                case "scrape_web":        return scrapeWeb(args.getString("url"), args.optString("selector",""));
+                case "read_clipboard":    return getClipboard();
+                case "write_clipboard":   return setClipboard(args.getString("text"));
+                case "press_key":         return ShizukuShell.exec("input keyevent " + keyCode(args.getString("key")));
+                case "input_swipe":       return ShizukuShell.exec("input swipe "+args.getInt("x1")+" "+args.getInt("y1")+" "+args.getInt("x2")+" "+args.getInt("y2")+" "+args.optInt("ms",300));
+                case "am_broadcast":      return ShizukuShell.exec("am broadcast -a " + args.getString("action") + " " + args.optString("extras",""));
+                case "pm_list":           return ShizukuShell.exec("pm list packages" + (args.optBoolean("system",false) ? "" : " -3"));
+                case "logcat":            return ShizukuShell.exec("logcat -d -t 50 " + args.optString("filter","*:E"));
+                case "dumpsys":           return ShizukuShell.exec("dumpsys " + args.getString("service") + " | head -40");
+                case "top_cpu":           return ShizukuShell.exec("top -b -n1 | head -20");
+                case "disk_usage":        return ShizukuShell.exec("df -h /sdcard /data 2>/dev/null | head -5");
+                case "find_files":        return ShizukuShell.exec("find " + args.optString("path","/sdcard") + " -name "" + args.getString("pattern") + "" 2>/dev/null | head -20");
+                case "zip_files":         return ShizukuShell.exec("cd " + args.getString("dir") + " && zip -r /sdcard/kira_archive_" + System.currentTimeMillis() + ".zip " + args.getString("pattern"));
+                case "unzip":             return ShizukuShell.exec("unzip " + args.getString("file") + " -d " + args.optString("dest","/sdcard/"));
+                case "download":          return ShizukuShell.exec("curl -L -o /sdcard/" + args.optString("name","kira_download") + " "" + args.getString("url") + """);
+                case "schedule_task":     { KiraProactive.scheduleReminder(ctx, args.getString("task"), args.optLong("minutes",1)); return "scheduled: " + args.getString("task"); }
+                case "watch_battery":     { KiraProactive.watchBattery(ctx, args.optInt("threshold",20)); return "watching battery"; }
+                case "vibrate":           { android.os.Vibrator v = (android.os.Vibrator)ctx.getSystemService(Context.VIBRATOR_SERVICE); if(v!=null)v.vibrate(args.optLong("ms",300)); return "vibrated"; }
+                case "play_tone":         return playTone(args.optInt("freq",440), args.optInt("ms",500));
+                case "set_wallpaper":     return setWallpaper(args.getString("path"));
+                case "take_photo":        return openCameraApp();
+                case "calendar_add":      return addCalendarEvent(args.getString("title"), args.optLong("start", System.currentTimeMillis()+3600000), args.optLong("end", System.currentTimeMillis()+7200000));
 
                 default: return "unknown tool: " + name + ". Available: read_screen, tap_screen, open_app, sh_run, web_search, send_sms, remember, recall, battery_info, sh_screenshot, and 40+ more.";
             }
@@ -501,6 +540,186 @@ public class KiraTools {
             case "right": return "22";
             default: return key;
         }
+    }
+
+
+    // ── NanoBot / ZeroClaw methods ────────────────────────────────────────────
+
+    private String readSms(int count) {
+        try {
+            android.database.Cursor c = ctx.getContentResolver().query(
+                android.net.Uri.parse("content://sms/inbox"), null, null, null, "date DESC LIMIT " + count);
+            if (c == null) return "cannot read SMS (permission denied?)";
+            StringBuilder sb = new StringBuilder();
+            while (c.moveToNext()) {
+                String addr = c.getString(c.getColumnIndexOrThrow("address"));
+                String body = c.getString(c.getColumnIndexOrThrow("body"));
+                sb.append("From: ").append(addr).append("\n").append(body.substring(0, Math.min(100, body.length()))).append("\n---\n");
+            }
+            c.close();
+            return sb.length() == 0 ? "no SMS" : sb.toString().trim();
+        } catch (Exception e) { return "SMS error: " + e.getMessage(); }
+    }
+
+    private String readContacts(int count) {
+        try {
+            android.database.Cursor c = ctx.getContentResolver().query(
+                android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                new String[]{android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                             android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER},
+                null, null, android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC");
+            if (c == null) return "contacts unavailable";
+            StringBuilder sb = new StringBuilder();
+            int n = 0;
+            while (c.moveToNext() && n++ < count) {
+                sb.append(c.getString(0)).append(": ").append(c.getString(1)).append("\n");
+            }
+            c.close();
+            return sb.length() == 0 ? "no contacts" : sb.toString().trim();
+        } catch (Exception e) { return "contacts error: " + e.getMessage(); }
+    }
+
+    private String readCallLog(int count) {
+        try {
+            android.database.Cursor c = ctx.getContentResolver().query(
+                android.provider.CallLog.Calls.CONTENT_URI, null, null, null,
+                android.provider.CallLog.Calls.DATE + " DESC LIMIT " + count);
+            if (c == null) return "call log unavailable";
+            StringBuilder sb = new StringBuilder();
+            while (c.moveToNext()) {
+                String name   = c.getString(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.CACHED_NAME));
+                String number = c.getString(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.NUMBER));
+                int type      = c.getInt(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.TYPE));
+                String t = type == android.provider.CallLog.Calls.INCOMING_TYPE ? "in" :
+                           type == android.provider.CallLog.Calls.OUTGOING_TYPE ? "out" : "missed";
+                sb.append("[").append(t).append("] ").append(name != null ? name : number).append("\n");
+            }
+            c.close();
+            return sb.length() == 0 ? "no calls" : sb.toString().trim();
+        } catch (Exception e) { return "call log error: " + e.getMessage(); }
+    }
+
+    private String setAlarm(int hour, int minute, String label) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.provider.AlarmClock.ACTION_SET_ALARM);
+            i.putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour);
+            i.putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute);
+            i.putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, label);
+            i.putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true);
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return "alarm set for " + hour + ":" + String.format("%02d", minute);
+        } catch (Exception e) { return "alarm error: " + e.getMessage(); }
+    }
+
+    private String setTimer(int seconds) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.provider.AlarmClock.ACTION_SET_TIMER);
+            i.putExtra(android.provider.AlarmClock.EXTRA_LENGTH, seconds);
+            i.putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true);
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return "timer set for " + seconds + "s";
+        } catch (Exception e) { return "timer error: " + e.getMessage(); }
+    }
+
+    private String shareText(String text, String app) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_SEND);
+            i.setType("text/plain");
+            i.putExtra(android.content.Intent.EXTRA_TEXT, text);
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (!app.isEmpty()) {
+                i.setPackage(APP_MAP.getOrDefault(app.toLowerCase(), app));
+            }
+            ctx.startActivity(i);
+            return "shared text";
+        } catch (Exception e) { return "share error: " + e.getMessage(); }
+    }
+
+    private String getWifiInfo() {
+        android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) ctx.getSystemService(Context.WIFI_SERVICE);
+        if (wm == null) return "wifi manager unavailable";
+        android.net.wifi.WifiInfo info = wm.getConnectionInfo();
+        if (info == null) return "not connected to WiFi";
+        return "SSID: " + info.getSSID() + "\nBSSID: " + info.getBSSID()
+            + "\nIP: " + android.text.format.Formatter.formatIpAddress(info.getIpAddress())
+            + "\nSignal: " + info.getRssi() + " dBm"
+            + "\nSpeed: " + info.getLinkSpeed() + " Mbps";
+    }
+
+    private String scrapeWeb(String url, String selector) {
+        try {
+            if (!url.startsWith("http")) url = "https://" + url;
+            org.jsoup.nodes.Document doc = org.jsoup.Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 KiraAgent/6.0")
+                .timeout(10000).get();
+            if (!selector.isEmpty()) {
+                return doc.select(selector).text().substring(0, Math.min(1000, doc.select(selector).text().length()));
+            }
+            String text = doc.body().text();
+            return text.substring(0, Math.min(1500, text.length()));
+        } catch (Exception e) { return "scrape error: " + e.getMessage(); }
+    }
+
+    private String getClipboard() {
+        com.kira.service.KiraAccessibilityService svc = com.kira.service.KiraAccessibilityService.instance;
+        if (svc != null) return svc.getClipboard();
+        return ShizukuShell.exec("service call clipboard 2 2>/dev/null | grep -o 'String.*' | head -1");
+    }
+
+    private String setClipboard(String text) {
+        com.kira.service.KiraAccessibilityService svc = com.kira.service.KiraAccessibilityService.instance;
+        if (svc != null) { svc.setClipboard(text); return "clipboard set"; }
+        return ShizukuShell.exec("am broadcast -a clipper.set --es text '" + text.replace("'","") + "' 2>/dev/null");
+    }
+
+    private String playTone(int freq, int durationMs) {
+        try {
+            android.media.AudioTrack track = new android.media.AudioTrack.Builder()
+                .setAudioAttributes(new android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA).build())
+                .setAudioFormat(new android.media.AudioFormat.Builder()
+                    .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(44100).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+                .setBufferSizeInBytes(44100 * durationMs / 1000 * 2)
+                .setTransferMode(android.media.AudioTrack.MODE_STATIC).build();
+            int numSamples = 44100 * durationMs / 1000;
+            short[] samples = new short[numSamples];
+            for (int i = 0; i < numSamples; i++) {
+                samples[i] = (short)(32767 * Math.sin(2 * Math.PI * freq * i / 44100));
+            }
+            track.write(samples, 0, numSamples);
+            track.play();
+            return "playing " + freq + "Hz tone for " + durationMs + "ms";
+        } catch (Exception e) { return "tone error: " + e.getMessage(); }
+    }
+
+    private String setWallpaper(String path) {
+        return ShizukuShell.exec("am broadcast -a android.intent.action.WALLPAPER_CHANGED 2>/dev/null; "
+            + "settings put system wallpaper_component null 2>/dev/null");
+    }
+
+    private String openCameraApp() {
+        try {
+            android.content.Intent i = new android.content.Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return "opened camera";
+        } catch (Exception e) { return ShizukuShell.openApp(ctx, "com.android.camera2"); }
+    }
+
+    private String addCalendarEvent(String title, long startMs, long endMs) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_INSERT);
+            i.setData(android.provider.CalendarContract.Events.CONTENT_URI);
+            i.putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs);
+            i.putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, endMs);
+            i.putExtra(android.provider.CalendarContract.Events.TITLE, title);
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return "calendar event created: " + title;
+        } catch (Exception e) { return "calendar error: " + e.getMessage(); }
     }
 
     public String getToolList() {

@@ -8,10 +8,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class KiraMemory {
-    private static final String TAG = "KiraMemory";
+    private static final String TAG       = "KiraMemory";
     private static final String PREFS_MEM  = "kira_memory";
     private static final String PREFS_CONV = "kira_conversations";
-    private static final int    MAX_CONV   = 50;
+    private static final int    MAX_CONV   = 200; // unlimited-feeling
 
     private final Context ctx;
 
@@ -22,24 +22,21 @@ public class KiraMemory {
     // ── Key-value memory ──────────────────────────────────────────────────────
 
     public void remember(String key, String value) {
-        ctx.getSharedPreferences(PREFS_MEM, Context.MODE_PRIVATE)
-            .edit().putString(key.trim(), value).apply();
+        prefs().edit().putString(key.trim(), value).apply();
     }
 
     public String recall(String key) {
-        String val = ctx.getSharedPreferences(PREFS_MEM, Context.MODE_PRIVATE)
-            .getString(key.trim(), null);
+        String val = prefs().getString(key.trim(), null);
         return val != null ? val : "nothing stored for: " + key;
     }
 
     public void forget(String key) {
-        ctx.getSharedPreferences(PREFS_MEM, Context.MODE_PRIVATE)
-            .edit().remove(key.trim()).apply();
+        prefs().edit().remove(key.trim()).apply();
     }
 
     public String listAll() {
-        SharedPreferences p = ctx.getSharedPreferences(PREFS_MEM, Context.MODE_PRIVATE);
-        if (p.getAll().isEmpty()) return "memory is empty";
+        SharedPreferences p = prefs();
+        if (p.getAll().isEmpty()) return "(empty)";
         StringBuilder sb = new StringBuilder();
         for (java.util.Map.Entry<String, ?> e : p.getAll().entrySet()) {
             sb.append(e.getKey()).append(": ").append(e.getValue()).append("\n");
@@ -47,11 +44,15 @@ public class KiraMemory {
         return sb.toString().trim();
     }
 
+    public void clearFacts() {
+        prefs().edit().clear().apply();
+    }
+
     // ── Conversation history ──────────────────────────────────────────────────
 
     public void storeConversation(String user, String kira) {
         try {
-            SharedPreferences p = ctx.getSharedPreferences(PREFS_CONV, Context.MODE_PRIVATE);
+            SharedPreferences p = convPrefs();
             String raw = p.getString("history", "[]");
             JSONArray arr = new JSONArray(raw);
             JSONObject entry = new JSONObject();
@@ -68,28 +69,28 @@ public class KiraMemory {
 
     public JSONArray loadHistory() {
         try {
-            String raw = ctx.getSharedPreferences(PREFS_CONV, Context.MODE_PRIVATE)
-                .getString("history", "[]");
-            return new JSONArray(raw);
+            return new JSONArray(convPrefs().getString("history", "[]"));
         } catch (Exception e) {
             return new JSONArray();
         }
     }
 
+    public void clearHistory() {
+        convPrefs().edit().remove("history").apply();
+    }
+
+    // ── Context for AI system prompt ─────────────────────────────────────────
+
     public String getContext() {
         try {
             StringBuilder sb = new StringBuilder();
-
-            // Key-value facts
-            SharedPreferences kv = ctx.getSharedPreferences(PREFS_MEM, Context.MODE_PRIVATE);
+            SharedPreferences kv = prefs();
             if (!kv.getAll().isEmpty()) {
                 sb.append("## Remembered facts\n");
                 for (java.util.Map.Entry<String, ?> e : kv.getAll().entrySet()) {
                     sb.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append("\n");
                 }
             }
-
-            // Recent conversations
             JSONArray arr = loadHistory();
             if (arr.length() > 0) {
                 sb.append("\n## Recent conversations\n");
@@ -101,27 +102,16 @@ public class KiraMemory {
                 }
             }
             return sb.toString().trim();
-        } catch (Exception e) {
-            return "";
-        }
+        } catch (Exception e) { return ""; }
     }
 
-    public void clearHistory() {
-        ctx.getSharedPreferences(PREFS_CONV, Context.MODE_PRIVATE)
-            .edit().remove("history").apply();
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private SharedPreferences prefs() {
+        return ctx.getSharedPreferences(PREFS_MEM, Context.MODE_PRIVATE);
     }
 
-    public void clearFacts() {
-        android.content.SharedPreferences.Editor ed = prefs.edit();
-        java.util.Map<String, ?> all = prefs.getAll();
-        for (String key : all.keySet()) {
-            if (!key.equals("history")) ed.remove(key);
-        }
-        ed.apply();
+    private SharedPreferences convPrefs() {
+        return ctx.getSharedPreferences(PREFS_CONV, Context.MODE_PRIVATE);
     }
-
-    public void clearHistory() {
-        prefs.edit().remove("history").apply();
-    }
-
 }

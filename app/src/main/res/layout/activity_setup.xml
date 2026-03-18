@@ -1,70 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#0a0a0a">
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#0a0a0a" android:scrollbars="none">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="24dp">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Kira Setup"
+            android:textColor="#ff8c00" android:textSize="28sp" android:textStyle="bold"
+            android:layout_marginBottom="4dp"/>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="? Kira Setup"
-            android:textColor="#00ff88"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="24dp" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Configure your AI agent" android:textColor="#555555"
+            android:textSize="14sp" android:layout_marginBottom="28dp"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Your name" android:textColor="#888888" android:layout_marginBottom="4dp"/>
         <EditText android:id="@+id/setupName" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:hint="Imran"
-            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
-            android:layout_marginBottom="16dp"/>
+            android:textColor="#ffffff" android:textColorHint="#444444"
+            android:background="#1a1a1a" android:padding="12dp"
+            android:inputType="textPersonName" android:layout_marginBottom="16dp"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="API Key" android:textColor="#888888" android:layout_marginBottom="4dp"/>
+            android:text="API Key (Groq / OpenAI / etc.)" android:textColor="#888888"
+            android:layout_marginBottom="4dp"/>
         <EditText android:id="@+id/setupApiKey" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:hint="gsk_... or sk-..."
-            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
+            android:layout_height="wrap_content" android:hint="sk-..."
+            android:textColor="#ffffff" android:textColorHint="#444444"
+            android:background="#1a1a1a" android:padding="12dp"
             android:inputType="textPassword" android:layout_marginBottom="16dp"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="API Base URL" android:textColor="#888888" android:layout_marginBottom="4dp"/>
+            android:text="Base URL" android:textColor="#888888" android:layout_marginBottom="4dp"/>
         <EditText android:id="@+id/setupBaseUrl" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:textColor="#ffffff"
-            android:background="#1a1a1a" android:padding="10dp" android:layout_marginBottom="16dp"/>
+            android:layout_height="wrap_content" android:hint="https://api.groq.com/openai/v1"
+            android:textColor="#ffffff" android:textColorHint="#444444"
+            android:background="#1a1a1a" android:padding="12dp"
+            android:inputType="textUri" android:layout_marginBottom="16dp"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Model" android:textColor="#888888" android:layout_marginBottom="4dp"/>
         <EditText android:id="@+id/setupModel" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:textColor="#ffffff"
-            android:background="#1a1a1a" android:padding="10dp" android:layout_marginBottom="16dp"/>
+            android:layout_height="wrap_content" android:hint="llama-3.1-8b-instant"
+            android:textColor="#ffffff" android:textColorHint="#444444"
+            android:background="#1a1a1a" android:padding="12dp"
+            android:inputType="text" android:layout_marginBottom="16dp"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Telegram Bot Token (optional)" android:textColor="#888888"
             android:layout_marginBottom="4dp"/>
         <EditText android:id="@+id/setupTgToken" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:hint="1234567:ABC..."
-            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
-            android:layout_marginBottom="16dp"/>
+            android:layout_height="wrap_content" android:hint="123456:ABC..."
+            android:textColor="#ffffff" android:textColorHint="#444444"
+            android:background="#1a1a1a" android:padding="12dp"
+            android:inputType="text" android:layout_marginBottom="16dp"/>
 
         <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="Your Telegram ID (get from @userinfobot)" android:textColor="#888888"
+            android:text="Your Telegram ID (optional, 0 = anyone)" android:textColor="#888888"
             android:layout_marginBottom="4dp"/>
         <EditText android:id="@+id/setupTgId" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:hint="123456789"
-            android:textColor="#ffffff" android:background="#1a1a1a" android:padding="10dp"
-            android:inputType="number" android:layout_marginBottom="32dp"/>
+            android:textColor="#ffffff" android:textColorHint="#444444"
+            android:background="#1a1a1a" android:padding="12dp"
+            android:inputType="number" android:layout_marginBottom="28dp"/>
 
         <Button android:id="@+id/setupSave" android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:text="Start Kira"
-            android:backgroundTint="#00ff88" android:textColor="#000000"
-            android:textStyle="bold" android:padding="14dp"/>
+            android:layout_height="52dp" android:text="Start Kira"
+            android:textColor="#000000" android:background="#ff8c00"
+            android:textSize="16sp" android:textStyle="bold"/>
 
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Made with love by Imran"
+            android:textColor="#333333" android:textSize="11sp"
+            android:gravity="center" android:paddingTop="16dp"/>
     </LinearLayout>
 </ScrollView>

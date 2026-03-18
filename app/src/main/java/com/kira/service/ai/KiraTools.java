@@ -11,6 +11,7 @@ import android.util.Log;
 
 import com.kira.service.KiraAccessibilityService;
 import com.kira.service.ShizukuShell;
+import com.kira.service.RustBridge;
 
 import org.json.JSONObject;
 import org.jsoup.Jsoup;
@@ -197,6 +198,14 @@ public class KiraTools {
                 case "curl":          return httpGet(args.getString("url"));
                 case "scrape_web":    return scrapeWeb(args.getString("url"), args.optString("selector", ""));
 
+
+
+                case "watch_screen":  { String keyword = args.getString("keyword"); String action = args.getString("action"); memory.remember("watch_screen_" + System.currentTimeMillis(), keyword + "|" + action); return "watching screen for: " + keyword; }
+                case "watch_app":     { RustBridge.addTrigger("app_" + args.getString("package"), "app_notif", args.getString("package"), args.getString("action"), args.optBoolean("repeat", false)); return "watching app: " + args.getString("package"); }
+                case "watch_battery": { RustBridge.addTrigger("bat_" + args.optInt("threshold",20), "battery_low", String.valueOf(args.optInt("threshold",20)), args.getString("action"), args.optBoolean("repeat", true)); return "watching battery < " + args.optInt("threshold",20) + "%"; }
+                case "watch_notif":   { RustBridge.addTrigger("notif_" + System.currentTimeMillis(), "keyword_notif", args.getString("keyword"), args.getString("action"), args.optBoolean("repeat", true)); return "watching notifications for: " + args.getString("keyword"); }
+                case "list_watches":  { return ShizukuShell.exec("echo watches active"); }
+                case "stop_watch":    { RustBridge.removeTrigger(args.getString("id")); return "stopped watch: " + args.getString("id"); }
 
                 // Vision (ZeroClaw-style)
                 case "analyze_screen": return analyzeScreen(args.optString("question", ""));

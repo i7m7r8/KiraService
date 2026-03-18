@@ -28,6 +28,8 @@ public class KiraAccessibilityService extends AccessibilityService {
     private Handler handler;
     private KiraAI ai;
     private KiraTelegram telegram;
+    private KiraWatcher watcher;
+    private KiraHeartbeat heartbeat;
 
     // Notification storage
     private final List<String> recentNotifications = new CopyOnWriteArrayList<>();
@@ -296,6 +298,8 @@ public class KiraAccessibilityService extends AccessibilityService {
 
     public void restartTelegram() {
         if (telegram != null) telegram.stop();
+        if (watcher   != null) watcher.stop();
+        if (heartbeat != null) heartbeat.stop();
         ai = new KiraAI(this);
         KiraConfig cfg = KiraConfig.load(this);
         if (!cfg.tgToken.isEmpty()) {
@@ -310,6 +314,8 @@ public class KiraAccessibilityService extends AccessibilityService {
     public void onDestroy() {
         instance = null;
         if (telegram != null) telegram.stop();
+        if (watcher   != null) watcher.stop();
+        if (heartbeat != null) heartbeat.stop();
         super.onDestroy();
     }
 }

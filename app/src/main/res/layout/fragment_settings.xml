@@ -422,6 +422,33 @@
         <TextView style="@style/SectionHeader" android:text="INTERFACE"
             android:layout_marginTop="12dp"/>
 
+        <!-- Theme toggle -->
+        <LinearLayout android:id="@+id/rowThemeToggle"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:orientation="horizontal"
+            android:background="#AA0a0a16"
+            android:paddingStart="16dp" android:paddingEnd="12dp"
+            android:layout_marginBottom="1dp"
+            android:gravity="center_vertical"
+            android:clickable="true" android:focusable="true">
+            <TextView style="@style/SettingsIcon" android:text="◑"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Theme"/>
+                <TextView style="@style/SettingsHint" android:text="auto · follows system"/>
+            </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:text="toggle"
+                android:textSize="10sp"
+                android:textColor="#555566"
+                android:background="#0d0d1e"
+                android:paddingStart="10dp" android:paddingEnd="10dp"
+                android:gravity="center"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
+
         <LinearLayout android:id="@+id/rowUserName" style="@style/SettingsRow">
             <TextView style="@style/SettingsIcon" android:text="👤"/>
             <LinearLayout style="@style/SettingsTextBlock">
@@ -579,6 +606,27 @@
                 android:padding="10dp"
                 android:visibility="gone"
                 android:layout_marginTop="8dp"/>
+        </LinearLayout>
+
+        <!-- ── SECTION: SYSTEM ──────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="SYSTEM"
+            android:layout_marginTop="12dp"/>
+
+        <LinearLayout android:id="@+id/rowOta"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:orientation="horizontal"
+            android:background="#AA060610"
+            android:paddingStart="16dp" android:paddingEnd="12dp"
+            android:layout_marginBottom="1dp"
+            android:gravity="center_vertical"
+            android:clickable="true" android:focusable="true">
+            <TextView style="@style/SettingsIcon" android:text="↑"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Check for Updates"/>
+                <TextView style="@style/SettingsHint" android:text="OTA via GitHub Releases"/>
+            </LinearLayout>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
         <!-- ── SECTION: ABOUT ────────────────────────────────────────────── -->

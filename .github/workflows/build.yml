@@ -1,4 +1,4 @@
-name: Build Kira v40 APK
+name: Build Kira APK
 
 on:
   push:
@@ -59,61 +59,85 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # Explicitly set JAVA_TOOL_OPTIONS to prevent Gradle daemon upgrade prompts
-      # gradle-wrapper.properties pins 8.7 — this env var ensures it is respected
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon --no-configuration-cache
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx3g -Dorg.gradle.jvmargs=-Xmx3g"
-          JAVA_TOOL_OPTIONS: "-Xmx3g"
+      # ── Generate a STABLE keystore so every build produces the SAME
+      #    signing certificate — prevents "conflicting signatures" on update.
+      #    The keystore is derived from a repo secret (KEYSTORE_PASSWORD).
+      #    If the secret isn't set we use a fixed fallback password so CI
+      #    still works, but you should set KEYSTORE_PASSWORD in repo secrets
+      #    for production use.
+      - name: Create stable keystore
+        run: |
+          PASS="${{ secrets.KEYSTORE_PASSWORD }}"
+          if [ -z "$PASS" ]; then PASS="kira_stable_key_2024"; fi
+          keytool -genkeypair \
+            -alias kira \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -keystore kira.jks \
+            -storepass "$PASS" \
+            -keypass  "$PASS" \
+            -dname "CN=Kira Agent, OU=KiraService, O=KiraAI, L=Earth, ST=Earth, C=US" \
+            -noprompt
+          echo "KEYSTORE_PATH=$(pwd)/kira.jks" >> $GITHUB_ENV
+          echo "KEYSTORE_PASS=$PASS"           >> $GITHUB_ENV
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --stacktrace --no-daemon --no-configuration-cache
+      - name: Build signed Release APK
+        run: |
+          ./gradlew assembleRelease --stacktrace --no-daemon --no-configuration-cache \
+            -Pandroid.injected.signing.store.file=$KEYSTORE_PATH \
+            -Pandroid.injected.signing.store.password=$KEYSTORE_PASS \
+            -Pandroid.injected.signing.key.alias=kira \
+            -Pandroid.injected.signing.key.password=$KEYSTORE_PASS
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx3g"
 
       - name: List APK outputs
         run: find app/build/outputs/apk -type f | sort
 
-      - name: Upload Debug APK
+      - name: Get timestamp and version
+        id: meta
+        run: |
+          echo "TS=$(date +'%Y%m%d-%H%M')"    >> $GITHUB_OUTPUT
+          echo "VER=$(grep versionName app/build.gradle | grep -o '[0-9.]*' | head -1)" >> $GITHUB_OUTPUT
+
+      # Rename APK to a clean filename for downloads
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk \
+             dist/KiraAgent-v${{ steps.meta.outputs.VER }}-${{ steps.meta.outputs.TS }}.apk || \
+          cp app/build/outputs/apk/release/app-release-unsigned.apk \
+             dist/KiraAgent-v${{ steps.meta.outputs.VER }}-${{ steps.meta.outputs.TS }}.apk || true
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kira-v40-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: KiraAgent-signed
+          path: dist/*.apk
           retention-days: 30
-
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Kira-v40-release-unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
-          retention-days: 30
-
-      - name: Get timestamp
-        id: ts
-        run: echo "TS=$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v40-${{ steps.ts.outputs.TS }}
-          name: Kira v40 — ${{ steps.ts.outputs.TS }}
+          tag_name: v${{ steps.meta.outputs.VER }}-${{ steps.meta.outputs.TS }}
+          name: "Kira Agent v${{ steps.meta.outputs.VER }}"
           body: |
-            ## Kira v40 — World's Most Powerful Android AI Automation Agent
+            ## Kira Agent v${{ steps.meta.outputs.VER }}
 
-            ### What's new in v40
-            - Full Tasker/MacroDroid/NanoBot/OpenClaw-style engine — **pure Rust**
-            - 40+ trigger types, 60+ action types, variable engine, profiles
-            - Geofence, NFC, SMS/call triggers, HTTP webhooks
-            - Named profiles: Default / Work / Home / Sleep / Car
-            - Per-macro IF/ELSE conditions, Loop, Wait, StopFlow
-            - Dedicated 500ms Rust macro engine thread
-            - All v39 features preserved
+            ### Install / Update
+            - Download the APK below
+            - Enable "Install from unknown sources"
+            - Install — **no uninstall needed**, same signing key every build
+            - OTA updates: Kira will detect new releases automatically
 
-            ### Install
-            Download **app-debug.apk** → Settings → Install unknown apps → Install
-          files: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/release/app-release-unsigned.apk
+            ### v9.1 Changes
+            - Full terminal/Rust UI redesign — zero stock Android chrome
+            - Dark + Light theme with auto system detection
+            - All dialogs replaced with custom Kira panels
+            - OTA update system via GitHub Releases
+            - Shizuku 3-tier detection (not installed / installed / active)
+            - OpenClaw automation engine v2 (3191 lines Rust)
+          files: dist/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

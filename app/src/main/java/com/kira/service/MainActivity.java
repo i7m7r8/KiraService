@@ -95,6 +95,9 @@ public class MainActivity extends Activity
         };
     private TextView    memoryHint, memoryContent, clearHistoryBtn, historySettingHint;
 
+    // Theme
+    boolean isDarkTheme = true;  // auto-set in onCreate
+
     // Nav
     private TextView[]     navIcons, navTexts;
     private LinearLayout[] navItems;
@@ -123,6 +126,10 @@ public class MainActivity extends Activity
         setContentView(R.layout.activity_main);
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
+        // Auto theme: follow system setting
+        int uiMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        isDarkTheme = (uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES);
+        applyTheme();
 
 
         // Init accelerometer for star parallax
@@ -144,6 +151,8 @@ public class MainActivity extends Activity
 
         // Start foreground service to keep Telegram alive
         KiraForegroundService.start(this);
+        // OTA check (non-blocking, 3s delay)
+        uiHandler.postDelayed(this::checkForOtaUpdate, 3000);
     }
 
     // -- Permissions -----------------------------------------------------------
@@ -183,24 +192,30 @@ public class MainActivity extends Activity
     }
 
     private void showShizukuDialog() {
-        new AlertDialog.Builder(this)
-            .setTitle("Enable Full Phone Control")
-            .setMessage("Kira uses Shizuku for ADB-level control (install apps, run shell commands, grant permissions).\n\n1. Install Shizuku from Play Store\n2. Open Shizuku ? Start via Wireless Debugging\n3. Return to Kira\n\nBasic screen control still works without Shizuku.")
-            .setPositiveButton("Get Shizuku", (d, w) -> {
-                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api"))); }
-                catch (Exception e) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app"))); }
-            })
-            .setNeutralButton("Already Running", (d, w) -> checkShizuku())
-            .setNegativeButton("Skip", null).show();
+        showKiraDialogMulti("Enable Phone Control",
+            "Kira uses Shizuku for ADB-level shell access.\n\n" +
+            "1. Install Shizuku from Play Store\n" +
+            "2. Open Shizuku → Start via Wireless Debugging\n" +
+            "3. Return to Kira\n\n" +
+            "Basic screen control works without Shizuku.",
+            new String[]{"GET SHIZUKU", "ALREADY RUNNING", "SKIP"},
+            new Runnable[]{
+                () -> { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api"))); } catch (Exception e) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app"))); } },
+                () -> checkShizuku(),
+                null
+            });
     }
 
     private void checkAccessibility() {
         if (KiraAccessibilityService.instance == null) {
-            new AlertDialog.Builder(this)
-                .setTitle("Enable Accessibility Service")
-                .setMessage("Kira needs Accessibility Service to read and control your screen.\n\nSettings ? Accessibility ? Kira ? Enable")
-                .setPositiveButton("Open Settings", (d, w) -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
-                .setNegativeButton("Later", null).show();
+            showKiraDialogMulti("Accessibility Required",
+                "Kira needs Accessibility Service to read and control your screen.\n\n" +
+                "Settings → Accessibility → Kira → Enable",
+                new String[]{"OPEN SETTINGS", "LATER"},
+                new Runnable[]{
+                    () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    null
+                });
         }
     }
 
@@ -356,6 +371,17 @@ public class MainActivity extends Activity
         View rowUserName = settingsFragment.findViewById(R.id.rowUserName);
         if (rowUserName != null) rowUserName.setOnClickListener(v ->
             editSetting("Your Name", cfg.userName, false, val -> { cfg.userName=val; cfg.save(MainActivity.this); if (userNameHint!=null) userNameHint.setText(val); }));
+
+        // Theme toggle row (reuses rowFloating area — add after floating)
+        View rowThemeToggle = settingsFragment.findViewById(R.id.rowThemeToggle);
+        if (rowThemeToggle != null) rowThemeToggle.setOnClickListener(v -> toggleTheme());
+
+        // OTA check row
+        View rowOta = settingsFragment.findViewById(R.id.rowOta);
+        if (rowOta != null) rowOta.setOnClickListener(v -> {
+            checkForOtaUpdate();
+            android.widget.Toast.makeText(this, "Checking for updates...", android.widget.Toast.LENGTH_SHORT).show();
+        });
 
         // Tools rows
         View rowSkills = settingsFragment.findViewById(R.id.rowSkills);
@@ -969,9 +995,129 @@ public class MainActivity extends Activity
             }
         }
 
-        new android.app.AlertDialog.Builder(this)
-            .setTitle("Select AI Provider")
-            .setItems(displayNames, (d, w) -> {
+        showProviderListDialog(displayNames, PROVIDERS);
+    }
+
+    @SuppressWarnings("unused")
+    private void _providerDialogLambda(String[][] PROVIDERS, String[] displayNames) {
+        // kept for reference — actual impl is showProviderListDialog
+    }
+
+    private void showProviderListDialog(String[] displayNames, String[][] PROVIDERS) {
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xCC000000);
+        overlay.setLayoutParams(new android.widget.FrameLayout.LayoutParams(MATCH, MATCH));
+
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(isDarkTheme ? 0xFF0c0c18 : 0xFFf0f0f8);
+        cardBg.setCornerRadius(dp(4));
+        cardBg.setStroke(dp(1), isDarkTheme ? 0xFF1a1a2e : 0xFFddddee);
+        card.setBackground(cardBg);
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.9f),
+            (int)(getResources().getDisplayMetrics().heightPixels * 0.75f));
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Accent bar
+        android.view.View bar = new android.view.View(this);
+        bar.setBackgroundColor(0xFFDC143C);
+        bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(bar);
+
+        // Title
+        android.widget.TextView ttv = new android.widget.TextView(this);
+        ttv.setText("SELECT PROVIDER");
+        ttv.setTextColor(isDarkTheme ? 0xFFffffff : 0xFF111111);
+        ttv.setTextSize(13); ttv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        android.widget.LinearLayout.LayoutParams ttp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        ttp.setMargins(dp(16), dp(12), dp(16), dp(10)); ttv.setLayoutParams(ttp);
+        card.addView(ttv);
+
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(isDarkTheme ? 0xFF111122 : 0xFFddddee);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Scrollable provider list
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, 0, 1));
+        android.widget.LinearLayout list = new android.widget.LinearLayout(this);
+        list.setOrientation(android.widget.LinearLayout.VERTICAL);
+        list.setPadding(0, dp(4), 0, dp(4));
+
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+
+        Runnable dismiss = () -> root.removeView(overlay);
+        overlay.setOnClickListener(v -> dismiss.run());
+        card.setOnClickListener(v -> {});
+
+        for (int i = 0; i < displayNames.length; i++) {
+            final int idx = i;
+            final String[] prov = PROVIDERS[i];
+            android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(16), dp(12), dp(16), dp(12));
+            boolean isActive = displayNames[i].endsWith("  ✓");
+            row.setBackgroundColor(isActive ? (isDarkTheme ? 0x22DC143C : 0x11DC143C) : 0x00000000);
+            row.setClickable(true); row.setFocusable(true);
+
+            android.widget.TextView nameTV = new android.widget.TextView(this);
+            nameTV.setText(displayNames[i]);
+            nameTV.setTextColor(isActive ? 0xFFDC143C : (isDarkTheme ? 0xFFccccdd : 0xFF222233));
+            nameTV.setTextSize(13);
+            nameTV.setTypeface(android.graphics.Typeface.MONOSPACE);
+            nameTV.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
+
+            row.addView(nameTV);
+            if (isActive) {
+                android.widget.TextView chk = new android.widget.TextView(this);
+                chk.setText("✓"); chk.setTextColor(0xFFDC143C); chk.setTextSize(14);
+                row.addView(chk);
+            }
+            row.setOnClickListener(v -> {
+                dismiss.run();
+                if ("custom".equals(prov[0])) { showCustomProviderDialog(); }
+                else {
+                    cfg.baseUrl = prov[2]; cfg.model = prov[3]; cfg.save(this);
+                    try { RustBridge.setActiveProvider(prov[0]); } catch (Exception ignored) {}
+                    updateSettingsUI();
+                    android.widget.Toast.makeText(this, prov[1], android.widget.Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            // Separator
+            android.view.View rowSep = new android.view.View(this);
+            rowSep.setBackgroundColor(isDarkTheme ? 0xFF0a0a18 : 0xFFeeeeee);
+            rowSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+
+            list.addView(row);
+            list.addView(rowSep);
+        }
+        sv.addView(list);
+        card.addView(sv);
+
+        // Close button
+        android.view.View closeSep = new android.view.View(this);
+        closeSep.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+        closeSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(closeSep);
+        android.widget.TextView closeBtn = new android.widget.TextView(this);
+        closeBtn.setText("CANCEL"); closeBtn.setTextColor(0xFF444466);
+        closeBtn.setTextSize(11); closeBtn.setGravity(android.view.Gravity.CENTER);
+        closeBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        closeBtn.setClickable(true); closeBtn.setFocusable(true);
+        closeBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(48)));
+        closeBtn.setOnClickListener(v -> dismiss.run());
+        card.addView(closeBtn);
+        overlay.addView(card);
+
+        // remove stale (dead code path)
+        if (false) {
                 if ("custom".equals(PROVIDERS[w][0])) {
                     showCustomProviderDialog();
                 } else {
@@ -983,7 +1129,7 @@ public class MainActivity extends Activity
                     android.widget.Toast.makeText(this,
                         "Provider: " + PROVIDERS[w][1], android.widget.Toast.LENGTH_SHORT).show();
                 }
-            }).show();
+        }
     }
 
     private boolean isKnownProvider(String url) {
@@ -1076,6 +1222,259 @@ public class MainActivity extends Activity
             okhttp3.Response resp = client.newCall(new okhttp3.Request.Builder().url(url).build()).execute();
             return resp.body() != null ? resp.body().string() : "(empty)";
         } catch(Exception e) { return "(unavailable)"; }
+    }
+
+    // ── Theme ─────────────────────────────────────────────────────────────────
+
+    /** Apply dark or light theme to the whole UI */
+    private void applyTheme() {
+        // Background colors driven by isDarkTheme
+        int bg        = isDarkTheme ? 0xFF050508 : 0xFFf4f4f8;
+        int navBg     = isDarkTheme ? 0xE5040410 : 0xE5f0f0f8;
+        int chatBg    = 0x00000000; // always transparent — galaxy shows through in dark
+        // Nav bar
+        View nav = findViewById(R.id.bottomNav);
+        if (nav != null) nav.setBackgroundColor(navBg);
+        // Content frame background
+        if (homeFragment   != null) homeFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        if (settingsFragment != null) settingsFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        if (historyFragment != null) historyFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        if (toolsFragment  != null) toolsFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        // Chat input bar
+        View inputBar = homeFragment != null ? homeFragment.findViewWithTag("inputBar") : null;
+        if (inputBar != null) inputBar.setBackgroundColor(isDarkTheme ? 0xEE06060f : 0xEEf0f0f8);
+        // Status bar color
+        getWindow().setStatusBarColor(isDarkTheme ? 0xFF050508 : 0xFFf4f4f8);
+        getWindow().setNavigationBarColor(isDarkTheme ? 0xFF040410 : 0xFFf0f0f8);
+        // Adjust icon/text brightness for light mode
+        if (headerSubtitle != null)
+            headerSubtitle.setTextColor(isDarkTheme ? 0xFF333355 : 0xFF888899);
+    }
+
+    /** Toggle theme and re-apply */
+    private void toggleTheme() {
+        isDarkTheme = !isDarkTheme;
+        applyTheme();
+        android.widget.Toast.makeText(this,
+            isDarkTheme ? "Dark theme" : "Light theme", android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    // ── Multi-button dialog ────────────────────────────────────────────────────
+
+    /**
+     * Kira dialog with N buttons (1-3). Labels array maps to actions array.
+     * null action = dismiss only.
+     */
+    private void showKiraDialogMulti(String title, String msg, String[] labels, Runnable[] actions) {
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xCC000000);
+        overlay.setLayoutParams(new android.widget.FrameLayout.LayoutParams(MATCH, MATCH));
+
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int cardColor  = isDarkTheme ? 0xFF0c0c18 : 0xFFf8f8ff;
+        int borderColor= isDarkTheme ? 0xFF1a1a2e : 0xFFccccdd;
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(cardColor); cardBg.setCornerRadius(dp(4)); cardBg.setStroke(dp(1), borderColor);
+        card.setBackground(cardBg);
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.88f), WRAP);
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Top accent
+        android.view.View bar = new android.view.View(this);
+        bar.setBackgroundColor(0xFFDC143C);
+        bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(bar);
+
+        // Title row
+        android.widget.LinearLayout titleRow = new android.widget.LinearLayout(this);
+        titleRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        titleRow.setPadding(dp(18), dp(14), dp(18), dp(10));
+        android.widget.TextView titleTv = new android.widget.TextView(this);
+        titleTv.setText(title);
+        titleTv.setTextColor(isDarkTheme ? 0xFFFFFFFF : 0xFF111111);
+        titleTv.setTextSize(14); titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
+        android.widget.TextView kBadge = new android.widget.TextView(this);
+        kBadge.setText("K"); kBadge.setTextColor(0x33DC143C); kBadge.setTextSize(20);
+        kBadge.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        titleRow.addView(titleTv); titleRow.addView(kBadge);
+        card.addView(titleRow);
+
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(isDarkTheme ? 0xFF111122 : 0xFFddddee);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Message
+        android.widget.TextView msgTv = new android.widget.TextView(this);
+        msgTv.setText(msg);
+        msgTv.setTextColor(isDarkTheme ? 0xFF8888AA : 0xFF444466);
+        msgTv.setTextSize(12); msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        msgTv.setLineSpacing(dp(2), 1);
+        android.widget.LinearLayout.LayoutParams msgLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        msgLp.setMargins(dp(18), dp(12), dp(18), dp(16)); msgTv.setLayoutParams(msgLp);
+        card.addView(msgTv);
+
+        // Button row
+        android.view.View btnSep = new android.view.View(this);
+        btnSep.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+        btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(btnSep);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        btnRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(52)));
+
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+        Runnable dismiss = () -> root.removeView(overlay);
+        overlay.setOnClickListener(v -> dismiss.run());
+        card.setOnClickListener(v -> {});
+
+        for (int i = 0; i < labels.length; i++) {
+            final int idx = i;
+            if (i > 0) {
+                android.view.View bd = new android.view.View(this);
+                bd.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+                bd.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
+                btnRow.addView(bd);
+            }
+            android.widget.TextView btn = new android.widget.TextView(this);
+            btn.setText(labels[i]);
+            // Last button = primary (crimson), others = muted
+            boolean isPrimary = (i == 0);
+            btn.setTextColor(isPrimary ? 0xFFDC143C : (isDarkTheme ? 0xFF444466 : 0xFF888899));
+            btn.setTextSize(11);
+            btn.setTypeface(android.graphics.Typeface.MONOSPACE, isPrimary ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            btn.setGravity(android.view.Gravity.CENTER);
+            btn.setClickable(true); btn.setFocusable(true);
+            btn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+            btn.setOnClickListener(v -> {
+                dismiss.run();
+                if (actions[idx] != null) actions[idx].run();
+            });
+            btnRow.addView(btn);
+        }
+        card.addView(btnRow);
+        overlay.addView(card);
+    }
+
+    // ── OTA Update ────────────────────────────────────────────────────────────
+
+    /** Check GitHub Releases for a newer APK and prompt to install */
+    private void checkForOtaUpdate() {
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build();
+                // GitHub Releases API
+                String repoUrl = cfg.otaRepo.isEmpty()
+                    ? "https://api.github.com/repos/" + getPackageName().replace("com.kira.service","i7m7r8/KiraService") + "/releases/latest"
+                    : "https://api.github.com/repos/" + cfg.otaRepo + "/releases/latest";
+                okhttp3.Response resp = client.newCall(
+                    new okhttp3.Request.Builder().url(repoUrl)
+                        .header("Accept","application/vnd.github+json").build()).execute();
+                if (resp.body() == null) return;
+                String body = resp.body().string();
+                org.json.JSONObject rel = new org.json.JSONObject(body);
+                String tagName = rel.optString("tag_name","");
+                String currentVersion = getPackageManager()
+                    .getPackageInfo(getPackageName(), 0).versionName;
+                // Find debug APK asset
+                org.json.JSONArray assets = rel.optJSONArray("assets");
+                String apkUrl = null;
+                if (assets != null) {
+                    for (int i = 0; i < assets.length(); i++) {
+                        org.json.JSONObject asset = assets.getJSONObject(i);
+                        String name = asset.optString("name","");
+                        if (name.endsWith(".apk") && name.contains("debug")) {
+                            apkUrl = asset.optString("browser_download_url","");
+                            break;
+                        }
+                    }
+                    if (apkUrl == null && assets.length() > 0) {
+                        // fallback: first APK
+                        for (int i = 0; i < assets.length(); i++) {
+                            String name = assets.getJSONObject(i).optString("name","");
+                            if (name.endsWith(".apk")) {
+                                apkUrl = assets.getJSONObject(i).optString("browser_download_url","");
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (apkUrl == null || apkUrl.isEmpty()) return;
+                // Compare versions (simple string compare — tag like "v40-20260319-1234")
+                if (tagName.equals(getSharedPreferences("kira_ota",0).getString("last_seen_tag",""))) return;
+                final String finalApkUrl = apkUrl;
+                final String finalTag = tagName;
+                uiHandler.post(() -> showKiraDialogMulti(
+                    "Update Available",
+                    "Version " + finalTag + " is available on GitHub.
+
+Current: " + currentVersion + "
+
+Download and install the new APK?",
+                    new String[]{"DOWNLOAD & INSTALL", "LATER", "SKIP"},
+                    new Runnable[]{
+                        () -> downloadAndInstallApk(finalApkUrl, finalTag),
+                        null,
+                        () -> getSharedPreferences("kira_ota",0).edit().putString("last_seen_tag", finalTag).apply()
+                    }
+                ));
+            } catch (Exception e) {
+                android.util.Log.d("KiraOTA", "update check: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void downloadAndInstallApk(String apkUrl, String tag) {
+        android.widget.Toast.makeText(this, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build();
+                okhttp3.Response resp = client.newCall(
+                    new okhttp3.Request.Builder().url(apkUrl).build()).execute();
+                if (resp.body() == null) return;
+                byte[] apkBytes = resp.body().bytes();
+                // Save to cache
+                java.io.File apkFile = new java.io.File(getCacheDir(), "kira_update.apk");
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(apkFile)) {
+                    fos.write(apkBytes);
+                }
+                uiHandler.post(() -> {
+                    try {
+                        // Use FileProvider for Android 7+
+                        android.net.Uri apkUri;
+                        if (android.os.Build.VERSION.SDK_INT >= 24) {
+                            apkUri = androidx.core.content.FileProvider.getUriForFile(
+                                this, getPackageName() + ".provider", apkFile);
+                        } else {
+                            apkUri = android.net.Uri.fromFile(apkFile);
+                        }
+                        android.content.Intent install = new android.content.Intent(
+                            android.content.Intent.ACTION_VIEW);
+                        install.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                        install.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                                         android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(install);
+                        // Mark as seen so we don't prompt again
+                        getSharedPreferences("kira_ota",0).edit().putString("last_seen_tag", tag).apply();
+                    } catch (Exception e) {
+                        Toast.makeText(this, "Install error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (Exception e) {
+                uiHandler.post(() -> Toast.makeText(this, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }).start();
     }
 
     /** Custom Kira info dialog — no stock Android chrome */
@@ -1406,13 +1805,20 @@ public class MainActivity extends Activity
     }
 
     private void showFullDialog(String user, String kira, String time) {
-        new AlertDialog.Builder(this)
-            .setTitle(time)
-            .setMessage("YOU:\n" + user + "\n\n-------------\n\nKIRA:\n" + kira)
-            .setPositiveButton("? Resend", (d, w) -> { showTab(0); inputField.setText(user); sendMessage(); })
-            .setNeutralButton("Copy Reply", (d, w) -> copyText(kira))
-            .setNegativeButton("Close", null)
-            .show();
+        showKiraDialogMulti(time,
+            "YOU:
+" + user + "
+
+──────
+
+KIRA:
+" + kira,
+            new String[]{"↩ RESEND", "COPY", "CLOSE"},
+            new Runnable[]{
+                () -> { showTab(0); inputField.setText(user); sendMessage(); },
+                () -> copyText(kira),
+                null
+            });
     }
 
     // -- Settings --------------------------------------------------------------
@@ -1484,23 +1890,19 @@ public class MainActivity extends Activity
     }
 
     private void clearMemory() {
-        new AlertDialog.Builder(this)
-            .setTitle("Clear Memory")
-            .setMessage("Delete all stored facts? Conversation history is kept.")
-            .setPositiveButton("Clear", (d, w) -> {
-                try { new KiraMemory(this).clearFacts(); loadMemorySection(); Toast.makeText(this,"Facts cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
-            })
-            .setNegativeButton("Cancel", null).show();
+        showKiraDialog("Clear Memory", "Delete all stored facts?\nConversation history is kept.",
+            "CLEAR", "CANCEL", () -> {
+                try { new KiraMemory(this).clearFacts(); loadMemorySection();
+                    Toast.makeText(this,"Facts cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
+            });
     }
 
     private void clearHistory() {
-        new AlertDialog.Builder(this)
-            .setTitle("Clear Conversation History")
-            .setMessage("Delete all conversation history?")
-            .setPositiveButton("Clear", (d, w) -> {
-                try { new KiraMemory(this).clearHistory(); loadMemorySection(); Toast.makeText(this,"History cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
-            })
-            .setNegativeButton("Cancel", null).show();
+        showKiraDialog("Clear History", "Delete all conversation history?",
+            "CLEAR", "CANCEL", () -> {
+                try { new KiraMemory(this).clearHistory(); loadMemorySection();
+                    Toast.makeText(this,"History cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
+            });
     }
 
     private void updateShizukuStatus() {
@@ -1534,12 +1936,13 @@ public class MainActivity extends Activity
 
     private void toggleFloating() {
         if (!Settings.canDrawOverlays(this)) {
-            new AlertDialog.Builder(this)
-                .setTitle("Overlay Permission Needed")
-                .setMessage("For the floating window, Kira needs 'Display over other apps'.\n\nSettings ? Apps ? Kira ? Display over other apps ? Enable")
-                .setPositiveButton("Open Settings", (d, w) ->
-                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))))
-                .setNegativeButton("Cancel", null).show();
+            showKiraDialogMulti("Overlay Permission",
+                "Kira needs 'Display over other apps'.\n\nSettings → Apps → Kira → Display over other apps → Enable",
+                new String[]{"OPEN SETTINGS", "CANCEL"},
+                new Runnable[]{
+                    () -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))),
+                    null
+                });
             return;
         }
         floatingActive = !floatingActive;

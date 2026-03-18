@@ -19,7 +19,7 @@ android {
     }
     buildTypes {
         debug   { debuggable true }
-        release { minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'); signingConfig signingConfigs.debug }
+        release { minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt') }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
@@ -90,4 +90,7 @@ dependencies {
 
     // On-device OCR (ZeroClaw vision without internet)
     implementation 'com.google.mlkit:text-recognition:16.0.1'
+
+    // FileProvider for OTA APK install
+    implementation 'androidx.core:core:1.12.0'
 }

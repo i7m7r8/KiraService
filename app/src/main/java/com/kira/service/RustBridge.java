@@ -207,4 +207,35 @@ public class RustBridge {
 
     // ── Utility ───────────────────────────────────────────────────────────────
     public static native void freeString(String s);
+
+    // ── OpenClaw / NanoBot / ZeroClaw extended automation ────────────────────
+
+    /** Export all macros as JSON string (backup / share) */
+    public static native String exportMacros();
+
+    /** Import macros from JSON (merged, not wiped) */
+    public static native void importMacros(String json);
+
+    /**
+     * Chain-trigger another macro by ID.
+     * Respects cooldown + rate limiter.
+     */
+    public static native void chainMacro(String targetId);
+
+    /**
+     * Evaluate a %VAR% expression.
+     * e.g. evalExpr("5 + %MY_NUM%") → "8"
+     */
+    public static native String evalExpr(String expression);
+
+    /** Expand %VAR% tokens in a string */
+    public static native String expandVars(String text);
+
+    /**
+     * Get full automation status JSON:
+     * {enabled_macros, templates, total_macros, variables,
+     *  active_profile, pending_actions, run_log_entries, rate_ok}
+     */
+    public static native String getAutomationStatus();
+
 }

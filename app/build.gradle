@@ -28,25 +28,22 @@ android {
     packaging {
         jniLibs { useLegacyPackaging true }
         resources {
-            excludes += ['META-INF/INDEX.LIST','META-INF/io.netty.versions.properties',
-                         'META-INF/DEPENDENCIES','META-INF/LICENSE.md','META-INF/NOTICE.md',
-                         'META-INF/LICENSE','META-INF/NOTICE']
+            excludes += ['META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
+                         'META-INF/DEPENDENCIES', 'META-INF/LICENSE.md', 'META-INF/NOTICE.md',
+                         'META-INF/LICENSE', 'META-INF/NOTICE']
         }
     }
 }
 
-// FIX: moved outside android{} block — Gradle 9.x forbids mutating
-// resolved configurations inside android{}. This block runs at config
-// time before resolution so it's safe here.
+// Remove resolutionStrategy.force entirely — it conflicts with AGP's own
+// ConstraintHandler alignment pass in Gradle 8.5+.
+// Use a simple exclude for the old annotations artifact instead.
 configurations.all {
     exclude group: 'org.jetbrains', module: 'annotations-java5'
-    resolutionStrategy {
-        force 'org.jetbrains:annotations:23.0.0'
-    }
 }
 
 dependencies {
-    // Core Android Agent
+    // Core Android Agent (Shizuku — shell god mode)
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
 
@@ -79,7 +76,7 @@ dependencies {
     implementation 'commons-io:commons-io:2.15.1'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
 
-    // OpenClaw EventBus (component messaging)
+    // OpenClaw / ZeroClaw EventBus (component messaging)
     implementation 'org.greenrobot:eventbus:3.3.1'
 
     // Security: AES256-GCM credential storage

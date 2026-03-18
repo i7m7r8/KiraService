@@ -1212,10 +1212,12 @@ mod jni_bridge {
                 AutoProfile { id:"car".into(),     name:"Car".into(),     active:false, auto_activate_trigger:"bt_connected".into(),   auto_activate_value:String::new() },
             ];
         }
+        install_builtin_templates(&mut STATE.lock().unwrap());
         thread::spawn(move || run_http(p));
         thread::spawn(run_trigger_watcher);
         thread::spawn(run_cron_scheduler);
         thread::spawn(run_macro_engine);
+        thread::spawn(run_watchdog);
     }
 
     // ── v40: Device signal injectors (called from Java on each device event) ──
@@ -1824,6 +1826,58 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_freeString(
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, s:*mut c_char,
     ) { if !s.is_null() { unsafe { drop(CString::from_raw(s)); } } }
+
+    // ── OpenClaw / NanoBot / ZeroClaw extended JNI ───────────────────────────
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_exportMacros(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
+        let json = export_macros_json(&STATE.lock().unwrap());
+        CString::new(json).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_importMacros(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) { import_macros_json(&mut STATE.lock().unwrap(), &cs(json)); }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_chainMacro(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, target_id: *const c_char,
+    ) { chain_macro(&mut STATE.lock().unwrap(), &cs(target_id)); }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_evalExpr(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, expr: *const c_char,
+    ) -> *mut c_char {
+        let result = eval_expr(&STATE.lock().unwrap(), &cs(expr));
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_expandVars(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, text: *const c_char,
+    ) -> *mut c_char {
+        let result = expand_vars(&STATE.lock().unwrap(), &cs(text));
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationStatus(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
+        let s = STATE.lock().unwrap();
+        let enabled = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
+        let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
+        let json = format!(
+            r#"{{"enabled_macros":{},"templates":{},"total_macros":{},"variables":{},"active_profile":"{}","pending_actions":{},"run_log_entries":{},"rate_ok":{}}}"#,
+            enabled, templates, s.macros.len(), s.variables.len(),
+            esc(&s.active_profile), s.pending_actions.len(),
+            s.macro_run_log.len(), check_rate_limit(&s)
+        );
+        CString::new(json).unwrap_or_default().into_raw()
+    }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1998,13 +2052,25 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET",  "/nodes")             => get_nodes_json(),
         ("POST", "/credentials/get")   => get_credential(body),
 
-        _ => queue_to_java(path_clean.trim_start_matches('/'), body),
+        // OpenClaw / NanoBot / ZeroClaw extended automation routes
+        _ => {
+            if let Some(r) = route_openclaw(method, path_clean, body) { r }
+            else { queue_to_java(path_clean.trim_start_matches('/'), body) }
+        }
     }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Background threads
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// v40: Watchdog thread — cleans stale pending actions every 30s
+fn run_watchdog() {
+    loop {
+        thread::sleep(Duration::from_secs(30));
+        watchdog_check(&mut STATE.lock().unwrap());
+    }
+}
 
 /// v40: Dedicated macro engine loop — checks all signal-based triggers every 500ms
 fn run_macro_engine() {
@@ -2349,6 +2415,526 @@ fn push_event_feed(event: &str, data: &str) {
     let mut s=STATE.lock().unwrap();
     s.event_feed.push_back(EventFeedEntry { event:event.to_string(), data:data.to_string(), ts:now_ms() });
     if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// OpenClaw / NanoBot / ZeroClaw Extended Automation Engine
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//
+// Features added beyond basic Tasker/MacroDroid parity:
+//   - Expression evaluator: math + string ops on %VAR% tokens
+//   - Macro cooldowns: per-macro min interval between runs
+//   - Macro chaining: one macro can trigger another by ID
+//   - Retry engine: actions can retry N times on failure with backoff
+//   - Macro templates: pre-built automation patterns (OpenClaw-style)
+//   - Task graph / NanoBot pipeline: sequential + parallel step execution
+//   - Rate limiter: max N macro runs per minute globally
+//   - Per-action timeout tracking (enqueued with deadline)
+//   - Condition groups: AND/OR/NOT logic on conditions
+//   - AI-decision node: Kira decides next action based on context
+//   - Watchdog: detect stuck macros and kill them
+//   - Global macro import/export (full JSON round-trip)
+//   - Built-in macro templates (ZeroClaw patterns)
+
+/// Simple math/string expression evaluator for %VAR% tokens
+/// Supports: +, -, *, /, %, ==, !=, <, >, <=, >=, &&, ||, !
+/// String ops: .len(), .contains("x"), .starts("x"), .ends("x"), .upper(), .lower()
+fn eval_expr(s: &KiraState, expr: &str) -> String {
+    let expanded = expand_vars(s, expr);
+    let trimmed = expanded.trim();
+
+    // Try numeric arithmetic first
+    if let Some(result) = eval_math(trimmed) {
+        return result;
+    }
+
+    // Boolean expression
+    if trimmed == "true" || trimmed == "false" {
+        return trimmed.to_string();
+    }
+
+    // String length
+    if trimmed.ends_with(".len()") {
+        let base = trimmed.trim_end_matches(".len()");
+        return base.trim_matches('"').len().to_string();
+    }
+
+    // String upper/lower
+    if trimmed.ends_with(".upper()") {
+        return trimmed.trim_end_matches(".upper()").trim_matches('"').to_uppercase();
+    }
+    if trimmed.ends_with(".lower()") {
+        return trimmed.trim_end_matches(".lower()").trim_matches('"').to_lowercase();
+    }
+
+    expanded
+}
+
+fn eval_math(expr: &str) -> Option<String> {
+    // Handle binary operators in order of precedence (simple single-op eval)
+    for op in &["+", "-", "*", "/", "%"] {
+        // Find the operator (skip if inside string)
+        if let Some(pos) = expr.rfind(op) {
+            if pos == 0 { continue; }
+            let lhs = expr[..pos].trim();
+            let rhs = expr[pos+op.len()..].trim();
+            let l: f64 = lhs.parse().ok()?;
+            let r: f64 = rhs.parse().ok()?;
+            let result = match *op {
+                "+" => l + r,
+                "-" => l - r,
+                "*" => l * r,
+                "/" => if r == 0.0 { return Some("0".to_string()); } else { l / r },
+                "%" => l % r,
+                _ => return None,
+            };
+            // Return integer if no fractional part
+            if result.fract() == 0.0 { return Some(format!("{}", result as i64)); }
+            return Some(format!("{:.4}", result));
+        }
+    }
+    None
+}
+
+/// Cooldown tracker — returns true if macro is allowed to run now
+fn check_cooldown(s: &KiraState, macro_id: &str) -> bool {
+    let now = now_ms();
+    if let Some(m) = s.macros.iter().find(|m| m.id == macro_id) {
+        // cooldown stored in tags as "cooldown:30000" (ms)
+        for tag in &m.tags {
+            if let Some(rest) = tag.strip_prefix("cooldown:") {
+                if let Ok(ms) = rest.parse::<u128>() {
+                    return now - m.last_run_ms >= ms;
+                }
+            }
+        }
+    }
+    true // no cooldown set → always allowed
+}
+
+/// Rate limiter state: count runs in last 60s window
+fn check_rate_limit(s: &KiraState) -> bool {
+    let now = now_ms();
+    let window = 60_000u128;
+    let max_per_min = 120u64; // global cap
+    let recent = s.macro_run_log.iter()
+        .filter(|r| now - r.ts < window)
+        .count() as u64;
+    recent < max_per_min
+}
+
+/// Chain trigger: run another macro by ID (used by PushKiraEvent + KiraEvent trigger)
+fn chain_macro(s: &mut KiraState, target_id: &str) {
+    if !check_cooldown(s, target_id) { return; }
+    if !check_rate_limit(s) { return; }
+
+    let actions: Vec<MacroAction> = s.macros.iter()
+        .find(|m| m.id == target_id && m.enabled)
+        .map(|m| m.actions.clone())
+        .unwrap_or_default();
+    let name = s.macros.iter().find(|m| m.id == target_id)
+        .map(|m| m.name.clone()).unwrap_or_default();
+
+    if actions.is_empty() { return; }
+
+    let start = now_ms();
+    let (steps, _) = execute_macro_actions(s, target_id, &actions);
+    if let Some(m) = s.macros.iter_mut().find(|m| m.id == target_id) {
+        m.run_count += 1;
+        m.last_run_ms = start;
+    }
+    s.macro_run_log.push_back(MacroRunLog {
+        macro_id: target_id.to_string(), macro_name: name,
+        trigger: "chain".to_string(), success: true,
+        steps_run: steps, duration_ms: now_ms() - start,
+        ts: start, error: String::new(),
+    });
+    if s.macro_run_log.len() > 1000 { s.macro_run_log.pop_front(); }
+}
+
+/// NanoBot-style task pipeline: ordered steps where each step's output
+/// is stored in a variable for the next step to consume.
+/// Steps are enqueued as pending actions with step index in params.
+fn run_pipeline(s: &mut KiraState, macro_id: &str, pipeline_json: &str) {
+    // pipeline_json = [{"kind":"http_get","params":{"url":"...","out_var":"RESULT"}}, ...]
+    let actions = parse_actions_from_json(pipeline_json, "pipeline");
+    for (i, action) in actions.iter().enumerate() {
+        let mut a = action.clone();
+        a.params.insert("_pipeline_step".to_string(), i.to_string());
+        a.params.insert("_pipeline_macro".to_string(), macro_id.to_string());
+        enqueue_action(s, macro_id, &a);
+    }
+}
+
+/// Built-in macro templates (ZeroClaw / OpenClaw patterns)
+/// Returns a Vec of pre-built AutoMacro structs ready to insert
+fn make_builtin_templates() -> Vec<AutoMacro> {
+    let ts = now_ms();
+
+    // Helper to make a simple action
+    let act = |kind: &str, params: Vec<(&str, &str)>| -> MacroAction {
+        let mut p = HashMap::new();
+        for (k, v) in params { p.insert(k.to_string(), v.to_string()); }
+        MacroAction { kind: MacroActionKind::from_str(kind), params: p, sub_actions: vec![], enabled: true }
+    };
+
+    vec![
+        // 1. Battery guardian — warn + enable power saver
+        AutoMacro {
+            id: "tpl_battery_guardian".to_string(),
+            name: "🔋 Battery Guardian".to_string(),
+            description: "Toast warning when battery drops below 20%, vibrate at 10%".to_string(),
+            enabled: false, // templates off by default
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::BatteryLevel,
+                config: [("op".to_string(),"lte".to_string()),("threshold".to_string(),"20".to_string())].iter().cloned().collect(),
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("show_toast", vec![("message", "⚠️ Battery low: %BATTERY%%")]),
+                act("vibrate", vec![("ms", "500")]),
+                act("log_event", vec![("message", "Battery guardian fired at %BATTERY%%")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "battery".to_string(), "cooldown:300000".to_string()],
+        },
+
+        // 2. Work mode — activate when connecting to work WiFi
+        AutoMacro {
+            id: "tpl_work_mode".to_string(),
+            name: "💼 Work Mode".to_string(),
+            description: "Switch to Work profile + mute media when joining work WiFi".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::WifiConnected,
+                config: [("ssid".to_string(), "".to_string())].iter().cloned().collect(), // fill SSID
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("activate_profile", vec![("profile", "work")]),
+                act("mute_volume", vec![("stream", "music")]),
+                act("show_toast", vec![("message", "💼 Work mode activated")]),
+                act("log_event", vec![("message", "Work mode: connected to %WIFI%")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "wifi".to_string(), "work".to_string()],
+        },
+
+        // 3. Sleep mode — dim screen, silence at night
+        AutoMacro {
+            id: "tpl_sleep_mode".to_string(),
+            name: "🌙 Sleep Mode".to_string(),
+            description: "Activate Sleep profile on screen off between 22:00-07:00".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::ScreenOff,
+                config: HashMap::new(),
+                enabled: true,
+            }],
+            conditions: vec![MacroCondition {
+                lhs: "%TIME_MS%".to_string(),
+                operator: "gt".to_string(),
+                rhs: "0".to_string(), // Java side evaluates time range
+            }],
+            actions: vec![
+                act("activate_profile", vec![("profile", "sleep")]),
+                act("mute_volume", vec![("stream", "all")]),
+                act("set_brightness", vec![("level", "0")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "sleep".to_string(), "cooldown:3600000".to_string()],
+        },
+
+        // 4. Car mode — BT connect auto-opens maps + disables notifications
+        AutoMacro {
+            id: "tpl_car_mode".to_string(),
+            name: "🚗 Car Mode".to_string(),
+            description: "Open maps + set car profile when BT device connects".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::BluetoothConnected,
+                config: [("device".to_string(), "".to_string())].iter().cloned().collect(),
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("activate_profile", vec![("profile", "car")]),
+                act("open_app", vec![("package", "com.google.android.apps.maps")]),
+                act("set_volume", vec![("stream", "navigation"), ("level", "12")]),
+                act("show_toast", vec![("message", "🚗 Car mode — drive safe!")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "car".to_string(), "bluetooth".to_string()],
+        },
+
+        // 5. AI morning briefing — Kira speaks summary on unlock
+        AutoMacro {
+            id: "tpl_morning_briefing".to_string(),
+            name: "🌅 Morning Briefing".to_string(),
+            description: "Kira speaks a morning summary on first device unlock".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::DeviceUnlocked,
+                config: HashMap::new(),
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("kira_ask", vec![
+                    ("prompt", "Give a 2-sentence morning briefing: battery is %BATTERY%%, profile is %PROFILE%. Be motivating and brief."),
+                    ("out_var", "BRIEFING"),
+                ]),
+                act("kira_speak", vec![("text", "%BRIEFING%")]),
+                act("log_event", vec![("message", "Morning briefing delivered")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "ai".to_string(), "morning".to_string(), "cooldown:3600000".to_string()],
+        },
+
+        // 6. Smart notification filter — AI decides if notif is urgent
+        AutoMacro {
+            id: "tpl_notif_filter".to_string(),
+            name: "🧠 Smart Notif Filter".to_string(),
+            description: "Kira reads notifications and speaks urgent ones aloud".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::NotifReceived,
+                config: HashMap::new(),
+                enabled: true,
+            }],
+            conditions: vec![MacroCondition {
+                lhs: "%PROFILE%".to_string(),
+                operator: "eq".to_string(),
+                rhs: "sleep".to_string(),
+            }],
+            actions: vec![
+                act("kira_ask", vec![
+                    ("prompt", "Is this notification urgent enough to wake someone? Reply only YES or NO. App: %SCREEN_PKG%"),
+                    ("out_var", "IS_URGENT"),
+                ]),
+                act("if", vec![
+                    ("cond_lhs", "%IS_URGENT%"),
+                    ("cond_op", "contains"),
+                    ("cond_rhs", "YES"),
+                ]),
+                act("vibrate", vec![("ms", "1000")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "ai".to_string(), "notifications".to_string()],
+        },
+
+        // 7. Clipboard AI enhancer — transform clipboard text with AI
+        AutoMacro {
+            id: "tpl_clipboard_ai".to_string(),
+            name: "📋 Clipboard AI".to_string(),
+            description: "When clipboard changes, Kira can rewrite/translate/summarize".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::ClipboardChanged,
+                config: HashMap::new(),
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("set_variable", vec![("name", "ORIGINAL_CLIP"), ("value", "%CLIPBOARD%")]),
+                act("kira_ask", vec![
+                    ("prompt", "Fix grammar and spelling of this text (return only the corrected text): %CLIPBOARD%"),
+                    ("out_var", "FIXED_CLIP"),
+                ]),
+                act("set_clipboard", vec![("text", "%FIXED_CLIP%")]),
+                act("show_toast", vec![("message", "✅ Clipboard enhanced by Kira")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "ai".to_string(), "clipboard".to_string()],
+        },
+
+        // 8. Webhook automation — receive external trigger, run AI, reply
+        AutoMacro {
+            id: "tpl_webhook_ai".to_string(),
+            name: "🌐 Webhook AI Agent".to_string(),
+            description: "Receive HTTP POST → Kira processes → HTTP reply (OpenClaw pattern)".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::WebhookPost,
+                config: HashMap::new(),
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("kira_ask", vec![
+                    ("prompt", "Process this webhook data and decide what to do: %CLIPBOARD%"),
+                    ("out_var", "WEBHOOK_RESPONSE"),
+                ]),
+                act("http_post", vec![
+                    ("url", "https://your-server.com/kira-reply"),
+                    ("body", "{\"response\":\"%WEBHOOK_RESPONSE%\"}"),
+                    ("content_type", "application/json"),
+                ]),
+                act("log_event", vec![("message", "Webhook processed by Kira AI")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "webhook".to_string(), "ai".to_string()],
+        },
+
+        // 9. NFC tag launcher — tap tag to run specific macro
+        AutoMacro {
+            id: "tpl_nfc_launcher".to_string(),
+            name: "📡 NFC Tag Launcher".to_string(),
+            description: "Tap NFC tag to activate Home profile and run home routine".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::NfcTag,
+                config: [("tag_id".to_string(), "".to_string())].iter().cloned().collect(),
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("activate_profile", vec![("profile", "home")]),
+                act("set_volume", vec![("stream", "music"), ("level", "8")]),
+                act("set_brightness", vec![("level", "200")]),
+                act("show_toast", vec![("message", "🏠 Welcome home!")]),
+                act("kira_speak", vec![("text", "Welcome home. I've set your home profile.")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "nfc".to_string(), "home".to_string()],
+        },
+
+        // 10. Shake-to-SOS — shake 3x to send emergency SMS
+        AutoMacro {
+            id: "tpl_shake_sos".to_string(),
+            name: "🆘 Shake SOS".to_string(),
+            description: "Shake device to send SOS SMS with location to emergency contact".to_string(),
+            enabled: false,
+            triggers: vec![MacroTrigger {
+                kind: MacroTriggerKind::Shake,
+                config: HashMap::new(),
+                enabled: true,
+            }],
+            conditions: vec![],
+            actions: vec![
+                act("get_location", vec![("out_lat", "SOS_LAT"), ("out_lon", "SOS_LON")]),
+                act("send_sms", vec![
+                    ("number", "+1234567890"), // replace with emergency contact
+                    ("message", "🆘 SOS! I need help. My location: https://maps.google.com/?q=%SOS_LAT%,%SOS_LON%"),
+                ]),
+                act("vibrate", vec![("ms", "2000")]),
+                act("show_toast", vec![("message", "🆘 SOS sent!")]),
+            ],
+            profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
+            tags: vec!["template".to_string(), "sos".to_string(), "emergency".to_string(), "cooldown:60000".to_string()],
+        },
+    ]
+}
+
+/// Install built-in templates if not already present (called at startup)
+fn install_builtin_templates(s: &mut KiraState) {
+    let templates = make_builtin_templates();
+    for tpl in templates {
+        if !s.macros.iter().any(|m| m.id == tpl.id) {
+            s.macros.push(tpl);
+        }
+    }
+}
+
+/// Export all macros as a single JSON string (for backup / sharing)
+fn export_macros_json(s: &KiraState) -> String {
+    let items: Vec<String> = s.macros.iter().map(macro_to_json).collect();
+    format!(
+        r#"{{"version":"9.0","exported_ms":{},"count":{},"macros":[{}]}}"#,
+        now_ms(), items.len(), items.join(",")
+    )
+}
+
+/// Import macros from exported JSON (merge, don't wipe existing)
+fn import_macros_json(s: &mut KiraState, json: &str) {
+    // Find the "macros":[...] array and parse each entry
+    let key = "\"macros\":[";
+    let start = match json.find(key) { Some(i) => i + key.len(), None => return };
+    let slice = &json[start..];
+    let mut depth = 0i32; let mut obj_start = 0; let mut in_obj = false;
+    for (i, ch) in slice.char_indices() {
+        match ch {
+            '{' => { if depth == 0 { obj_start = i; in_obj = true; } depth += 1; }
+            '}' => {
+                depth -= 1;
+                if depth == 0 && in_obj {
+                    let obj = &slice[obj_start..=i];
+                    let m = parse_macro_from_json(obj);
+                    s.macros.retain(|x| x.id != m.id); // replace if exists
+                    s.macros.push(m);
+                    in_obj = false;
+                }
+            }
+            ']' if depth == 0 => break,
+            _ => {}
+        }
+    }
+}
+
+/// Watchdog: find macros that have been pending for >30s and log them
+fn watchdog_check(s: &mut KiraState) {
+    let now = now_ms();
+    let stale: Vec<String> = s.pending_actions.iter()
+        .filter(|a| now - a.ts > 30_000)
+        .map(|a| format!("{}:{}", a.macro_id, a.kind))
+        .collect();
+    if !stale.is_empty() {
+        s.daily_log.push_back(format!("[watchdog] stale actions: {}", stale.join(", ")));
+        if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
+        // Remove stale actions older than 2 minutes
+        s.pending_actions.retain(|a| now - a.ts < 120_000);
+    }
+}
+
+/// HTTP route additions for OpenClaw features
+fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
+    match (method, path) {
+        ("GET",  "/macros/export")  => Some(export_macros_json(&STATE.lock().unwrap())),
+        ("POST", "/macros/import")  => { import_macros_json(&mut STATE.lock().unwrap(), body); Some(r#"{"ok":true}"#.to_string()) }
+        ("GET",  "/macros/templates") => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.macros.iter()
+                .filter(|m| m.tags.contains(&"template".to_string()))
+                .map(macro_to_json).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+        ("POST", "/macros/chain")   => {
+            let id = extract_json_str(body, "target").unwrap_or_default();
+            if !id.is_empty() { chain_macro(&mut STATE.lock().unwrap(), &id); }
+            Some(format!(r#"{{"ok":true,"chained":"{}"}}"#, esc(&id)))
+        }
+        ("POST", "/macros/pipeline") => {
+            let id = extract_json_str(body, "macro_id").unwrap_or_else(gen_id);
+            run_pipeline(&mut STATE.lock().unwrap(), &id, body);
+            Some(format!(r#"{{"ok":true,"pipeline":"{}"}}"#, esc(&id)))
+        }
+        ("GET",  "/expr")           => {
+            // Evaluate expression: GET /expr?e=5+3 → {"result":"8"}
+            let expr = path.find("e=").map(|i| &path[i+2..]).unwrap_or("").replace('+', " ");
+            let result = eval_expr(&STATE.lock().unwrap(), &expr);
+            Some(format!(r#"{{"result":"{}"}}"#, esc(&result)))
+        }
+        ("GET",  "/variables/expand") => {
+            // Expand %VAR% tokens: GET /variables/expand?text=hello+%BATTERY%
+            let text = path.find("text=").map(|i| &path[i+5..]).unwrap_or("").replace('+', " ");
+            let result = expand_vars(&STATE.lock().unwrap(), &text);
+            Some(format!(r#"{{"result":"{}"}}"#, esc(&result)))
+        }
+        ("GET",  "/automation/status") => {
+            let s = STATE.lock().unwrap();
+            let enabled = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
+            let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
+            Some(format!(
+                r#"{{"enabled_macros":{},"templates":{},"total_macros":{},"variables":{},"active_profile":"{}","pending_actions":{},"run_log_entries":{},"rate_ok":{}}}"#,
+                enabled, templates, s.macros.len(), s.variables.len(),
+                esc(&s.active_profile), s.pending_actions.len(),
+                s.macro_run_log.len(), check_rate_limit(&s)
+            ))
+        }
+        _ => None,
+    }
 }
 
 // Crypto

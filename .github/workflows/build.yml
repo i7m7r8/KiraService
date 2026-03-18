@@ -59,17 +59,18 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # gradlew uses gradle-wrapper.properties which pins Gradle 8.4
-      # No manual gradle install needed — wrapper downloads it automatically
+      # Explicitly set JAVA_TOOL_OPTIONS to prevent Gradle daemon upgrade prompts
+      # gradle-wrapper.properties pins 8.7 — this env var ensures it is respected
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: ./gradlew assembleDebug --stacktrace --no-daemon --no-configuration-cache
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx2g"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx3g -Dorg.gradle.jvmargs=-Xmx3g"
+          JAVA_TOOL_OPTIONS: "-Xmx3g"
 
-      - name: Build Release APK (unsigned, signed with debug key)
-        run: ./gradlew assembleRelease --stacktrace --no-daemon
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace --no-daemon --no-configuration-cache
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx2g"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx3g"
 
       - name: List APK outputs
         run: find app/build/outputs/apk -type f | sort
@@ -100,21 +101,17 @@ jobs:
           body: |
             ## Kira v40 — World's Most Powerful Android AI Automation Agent
 
-            ### What's new
-            - Full Tasker/MacroDroid-equivalent engine in **pure Rust**
-              - 40+ trigger types: screen, battery, WiFi/BT, shake, SMS, call, NFC,
-                geofence, app launch, clipboard, cron, time interval...
-              - 60+ action types: HTTP, shell, volume, torch, brightness, TTS,
-                open app, send SMS, notifications, variables, if/loop/wait...
-              - Variable engine with %VAR% tokens + math ops
-              - Named profiles: Default / Work / Home / Sleep / Car
-              - Per-macro conditions (eq/gt/contains/matches...)
-              - Macro run log + dedicated 500ms engine thread
-            - **Fixed**: APK now correctly attached to every release
+            ### What's new in v40
+            - Full Tasker/MacroDroid/NanoBot/OpenClaw-style engine — **pure Rust**
+            - 40+ trigger types, 60+ action types, variable engine, profiles
+            - Geofence, NFC, SMS/call triggers, HTTP webhooks
+            - Named profiles: Default / Work / Home / Sleep / Car
+            - Per-macro IF/ELSE conditions, Loop, Wait, StopFlow
+            - Dedicated 500ms Rust macro engine thread
             - All v39 features preserved
 
             ### Install
-            Download **app-debug.apk** → enable "Install unknown apps" → install.
+            Download **app-debug.apk** → Settings → Install unknown apps → Install
           files: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/release/app-release-unsigned.apk

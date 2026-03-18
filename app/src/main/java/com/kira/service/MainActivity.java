@@ -102,7 +102,11 @@ public class MainActivity extends Activity {
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
 
-        if (!cfg.setupDone) { showFirstSetup(); return; }
+        if (!cfg.setupDone) {
+            startActivity(new android.content.Intent(this, SetupActivity.class));
+            finish();
+            return;
+        }
 
         ai = new KiraAI(this);
         agent = new com.kira.service.ai.KiraAgent(this);

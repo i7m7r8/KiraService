@@ -216,6 +216,22 @@ public class KiraTools {
                 case "list_skills":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/skills").build()).execute().body().string(); } catch(Exception e){ return "error: "+e.getMessage(); } }
 
 
+                // OpenClaw: Knowledge base population (RAG)
+                case "kb_add":        { try { String b2="{\"id\":\""+args.optString("id",String.valueOf(System.currentTimeMillis()))+"\""+",\"title\":\""+args.getString("title").replace("\"","\\\"")+"\""+",\"content\":\""+args.getString("content").replace("\"","\\\"")+"\""+",\"tags\":\""+args.optString("tags","")+"\""+"}"; new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/kb/add").post(okhttp3.RequestBody.create(b2,okhttp3.MediaType.parse("application/json"))).build()).execute(); return "kb entry added: "+args.getString("title"); } catch(Exception e){ return "error: "+e.getMessage(); } }
+                case "kb_search":     { try { String q=java.net.URLEncoder.encode(args.getString("query"),"UTF-8"); return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/kb/search?q="+q).build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                // OpenClaw: Event feed
+                case "post_to_feed":  { try { String b2="{\"event\":\""+args.getString("event")+"\",\"data\":\""+args.optString("data","")+"\"}"; new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/events").post(okhttp3.RequestBody.create(b2,okhttp3.MediaType.parse("application/json"))).build()).execute(); return "event posted"; } catch(Exception e){ return "error"; } }
+                case "get_events":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/events").build()).execute().body().string(); } catch(Exception e){ return "offline"; } }
+                // ZeroClaw: Cache
+                case "cache_set":     { try { String b2="{\"key\":\""+args.getString("key")+"\",\"value\":\""+args.getString("value").replace("\"","\\\"")+"\",\"ttl_ms\":"+args.optLong("ttl_ms",300000)+"}"; new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/cache").post(okhttp3.RequestBody.create(b2,okhttp3.MediaType.parse("application/json"))).build()).execute(); return "cached: "+args.getString("key"); } catch(Exception e){ return "error"; } }
+                case "cache_get":     { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/cache?key="+java.net.URLEncoder.encode(args.getString("key"),"UTF-8")).build()).execute().body().string(); } catch(Exception e){ return "cache miss"; } }
+                // NanoClaw: budget
+                case "get_budget":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/budget").build()).execute().body().string(); } catch(Exception e){ return "offline"; } }
+                case "reset_budget":  { com.kira.service.RustBridge.resetToolIter(args.optString("session","default")); return "budget reset"; }
+                // Rou Bao: streaming
+                case "stream_chunk":  { try { String b2="{\"text\":\""+args.getString("text").replace("\"","\\\"")+"\"}"; new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/stream/chunk").post(okhttp3.RequestBody.create(b2,okhttp3.MediaType.parse("application/json"))).build()).execute(); return "streamed"; } catch(Exception e){ return "error"; } }
+                // OpenClaw: relay to another channel
+                case "relay_to":      { try { String b2="{\"channel\":\""+args.getString("channel")+"\",\"message\":\""+args.getString("message").replace("\"","\\\"")+"\"}"; new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/relay").post(okhttp3.RequestBody.create(b2,okhttp3.MediaType.parse("application/json"))).build()).execute(); return "relayed to: "+args.getString("channel"); } catch(Exception e){ return "error"; } }
                 // OpenClaw: Workflows (.agent/workflows pattern)
                 case "list_workflows":   return new KiraWorkflow(ctx).listJson();
                 case "run_workflow":     { String goal = new KiraWorkflow(ctx).buildGoal(args.getString("name")); return "workflow goal: " + goal + " (use /agent or /chain to run)"; }

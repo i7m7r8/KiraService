@@ -41,7 +41,7 @@ public class KiraTools {
         try {
             switch (name) {
                 // Memory
-                case "remember":        return memory.remember(args.getString("key"), args.getString("value")) + "" + "remembered: " + args.getString("key");
+                case "remember":        { memory.remember(args.getString("key"), args.getString("value")); return "remembered: " + args.getString("key"); }
                 case "recall":          return memory.recall(args.getString("key"));
                 case "forget":          { memory.forget(args.getString("key")); return "forgot: " + args.getString("key"); }
                 case "memory_list":     return memory.listAll();

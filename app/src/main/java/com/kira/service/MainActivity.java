@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
     // Settings
     private TextView    apiKeyHint, visionHint, modelHint, baseUrlHint, tgTokenHint, tgIdHint;
     private TextView    maxStepsHint, heartbeatHint, personaHint, providerHint, skillsHint, checkpointsHint, auditHint, userNameHint, rustStatsHint, rustStatsContent;
-    private LinearLayout shizukuStatus;
+    private View shizukuStatus;
     private TextView    shizukuStatusTitle, shizukuStatusIcon;
     private TextView    floatingToggle;
     private boolean     floatingActive = false;
@@ -91,6 +91,13 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Skip setup if already configured
+        com.kira.service.ai.KiraConfig cfgCheck = com.kira.service.ai.KiraConfig.load(this);
+        if (!cfgCheck.setupDone && !getIntent().getBooleanExtra("skip_setup", false)) {
+            startActivity(new android.content.Intent(this, SetupActivity.class));
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_main);
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
@@ -232,25 +239,25 @@ public class MainActivity extends Activity {
         baseUrlHint       = settingsFragment.findViewById(R.id.baseUrlHint);
         tgTokenHint       = settingsFragment.findViewById(R.id.tgTokenHint);
         tgIdHint          = settingsFragment.findViewById(R.id.tgIdHint);
-        shizukuStatus     = settingsFragment.findViewById(R.id.shizukuStatus);
+        shizukuStatus = settingsFragment.findViewById(R.id.cardShizuku);
         shizukuStatusTitle= settingsFragment.findViewById(R.id.shizukuTitle);
         shizukuStatusIcon = settingsFragment.findViewById(R.id.shizukuIcon);
         floatingToggle    = settingsFragment.findViewById(R.id.floatingToggle);
 
-        settingsFragment.findViewById(R.id.settingApiKey).setOnClickListener(v ->
+        settingsFragment.findViewById(R.id.rowApiKey).setOnClickListener(v ->
             editSetting("API Key", cfg.apiKey, false, val -> { cfg.apiKey = val; cfg.save(this); updateSettingsUI(); }));
-        settingsFragment.findViewById(R.id.settingModel).setOnClickListener(v ->
+        settingsFragment.findViewById(R.id.rowModel).setOnClickListener(v ->
             editSetting("Model", cfg.model, false, val -> { cfg.model = val; cfg.save(this); updateSettingsUI(); }));
-        settingsFragment.findViewById(R.id.settingBaseUrl).setOnClickListener(v ->
+        settingsFragment.findViewById(R.id.rowBaseUrl).setOnClickListener(v ->
             editSetting("Base URL", cfg.baseUrl, false, val -> { cfg.baseUrl = val; cfg.save(this); updateSettingsUI(); }));
-        settingsFragment.findViewById(R.id.settingTgToken).setOnClickListener(v ->
+        settingsFragment.findViewById(R.id.rowTgToken).setOnClickListener(v ->
             editSetting("Telegram Bot Token", cfg.tgToken, false, val -> { cfg.tgToken = val; cfg.save(this); updateSettingsUI(); restartTelegram(); }));
-        settingsFragment.findViewById(R.id.settingTgId).setOnClickListener(v ->
+        settingsFragment.findViewById(R.id.rowTgId).setOnClickListener(v ->
             editSetting("Your Telegram ID", cfg.tgAllowed == 0 ? "" : String.valueOf(cfg.tgAllowed), true, val -> {
                 try { cfg.tgAllowed = val.isEmpty() ? 0 : Long.parseLong(val.trim()); cfg.save(this); updateSettingsUI(); } catch (Exception ignored) {}
             }));
         visionHint = settingsFragment.findViewById(R.id.visionHint);
-        View settingVision = settingsFragment.findViewById(R.id.settingVision);
+        View settingVision = settingsFragment.findViewById(R.id.rowVision);
         if (settingVision != null) settingVision.setOnClickListener(v ->
             editSetting("Vision Model", cfg.visionModel, false, val -> { cfg.visionModel = val; cfg.save(this); if (visionHint != null) visionHint.setText(val.isEmpty() ? "not set" : val); }));
 
@@ -326,10 +333,10 @@ public class MainActivity extends Activity {
         View rowHistory2 = settingsFragment.findViewById(R.id.rowHistory);
         if (rowHistory2 != null) rowHistory2.setOnClickListener(v -> showConfirmDialog("Clear all history?", () -> { new com.kira.service.ai.KiraMemory(this).clearHistory(); conversation.clear(); chatContainer.removeAllViews(); }));
 
-        settingsFragment.findViewById(R.id.settingAccessibility).setOnClickListener(v ->
+        settingsFragment.findViewById(R.id.cardAccessibility).setOnClickListener(v ->
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        shizukuStatus.setOnClickListener(v -> checkShizuku());
-        settingsFragment.findViewById(R.id.settingFloating).setOnClickListener(v -> toggleFloating());
+        // shizuku card click wired via cardShizuku above
+        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating());
 
         buildToolsList();
         updateSettingsUI();
@@ -338,13 +345,13 @@ public class MainActivity extends Activity {
         // Memory section wiring
         memoryHint        = settingsFragment.findViewById(R.id.memoryHint);
         memoryContent     = settingsFragment.findViewById(R.id.memoryContent);
-        clearHistoryBtn   = settingsFragment.findViewById(R.id.clearHistoryBtn);
+        // clearHistoryBtn handled by rowHistory onClick
         historySettingHint= settingsFragment.findViewById(R.id.historySettingHint);
         TextView memoryClearBtn = settingsFragment.findViewById(R.id.memoryClearBtn);
 
-        settingsFragment.findViewById(R.id.settingMemory).setOnClickListener(v -> toggleMemoryContent());
+        // rust stats row already handled by rowRustStats above
         if (memoryClearBtn != null) memoryClearBtn.setOnClickListener(v -> clearMemory());
-        if (clearHistoryBtn != null) clearHistoryBtn.setOnClickListener(v -> clearHistory());
+        // clearHistory wired via rowHistory2 above
     }
 
     // -- Tab nav ---------------------------------------------------------------
@@ -1098,7 +1105,7 @@ public class MainActivity extends Activity {
         shizukuStatusTitle.setTextColor(color);
         shizukuStatusIcon.setText(ok ? "?" : (installed ? "!" : "?"));
         shizukuStatusIcon.setTextColor(color);
-        shizukuStatus.setBackgroundColor(ok ? 0xFF0a1a0a : (installed ? 0xFF1a1200 : 0xFF1a0a0a));
+        if (shizukuStatus != null) shizukuStatus.setBackgroundColor(ok ? 0xFF0a1a0a : (installed ? 0xFF1a1200 : 0xFF1a0a0a));
     }
 
     private void toggleFloating() {

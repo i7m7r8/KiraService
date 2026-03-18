@@ -67,6 +67,10 @@ public class KiraMemory {
         }
     }
 
+    public int loadHistoryCount() {
+        try { return loadHistory().length(); } catch (Exception e) { return 0; }
+    }
+
     public JSONArray loadHistory() {
         try {
             return new JSONArray(convPrefs().getString("history", "[]"));

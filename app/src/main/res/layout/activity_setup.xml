@@ -1,25 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- v38: Setup built entirely in SetupActivity.java — this layout is not used but kept for R id references -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="#060606">
+    android:background="#050508">
 
-    <!-- Full-screen background gradient overlay -->
-    <View android:id="@+id/bgGradient"
-        android:layout_width="match_parent" android:layout_height="match_parent"
-        android:background="#0a0a0a"/>
-
-    <!-- Page container (swapped programmatically) -->
+    <!-- IDs referenced programmatically in SetupActivity -->
     <FrameLayout android:id="@+id/setupPageContainer"
         android:layout_width="match_parent" android:layout_height="match_parent"/>
 
-    <!-- Bottom navigation dots -->
     <LinearLayout android:id="@+id/setupDots"
         android:layout_width="wrap_content" android:layout_height="wrap_content"
         android:orientation="horizontal" android:gravity="center"
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="120dp"/>
 
-    <!-- Bottom button row -->
     <LinearLayout android:id="@+id/setupBtnRow"
         android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -29,15 +23,14 @@
 
         <TextView android:id="@+id/setupSkipBtn"
             android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1"
-            android:text="Skip" android:textColor="#444444" android:textSize="15sp"
+            android:text="Skip" android:textColor="#666680" android:textSize="15sp"
             android:gravity="center_vertical" android:clickable="true" android:focusable="true"/>
 
         <TextView android:id="@+id/setupNextBtn"
-            android:layout_width="160dp" android:layout_height="52dp"
-            android:text="Get Started" android:textColor="#000000"
+            android:layout_width="170dp" android:layout_height="52dp"
+            android:text="Get Started" android:textColor="#EEEEF5"
             android:textSize="15sp" android:textStyle="bold"
-            android:gravity="center" android:background="#ff8c00"
+            android:gravity="center" android:background="#DC143C"
             android:clickable="true" android:focusable="true"/>
     </LinearLayout>
-
 </FrameLayout>

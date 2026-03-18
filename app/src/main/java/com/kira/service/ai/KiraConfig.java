@@ -57,5 +57,16 @@ public class KiraConfig {
             .putInt("heartbeatInterval",    heartbeatInterval)
             .putBoolean("setupDone",        setupDone)
             .apply();
+        // v38: mirror to Rust state so /config + /appstats + /providers stay accurate
+        try {
+            com.kira.service.RustBridge.syncConfig(
+                userName, apiKey, baseUrl, model,
+                visionModel, persona, tgToken,
+                tgAllowed, agentMaxSteps, agentAutoApprove,
+                heartbeatInterval, setupDone
+            );
+        } catch (UnsatisfiedLinkError ignored) {
+            // Rust .so not loaded yet on first cold start — safe to skip
+        }
     }
 }

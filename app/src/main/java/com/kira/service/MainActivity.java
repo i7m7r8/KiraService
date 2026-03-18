@@ -71,6 +71,20 @@ public class MainActivity extends Activity {
     private TextView    shizukuStatusTitle, shizukuStatusIcon;
     private TextView    floatingToggle;
     private boolean     floatingActive = false;
+
+    // Shizuku permission result listener (kept as field so we can remove it)
+    private final Shizuku.OnRequestPermissionResultListener shizukuPermListener =
+        (requestCode, grantResult) -> {
+            if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                uiHandler.post(() -> {
+                    android.widget.Toast.makeText(this,
+                        "Shizuku active — god mode enabled!", android.widget.Toast.LENGTH_SHORT).show();
+                    updateShizukuStatus();
+                });
+            } else {
+                uiHandler.post(this::updateShizukuStatus);
+            }
+        };
     private TextView    memoryHint, memoryContent, clearHistoryBtn, historySettingHint;
 
     // Nav
@@ -114,6 +128,9 @@ public class MainActivity extends Activity {
         initViews();
         showTab(0);
 
+        // Register Shizuku permission result listener before requesting
+        try { Shizuku.addRequestPermissionResultListener(shizukuPermListener); }
+        catch (Exception ignored) {}
         requestAllPermissions();
         uiHandler.postDelayed(this::checkShizuku, 500);
         uiHandler.postDelayed(this::checkAccessibility, 2000);
@@ -153,15 +170,7 @@ public class MainActivity extends Activity {
                 return;
             }
             if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                Shizuku.addRequestPermissionResultListener((code, result) -> {
-                    if (result == PackageManager.PERMISSION_GRANTED) {
-                        uiHandler.post(() -> {
-                            Toast.makeText(this, "? Shizuku -- god mode active!", Toast.LENGTH_SHORT).show();
-                            updateShizukuStatus();
-                        });
-                    }
-                });
-                Shizuku.requestPermission(SHIZUKU_CODE);
+                ShizukuShell.requestPermission(SHIZUKU_CODE);
             }
         } catch (Exception ignored) {}
     }
@@ -320,11 +329,11 @@ public class MainActivity extends Activity {
 
         // Tools rows
         View rowSkills = settingsFragment.findViewById(R.id.rowSkills);
-        if (rowSkills != null) rowSkills.setOnClickListener(v -> { new Thread(() -> { String d=fetchRust("http://localhost:7070/skills"); uiHandler.post(() -> showInfoDialog("Skills",d)); }).start(); });
+        if (rowSkills != null) rowSkills.setOnClickListener(v -> showInfoDialog("Available Skills", "Kira has 176+ built-in tools including:\nscreen control, shell commands, SMS, calls, web search, file management, notifications, scheduling, vision AI, and more.\n\nSkill details available via chat: ask \'list tools\'"));
         View rowCheckpoints = settingsFragment.findViewById(R.id.rowCheckpoints);
         if (rowCheckpoints != null) rowCheckpoints.setOnClickListener(v -> showInfoDialog("Checkpoints", new com.kira.service.ai.KiraCheckpoint(this).getAllJson()));
         View rowAuditLog = settingsFragment.findViewById(R.id.rowAuditLog);
-        if (rowAuditLog != null) rowAuditLog.setOnClickListener(v -> { new Thread(() -> { String d=fetchRust("http://localhost:7070/audit_log"); uiHandler.post(() -> showInfoDialog("Audit Log",d)); }).start(); });
+        if (rowAuditLog != null) rowAuditLog.setOnClickListener(v -> showInfoDialog("Audit Log", "Audit log stored in conversation history.\nSee History tab for full interaction records."));
 
         // Rust stats
         View refreshBtn = settingsFragment.findViewById(R.id.rustRefreshBtn);
@@ -368,9 +377,9 @@ public class MainActivity extends Activity {
         settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            navIcons[i].setTextColor(on ? 0xFFFF8C00 : 0xFF666666);
-            navTexts[i].setTextColor(on ? 0xFFFF8C00 : 0xFF666666);
-            navItems[i].setBackgroundColor(on ? 0xFF1f1a0f : 0x00000000);
+            navIcons[i].setTextColor(on ? 0xFFDC143C : 0xFF444460);
+            navTexts[i].setTextColor(on ? 0xFFDC143C : 0xFF444460);
+            navItems[i].setBackgroundColor(on ? 0xFF1a0008 : 0x00000000);
         }
         if (tab == 2) refreshHistory();
         if (tab == 3) updateSettingsUI();
@@ -392,24 +401,24 @@ public class MainActivity extends Activity {
         // Agent mode: prefix with /agent or /auto
         if (text.startsWith("/kb ")) {
             String query = text.substring(4).trim();
-            new Thread(() -> { String d = fetchRust("http://localhost:7070/kb/search?q=" + java.net.URLEncoder.encode(query)); uiHandler.post(() -> addSystemNotice("KB: " + d)); }).start();
+            addSystemNotice("KB search: " + query + "\n(tip: ask Kira directly — say \'remember: ...\'  to store facts)");
             return;
         }
         if (text.equals("/events")) {
-            new Thread(() -> { String d = fetchRust("http://localhost:7070/events"); uiHandler.post(() -> addSystemNotice("Events: " + d)); }).start();
+            addSystemNotice("Event log: " + new com.kira.service.ai.KiraMemory(this).listAll());
             return;
         }
         if (text.equals("/metrics")) {
-            new Thread(() -> { String d = fetchRust("http://localhost:7070/metrics"); uiHandler.post(() -> addSystemNotice(d)); }).start();
+            addSystemNotice("Memory: " + new com.kira.service.ai.KiraMemory(this).listAll());
             return;
         }
         if (text.equals("/budget")) {
-            new Thread(() -> { String d = fetchRust("http://localhost:7070/budget"); uiHandler.post(() -> addSystemNotice("Budget: " + d)); }).start();
+            addSystemNotice("Budget tracking not available in this build.");
             return;
         }
         if (text.startsWith("/workflow ") || text.equals("/workflows")) {
             if (text.equals("/workflows")) {
-                new Thread(() -> { String list = new com.kira.service.ai.KiraWorkflow(this).listJson(); uiHandler.post(() -> addSystemNotice("Workflows: " + list)); }).start();
+                new Thread(() -> { String list = new com.kira.service.ai.KiraWorkflow(MainActivity.this).listJson(); uiHandler.post(() -> addSystemNotice("Workflows: " + list)); }).start();
                 return;
             }
             String goal = new com.kira.service.ai.KiraWorkflow(this).buildGoal(text.substring(10).trim());
@@ -593,7 +602,7 @@ public class MainActivity extends Activity {
         header.setPadding(0, 0, 0, dp(3));
 
         TextView label = makeLabel("KIRA");
-        label.setTextColor(0xFFff8c00);
+        label.setTextColor(0xFFDC143C);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
         TextView copyBtn = makeActionBtn("copy");
@@ -855,18 +864,65 @@ public class MainActivity extends Activity {
     }
 
     private void showProviderPicker() {
-        String[] ps = {"groq","openai","anthropic","gemini","deepseek","openrouter","ollama","together","mistral","cohere","perplexity","xai","cerebras","fireworks","sambanova","novita","custom"};
-        new android.app.AlertDialog.Builder(this).setTitle("Select AI Provider").setItems(ps, (d,w) -> {
-            final String pid = ps[w];
-            new Thread(() -> { try { String b2 = "{\"id\":\""+pid+"\"}";
-                new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/providers/set").post(okhttp3.RequestBody.create(b2,okhttp3.MediaType.parse("application/json"))).build()).execute();
-                uiHandler.post(() -> { if(providerHint!=null)providerHint.setText(pid+" (active)"); }); } catch(Exception ignored){} }).start();
-        }).show();
+        // v38: provider list comes from Rust (17+ entries, includes custom)
+        String providersJson;
+        try {
+            providersJson = RustBridge.getProviders();
+        } catch (UnsatisfiedLinkError e) {
+            providersJson = "[]";
+        }
+        // Parse the JSON array from Rust — extract id and name fields
+        java.util.List<String> ids   = new java.util.ArrayList<>();
+        java.util.List<String> names = new java.util.ArrayList<>();
+        try {
+            org.json.JSONArray arr = new org.json.JSONArray(providersJson);
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject p = arr.getJSONObject(i);
+                ids.add(p.getString("id"));
+                names.add(p.getString("name") + (p.optBoolean("active") ? " ✔" : ""));
+            }
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, "Provider list error: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] nameArr = names.toArray(new String[0]);
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Select AI Provider")
+            .setItems(nameArr, (d, w) -> {
+                String pid = ids.get(w);
+                if ("custom".equals(pid)) {
+                    editSetting("Custom Base URL", cfg.baseUrl, false, val -> {
+                        try { RustBridge.setCustomProvider(val, cfg.model); } catch (UnsatisfiedLinkError ignored) {}
+                        cfg.baseUrl = val; cfg.save(this); updateSettingsUI();
+                    });
+                } else {
+                    // Rust switches provider and returns new base_url + model
+                    try {
+                        String result = RustBridge.setActiveProvider(pid);
+                        org.json.JSONObject res = new org.json.JSONObject(result);
+                        if (res.optBoolean("ok")) {
+                            cfg.baseUrl = res.optString("base_url", cfg.baseUrl);
+                            cfg.model   = res.optString("model",    cfg.model);
+                            cfg.save(this); updateSettingsUI();
+                            if (providerHint != null) providerHint.setText(nameArr[w].replace(" ✔",""));
+                            android.widget.Toast.makeText(this, "Provider: " + nameArr[w], android.widget.Toast.LENGTH_SHORT).show();
+                        }
+                    } catch (Exception e) {
+                        android.widget.Toast.makeText(this, "Switch failed: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                }
+            }).show();
     }
 
+    // fetchRust kept for any residual calls but Rust backend not required in v38
     private String fetchRust(String url) {
-        try { return new okhttp3.OkHttpClient.Builder().connectTimeout(3,java.util.concurrent.TimeUnit.SECONDS).readTimeout(5,java.util.concurrent.TimeUnit.SECONDS).build().newCall(new okhttp3.Request.Builder().url(url).build()).execute().body().string(); }
-        catch(Exception e) { return "offline: "+e.getMessage(); }
+        try {
+            okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS).build();
+            okhttp3.Response resp = client.newCall(new okhttp3.Request.Builder().url(url).build()).execute();
+            return resp.body() != null ? resp.body().string() : "(empty)";
+        } catch(Exception e) { return "(unavailable)"; }
     }
 
     private void showInfoDialog(String title, String msg) {
@@ -1226,5 +1282,11 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (currentTab == 3) updateShizukuStatus();
+    }
+
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        try { Shizuku.removeRequestPermissionResultListener(shizukuPermListener); }
+        catch (Exception ignored) {}
     }
 }

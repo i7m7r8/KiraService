@@ -4,56 +4,71 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.AnimatorSet;
+import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.text.TextWatcher;
+import android.text.Editable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.kira.service.ai.KiraConfig;
+import android.util.Log;
+
+import java.util.Random;
 
 /**
- * Multi-page animated setup experience.
- *
- * Pages:
- *   0 - Welcome: Kira logo + motivational quote + brief description
- *   1 - API Key:  enter key, provider selection chips
- *   2 - Name:     personalize experience
- *   3 - Model:    model + base URL
- *   4 - Telegram: optional bot integration
- *   5 - Ready:    final animation + launch
- *
- * Quotes fetched from Rust /kb endpoint (pre-seeded) or local fallback.
- * Each page slides in from right with alpha fade.
+ * KiraService v38 — Setup wizard.
+ * Neon crimson UI + animated star field (tilts with accelerometer) +
+ * custom AI provider support.
  */
-public class SetupActivity extends Activity {
+public class SetupActivity extends Activity implements SensorEventListener {
 
     private static final int TOTAL_PAGES = 6;
 
-    // Motivational quotes shown on welcome page (cycling)
     private static final String[] QUOTES = {
         "The best way to predict the future is to create it.",
         "Intelligence is the ability to adapt to change.",
-        "Automation is not about replacing humans. It is about elevating them.",
-        "The machine does not isolate man from the great problems of nature but plunges him more deeply into them.",
+        "Automation elevates the human; it never replaces the soul.",
         "Any sufficiently advanced technology is indistinguishable from magic.",
-        "We are the first generation to build gods, and the last generation to be free of them.",
+        "We build the gods. We choose what they remember.",
         "The real problem is not whether machines think but whether men do.",
-        "You have power over your mind, not outside events. Realize this and you will find strength.",
-        "Do not wait to strike till the iron is hot, but make it hot by striking.",
+        "You have power over your mind — not outside events.",
+        "Do not wait to strike till the iron is hot; make it hot by striking.",
         "The secret of getting ahead is getting started.",
+        "Build something worthy of the future you imagine.",
     };
 
+    // Neon crimson palette
+    private static final int C_BG         = 0xFF050508;
+    private static final int C_CARD       = 0xFF0e0e18;
+    private static final int C_ACCENT     = 0xFFDC143C;
+    private static final int C_ACCENT2    = 0xFFFF2D55;
+    private static final int C_ACCENT_DIM = 0xFF2A0010;
+    private static final int C_TEXT       = 0xFFEEEEF5;
+    private static final int C_MUTED      = 0xFF666680;
+    private static final int C_HINT       = 0xFF2a2a40;
+
+    private StarFieldView starField;
     private FrameLayout pageContainer;
     private LinearLayout dotsRow;
     private TextView nextBtn, skipBtn;
@@ -61,229 +76,413 @@ public class SetupActivity extends Activity {
     private int currentPage = 0;
     private View currentView;
     private KiraConfig cfg;
-    private Handler handler = new Handler(Looper.getMainLooper());
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private SensorManager sensorManager;
+    private Sensor accelerometer;
 
-    // Collected values
     private String apiKey = "", baseUrl = "", model = "", name = "", tgToken = "", tgId = "";
     private int quoteIndex = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_setup);
 
-        cfg          = KiraConfig.load(this);
-        pageContainer= findViewById(R.id.setupPageContainer);
-        dotsRow      = findViewById(R.id.setupDots);
-        nextBtn      = findViewById(R.id.setupNextBtn);
-        skipBtn      = findViewById(R.id.setupSkipBtn);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(C_BG);
 
+        starField = new StarFieldView(this);
+        root.addView(starField, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
+        pageContainer = new FrameLayout(this);
+        pageContainer.setId(R.id.setupPageContainer);
+        root.addView(pageContainer, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
+        dotsRow = new LinearLayout(this);
+        dotsRow.setId(R.id.setupDots);
+        dotsRow.setOrientation(LinearLayout.HORIZONTAL);
+        dotsRow.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams dlp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT);
+        dlp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        dlp.bottomMargin = dp(120);
+        root.addView(dotsRow, dlp);
+
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER_VERTICAL);
+        btnRow.setPadding(dp(24), 0, dp(24), dp(40));
+        FrameLayout.LayoutParams brlp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, dp(92));
+        brlp.gravity = Gravity.BOTTOM;
+        root.addView(btnRow, brlp);
+
+        skipBtn = new TextView(this);
+        skipBtn.setId(R.id.setupSkipBtn);
+        skipBtn.setText("Skip");
+        skipBtn.setTextColor(C_MUTED);
+        skipBtn.setTextSize(15);
+        skipBtn.setGravity(Gravity.CENTER_VERTICAL);
+        skipBtn.setClickable(true);
+        skipBtn.setFocusable(true);
+        btnRow.addView(skipBtn, new LinearLayout.LayoutParams(0, dp(48), 1));
+
+        nextBtn = new TextView(this);
+        nextBtn.setId(R.id.setupNextBtn);
+        nextBtn.setText("Get Started");
+        nextBtn.setTextColor(C_TEXT);
+        nextBtn.setTextSize(15);
+        nextBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        nextBtn.setGravity(Gravity.CENTER);
+        nextBtn.setBackgroundColor(C_ACCENT);
+        nextBtn.setClickable(true);
+        nextBtn.setFocusable(true);
+        nextBtn.setPadding(dp(32), 0, dp(32), 0);
+        btnRow.addView(nextBtn, new LinearLayout.LayoutParams(dp(170), dp(52)));
+
+        setContentView(root);
+
+        cfg = KiraConfig.load(this);
         buildDots();
         showPage(0, true);
 
         nextBtn.setOnClickListener(v -> advance());
         skipBtn.setOnClickListener(v -> finish());
-
-        // Auto-cycle quote every 4 seconds on welcome page
         handler.postDelayed(this::cycleQuote, 4000);
+
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (sensorManager != null)
+            accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
     }
 
-    // ?? Page building ?????????????????????????????????????????????????????????
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (accelerometer != null && sensorManager != null)
+            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (sensorManager != null) sensorManager.unregisterListener(this);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent e) {
+        if (e.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            starField.onTilt(e.values[0], e.values[1]);
+            // v38: Rust smooths the parallax; Java still draws independently
+            // but Rust state is available for /theme/tilt endpoint
+            try { RustBridge.updateTilt(e.values[0], e.values[1]); }
+            catch (UnsatisfiedLinkError ignored) {}
+        }
+    }
+
+    @Override public void onAccuracyChanged(Sensor s, int a) {}
+
+    // ── Star field ────────────────────────────────────────────────────────────
+
+    static class StarFieldView extends View {
+        private static final int N = 110;
+        private final float[] x = new float[N], y = new float[N], sz = new float[N],
+                               br = new float[N], ph = new float[N];
+        private final int[] clr = new int[N];
+        private final android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        private float tiltX, tiltY, offX, offY;
+        private final long t0 = System.currentTimeMillis();
+
+        StarFieldView(Context ctx) {
+            super(ctx);
+            Random rnd = new Random(7);
+            int[] palette = {0xFFDDDDEE, 0xFFDDDDEE, 0xFFDDDDEE, 0xFFDC143C, 0xFFFF2D55, 0xFFCC8899};
+            for (int i = 0; i < N; i++) {
+                x[i] = rnd.nextFloat(); y[i] = rnd.nextFloat();
+                sz[i] = 0.7f + rnd.nextFloat() * 2.2f;
+                br[i] = 0.3f + rnd.nextFloat() * 0.7f;
+                ph[i] = rnd.nextFloat() * 6.28f;
+                clr[i] = palette[rnd.nextInt(palette.length)];
+            }
+            ValueAnimator va = ValueAnimator.ofFloat(0f, 1f);
+            va.setDuration(60); va.setRepeatCount(ValueAnimator.INFINITE);
+            va.addUpdateListener(a -> invalidate());
+            va.start();
+        }
+
+        void onTilt(float ax, float ay) { tiltX = ax; tiltY = ay; }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            int w = getWidth(), h = getHeight();
+            if (w == 0) return;
+            offX += (-tiltX * 0.013f - offX) * 0.07f;
+            offY += ( tiltY * 0.013f - offY) * 0.07f;
+            float t = (System.currentTimeMillis() - t0) / 1000f;
+            for (int i = 0; i < N; i++) {
+                float fx = (x[i] + offX * (sz[i] / 3f) + 1.5f) % 1f;
+                float fy = (y[i] + offY * (sz[i] / 3f) + 1.5f) % 1f;
+                float tw = 0.55f + 0.45f * (float)Math.sin(t * 1.2f + ph[i]);
+                int alpha = (int)(br[i] * tw * 210);
+                p.setColor((clr[i] & 0x00FFFFFF) | (alpha << 24));
+                float px = fx * w, py = fy * h;
+                c.drawCircle(px, py, sz[i] * 0.5f, p);
+                if (sz[i] > 2f) {
+                    p.setColor((clr[i] & 0x00FFFFFF) | (Math.max(0, alpha - 170) << 24));
+                    c.drawCircle(px, py, sz[i] * 2.5f, p);
+                }
+            }
+        }
+    }
+
+    // ── Pages ─────────────────────────────────────────────────────────────────
 
     private View buildPage(int page) {
         switch (page) {
-            case 0: return buildWelcomePage();
-            case 1: return buildApiKeyPage();
-            case 2: return buildNamePage();
-            case 3: return buildModelPage();
-            case 4: return buildTelegramPage();
-            case 5: return buildReadyPage();
-            default: return buildWelcomePage();
+            case 0:  return buildWelcomePage();
+            case 1:  return buildApiKeyPage();
+            case 2:  return buildNamePage();
+            case 3:  return buildModelPage();
+            case 4:  return buildTelegramPage();
+            default: return buildReadyPage();
         }
     }
 
     private View buildWelcomePage() {
+        ScrollView sv = sv();
         LinearLayout root = pageRoot();
 
-        // Logo
         TextView logo = new TextView(this);
         logo.setText("K");
-        logo.setTextSize(72);
-        logo.setTextColor(0xFFff8c00);
+        logo.setTextSize(80);
+        logo.setTextColor(C_ACCENT);
         logo.setTypeface(null, android.graphics.Typeface.BOLD);
         logo.setGravity(Gravity.CENTER);
-        logo.setTag("logo");
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(100), dp(100));
+        logo.setBackgroundColor(C_ACCENT_DIM);
+        logo.setShadowLayer(dp(18), 0, 0, C_ACCENT2);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(110), dp(110));
         lp.gravity = Gravity.CENTER_HORIZONTAL;
-        lp.setMargins(0, 0, 0, dp(24));
+        lp.setMargins(0, 0, 0, dp(20));
         logo.setLayoutParams(lp);
-        logo.setBackgroundColor(0xFF141414);
+        root.addView(logo);
 
-        // Title
         TextView title = bigText("Meet Kira");
-        title.setTag("title");
+        title.setShadowLayer(dp(10), 0, 0, C_ACCENT);
+        root.addView(title);
 
-        // Subtitle
         TextView sub = new TextView(this);
         sub.setText("Your autonomous AI agent for Android.\nNo root. No Termux. Just intelligence.");
-        sub.setTextColor(0xFF666666);
+        sub.setTextColor(C_MUTED);
         sub.setTextSize(15);
         sub.setGravity(Gravity.CENTER);
+        sub.setLineSpacing(0, 1.4f);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        sp.setMargins(dp(32), 0, dp(32), dp(48));
+        sp.setMargins(dp(32), 0, dp(32), dp(36));
         sub.setLayoutParams(sp);
+        root.addView(sub);
 
         // Quote card
-        LinearLayout quoteCard = new LinearLayout(this);
-        quoteCard.setOrientation(LinearLayout.VERTICAL);
-        quoteCard.setBackgroundColor(0xFF111111);
-        quoteCard.setPadding(dp(24), dp(20), dp(24), dp(20));
+        LinearLayout qcard = new LinearLayout(this);
+        qcard.setOrientation(LinearLayout.HORIZONTAL);
+        qcard.setBackgroundColor(C_CARD);
+        qcard.setPadding(dp(16), dp(18), dp(20), dp(18));
         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        qp.setMargins(dp(24), 0, dp(24), 0);
-        quoteCard.setLayoutParams(qp);
+        qp.setMargins(dp(24), 0, dp(24), dp(28));
+        qcard.setLayoutParams(qp);
 
-        TextView quoteBar = new TextView(this);
-        quoteBar.setText("\u201C");
-        quoteBar.setTextColor(0xFFff8c00);
-        quoteBar.setTextSize(32);
-        quoteBar.setTag("quoteBar");
-        quoteCard.addView(quoteBar);
+        View bar = new View(this);
+        bar.setBackgroundColor(C_ACCENT);
+        qcard.addView(bar, new LinearLayout.LayoutParams(dp(3), dp(56)));
 
-        TextView quoteText = new TextView(this);
-        quoteText.setText(QUOTES[quoteIndex]);
-        quoteText.setTextColor(0xFFaaaaaa);
-        quoteText.setTextSize(14);
-        quoteText.setLineSpacing(0, 1.4f);
-        quoteText.setTag("quoteText");
-        quoteCard.addView(quoteText);
+        TextView qt = new TextView(this);
+        qt.setText(QUOTES[quoteIndex]);
+        qt.setTextColor(0xFF9999BB);
+        qt.setTextSize(13);
+        qt.setLineSpacing(0, 1.5f);
+        qt.setTag("quoteText");
+        LinearLayout.LayoutParams qtlp = new LinearLayout.LayoutParams(0, WRAP, 1);
+        qtlp.setMargins(dp(14), 0, 0, 0);
+        qt.setLayoutParams(qtlp);
+        qcard.addView(qt);
+        root.addView(qcard);
 
         // Feature chips
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        cp.setMargins(0, dp(32), 0, 0);
-        chips.setLayoutParams(cp);
-
         for (String[] chip : new String[][]{
-            {"\uD83E\uDD16", "AI Agent"},
-            {"\uD83D\uDD2D", "Vision"},
-            {"\u26A1", "Rust Core"},
-            {"\uD83D\uDD14", "Telegram"},
-        }) {
+                {"\uD83E\uDD16", "AI Agent"}, {"\uD83D\uDD2D", "Vision"},
+                {"\u26A1", "Rust Core"},      {"\uD83D\uDD14", "Telegram"}}) {
             TextView tv = new TextView(this);
             tv.setText(chip[0] + " " + chip[1]);
-            tv.setTextColor(0xFF888888);
+            tv.setTextColor(C_MUTED);
             tv.setTextSize(11);
-            tv.setBackgroundColor(0xFF1a1a1a);
-            tv.setPadding(dp(10), dp(6), dp(10), dp(6));
+            tv.setBackgroundColor(C_CARD);
+            tv.setPadding(dp(10), dp(7), dp(10), dp(7));
             LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(WRAP, WRAP);
             tp.setMargins(dp(4), 0, dp(4), 0);
             tv.setLayoutParams(tp);
             chips.addView(tv);
         }
-
-        root.addView(logo);
-        root.addView(title);
-        root.addView(sub);
-        root.addView(quoteCard);
         root.addView(chips);
-        return root;
+        sv.addView(root);
+        return sv;
     }
 
     private View buildApiKeyPage() {
+        ScrollView sv = sv();
         LinearLayout root = pageRoot();
         root.addView(pageIcon("\uD83D\uDD11"));
-        root.addView(bigText("API Key"));
-        root.addView(hint("Enter your key from Groq, OpenAI, Anthropic\nor any OpenAI-compatible provider."));
+        root.addView(bigText("AI Provider & Key"));
+        root.addView(hint("Enter your API key. Choose a provider\nor add a custom endpoint."));
 
-        EditText input = inputField("sk-... or gsk-...", false);
-        input.setTag("apiKeyInput");
-        if (!cfg.apiKey.isEmpty()) input.setText("*".repeat(Math.min(16, cfg.apiKey.length())));
-        root.addView(input);
+        EditText keyInput = inputField("sk-... or gsk-...", false);
+        keyInput.setTag("apiKeyInput");
+        if (!cfg.apiKey.isEmpty())
+            keyInput.setText("*".repeat(Math.min(16, cfg.apiKey.length())));
+        root.addView(keyInput);
 
-        root.addView(sectionLabel("Quick select provider:"));
+        root.addView(sectionLabel("Quick-select provider:"));
 
-        LinearLayout chips = new LinearLayout(this);
-        chips.setOrientation(LinearLayout.HORIZONTAL);
-        chips.setPadding(dp(24), 0, dp(24), 0);
-        chips.setTag("providerChips");
-
+        // All providers including Custom
         String[][] providers = {
-            {"Groq (free)", "https://api.groq.com/openai/v1"},
-            {"OpenAI", "https://api.openai.com/v1"},
-            {"Anthropic", "https://api.anthropic.com/v1"},
-            {"Gemini", "https://generativelanguage.googleapis.com/v1beta/openai"},
-            {"Local", "http://localhost:11434/v1"},
+            {"Groq (free)",  "https://api.groq.com/openai/v1"},
+            {"OpenAI",       "https://api.openai.com/v1"},
+            {"Anthropic",    "https://api.anthropic.com/v1"},
+            {"Gemini",       "https://generativelanguage.googleapis.com/v1beta/openai"},
+            {"DeepSeek",     "https://api.deepseek.com/v1"},
+            {"OpenRouter",   "https://openrouter.ai/api/v1"},
+            {"Ollama (local)","http://localhost:11434/v1"},
+            {"Custom \u270E", "custom"},
         };
-        for (String[] p : providers) {
+
+        // Custom URL field — hidden until Custom is tapped
+        EditText customUrl = inputField("https://your-server/v1", false);
+        customUrl.setTag("customUrlInput");
+        customUrl.setVisibility(View.GONE);
+        customUrl.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {
+                baseUrl = s.toString().trim();
+                // v38: live-update Rust custom provider URL
+                if (!baseUrl.isEmpty()) {
+                    try { RustBridge.setCustomProvider(baseUrl, ""); } catch (UnsatisfiedLinkError ignored) {}
+                }
+            }
+            @Override public void afterTextChanged(Editable s) {}
+        });
+
+        LinearLayout chipsRow = new LinearLayout(this);
+        chipsRow.setOrientation(LinearLayout.HORIZONTAL);
+        chipsRow.setPadding(dp(24), 0, dp(24), 0);
+
+        TextView[] chipViews = new TextView[providers.length];
+        for (int i = 0; i < providers.length; i++) {
+            final String label = providers[i][0];
+            final String url   = providers[i][1];
+            final boolean isCustom = url.equals("custom");
             TextView tv = new TextView(this);
-            tv.setText(p[0]);
+            tv.setText(label);
             tv.setTextSize(12);
-            tv.setTextColor(0xFF888888);
-            tv.setBackgroundColor(0xFF1a1a1a);
-            tv.setPadding(dp(10), dp(8), dp(10), dp(8));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(WRAP, WRAP);
-            lp.setMargins(0, 0, dp(8), 0);
-            tv.setLayoutParams(lp);
+            tv.setTextColor(C_MUTED);
+            tv.setBackgroundColor(C_CARD);
+            tv.setPadding(dp(12), dp(8), dp(12), dp(8));
+            LinearLayout.LayoutParams clp2 = new LinearLayout.LayoutParams(WRAP, WRAP);
+            clp2.setMargins(0, 0, dp(8), 0);
+            tv.setLayoutParams(clp2);
             tv.setClickable(true);
-            final String url = p[1];
+            chipViews[i] = tv;
+            final int fi = i;
             tv.setOnClickListener(v -> {
-                baseUrl = url;
-                tv.setBackgroundColor(0xFF2a1a00);
-                tv.setTextColor(0xFFff8c00);
+                for (TextView c2 : chipViews) {
+                    c2.setBackgroundColor(C_CARD);
+                    c2.setTextColor(C_MUTED);
+                }
+                tv.setBackgroundColor(C_ACCENT_DIM);
+                tv.setTextColor(C_ACCENT2);
+                if (isCustom) {
+                    customUrl.setVisibility(View.VISIBLE);
+                    baseUrl = customUrl.getText().toString().trim();
+                    // v38: register in Rust provider registry immediately
+                    if (!baseUrl.isEmpty()) {
+                        try { RustBridge.setCustomProvider(baseUrl, ""); } catch (UnsatisfiedLinkError ignored) {}
+                    }
+                } else {
+                    customUrl.setVisibility(View.GONE);
+                    baseUrl = url;
+                    // v38: switch active provider in Rust
+                    try { RustBridge.setActiveProvider(url); } catch (UnsatisfiedLinkError ignored) {}
+                }
             });
-            chips.addView(tv);
+            chipsRow.addView(tv);
         }
 
-        android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        slp.setMargins(0, dp(8), 0, 0);
-        scroll.setLayoutParams(slp);
-        scroll.addView(chips);
-        root.addView(scroll);
-
-        return root;
+        HorizontalScrollView hscroll = new HorizontalScrollView(this);
+        hscroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout.LayoutParams hslp = new LinearLayout.LayoutParams(MATCH, WRAP);
+        hslp.setMargins(0, dp(4), 0, dp(12));
+        hscroll.setLayoutParams(hslp);
+        hscroll.addView(chipsRow);
+        root.addView(hscroll);
+        root.addView(customUrl);
+        sv.addView(root);
+        return sv;
     }
 
     private View buildNamePage() {
+        ScrollView sv = sv();
         LinearLayout root = pageRoot();
         root.addView(pageIcon("\uD83D\uDC64"));
         root.addView(bigText("What's your name?"));
-        root.addView(hint("Kira will use this to personalize\nyour experience."));
-
-        EditText input = inputField("Imran", false);
+        root.addView(hint("Kira will use this to personalise\nyour experience."));
+        EditText input = inputField("Your name…", false);
         input.setTag("nameInput");
-        if (!cfg.userName.isEmpty() && !cfg.userName.equals("User")) input.setText(cfg.userName);
+        if (!cfg.userName.isEmpty() && !cfg.userName.equals("User"))
+            input.setText(cfg.userName);
         root.addView(input);
 
-        TextView note = new TextView(this);
-        note.setText("\uD83D\uDCA1 Tip: Say \"remember my name is Imran\" and Kira will\nnever forget it across sessions.");
-        note.setTextColor(0xFF445544);
-        note.setTextSize(12);
-        note.setLineSpacing(0, 1.4f);
-        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(MATCH, WRAP);
-        np.setMargins(dp(24), dp(24), dp(24), 0);
-        note.setLayoutParams(np);
-        root.addView(note);
-
-        return root;
+        LinearLayout tip = new LinearLayout(this);
+        tip.setBackgroundColor(C_CARD);
+        tip.setPadding(dp(16), dp(14), dp(16), dp(14));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(MATCH, WRAP);
+        tlp.setMargins(dp(24), dp(8), dp(24), 0);
+        tip.setLayoutParams(tlp);
+        TextView tipIcon = new TextView(this);
+        tipIcon.setText("\uD83D\uDCA1");
+        tipIcon.setTextSize(16);
+        tipIcon.setPadding(0, 0, dp(10), 0);
+        TextView tipText = new TextView(this);
+        tipText.setText("Say \"remember my name is …\" and Kira will never forget it across sessions.");
+        tipText.setTextColor(0xFF445533);
+        tipText.setTextSize(12);
+        tipText.setLineSpacing(0, 1.4f);
+        tipText.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
+        tip.addView(tipIcon);
+        tip.addView(tipText);
+        root.addView(tip);
+        sv.addView(root);
+        return sv;
     }
 
     private View buildModelPage() {
+        ScrollView sv = sv();
         LinearLayout root = pageRoot();
         root.addView(pageIcon("\uD83E\uDDE0"));
         root.addView(bigText("Choose Your Model"));
         root.addView(hint("The AI model Kira will use.\nFast models respond in milliseconds."));
 
         String[][] models = {
-            {"llama-3.1-8b-instant", "Groq - ultrafast, free"},
-            {"llama-3.3-70b-versatile", "Groq - smarter, free"},
-            {"gpt-4o-mini", "OpenAI - balanced"},
-            {"claude-3-haiku-20240307", "Anthropic - precise"},
-            {"gemini-2.0-flash", "Google - multimodal"},
-            {"deepseek-chat", "DeepSeek - powerful"},
+            {"llama-3.1-8b-instant",    "Groq · ultrafast, free"},
+            {"llama-3.3-70b-versatile", "Groq · smarter, free"},
+            {"gpt-4o-mini",             "OpenAI · balanced"},
+            {"claude-3-haiku-20240307", "Anthropic · precise"},
+            {"gemini-2.0-flash",        "Google · multimodal"},
+            {"deepseek-chat",           "DeepSeek · powerful"},
+            {"mistral-7b-instruct",     "Mistral · lean"},
+            {"openrouter/auto",         "OpenRouter · auto-route"},
         };
 
         LinearLayout modelList = new LinearLayout(this);
@@ -292,10 +491,12 @@ public class SetupActivity extends Activity {
         mlp.setMargins(dp(24), dp(8), dp(24), 0);
         modelList.setLayoutParams(mlp);
 
-        for (String[] m : models) {
+        for (int mi = 0; mi < models.length; mi++) {
+            final String mName = models[mi][0];
+            final String mDesc = models[mi][1];
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setBackgroundColor(0xFF141414);
+            row.setBackgroundColor(C_CARD);
             row.setPadding(dp(16), dp(14), dp(16), dp(14));
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setClickable(true);
@@ -304,252 +505,242 @@ public class SetupActivity extends Activity {
             rp.setMargins(0, 0, 0, dp(2));
             row.setLayoutParams(rp);
 
-            TextView mName = new TextView(this);
-            mName.setText(m[0]);
-            mName.setTextColor(0xFFdddddd);
-            mName.setTextSize(13);
-            mName.setTypeface(null, android.graphics.Typeface.BOLD);
-            mName.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
-            mName.setFontFeatureSettings("monospace");
+            View dot = new View(this);
+            dot.setBackgroundColor(C_HINT);
+            dot.setTag("dot");
+            LinearLayout.LayoutParams dlp2 = new LinearLayout.LayoutParams(dp(8), dp(8));
+            dlp2.gravity = Gravity.CENTER_VERTICAL;
+            dlp2.setMargins(0, 0, dp(12), 0);
+            dot.setLayoutParams(dlp2);
 
-            TextView mDesc = new TextView(this);
-            mDesc.setText(m[1]);
-            mDesc.setTextColor(0xFF555555);
-            mDesc.setTextSize(11);
+            TextView mn = new TextView(this);
+            mn.setText(mName);
+            mn.setTextColor(C_TEXT);
+            mn.setTextSize(13);
+            mn.setTypeface(android.graphics.Typeface.MONOSPACE);
+            mn.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
+            mn.setTag("name");
 
-            row.addView(mName);
-            row.addView(mDesc);
+            TextView md = new TextView(this);
+            md.setText(mDesc);
+            md.setTextColor(C_MUTED);
+            md.setTextSize(11);
 
-            final String modelName = m[0];
+            row.addView(dot); row.addView(mn); row.addView(md);
+
             row.setOnClickListener(v -> {
-                model = modelName;
-                for (int i = 0; i < modelList.getChildCount(); i++) {
-                    modelList.getChildAt(i).setBackgroundColor(0xFF141414);
+                model = mName;
+                for (int j = 0; j < modelList.getChildCount(); j++) {
+                    LinearLayout r2 = (LinearLayout) modelList.getChildAt(j);
+                    r2.setBackgroundColor(C_CARD);
+                    View d2 = r2.findViewWithTag("dot");
+                    TextView n2 = r2.findViewWithTag("name");
+                    if (d2 != null) d2.setBackgroundColor(C_HINT);
+                    if (n2 != null) n2.setTextColor(C_TEXT);
                 }
-                row.setBackgroundColor(0xFF2a1a00);
-                mName.setTextColor(0xFFff8c00);
+                row.setBackgroundColor(C_ACCENT_DIM);
+                dot.setBackgroundColor(C_ACCENT);
+                mn.setTextColor(C_ACCENT2);
             });
-
             modelList.addView(row);
         }
 
-        android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        sv.setVerticalScrollBarEnabled(false);
-        LinearLayout.LayoutParams svlp = new LinearLayout.LayoutParams(MATCH, dp(280));
-        sv.setLayoutParams(svlp);
-        sv.addView(modelList);
-        root.addView(sv);
-
-        return root;
+        android.widget.ScrollView innerSv = new android.widget.ScrollView(this);
+        innerSv.setVerticalScrollBarEnabled(false);
+        innerSv.setLayoutParams(new LinearLayout.LayoutParams(MATCH, dp(280)));
+        innerSv.addView(modelList);
+        root.addView(innerSv);
+        sv.addView(root);
+        return sv;
     }
 
     private View buildTelegramPage() {
+        ScrollView sv = sv();
         LinearLayout root = pageRoot();
         root.addView(pageIcon("\u2708"));
-        root.addView(bigText("Telegram Bot (Optional)"));
-        root.addView(hint("Control Kira remotely.\nSend commands, get alerts, trigger agents."));
+        root.addView(bigText("Telegram Bot"));
+        root.addView(hint("Control Kira remotely.\nOptional — you can skip this."));
+        root.addView(sectionLabel("Bot Token  ·  get from @BotFather"));
+        EditText tgIn = inputField("123456:ABC-DEF…", false);
+        tgIn.setTag("tgInput");
+        if (!cfg.tgToken.isEmpty())
+            tgIn.setText(cfg.tgToken.substring(0, Math.min(10, cfg.tgToken.length())) + "…");
+        root.addView(tgIn);
+        root.addView(sectionLabel("Your Telegram ID  ·  get from @userinfobot"));
+        EditText tgIdIn = inputField("0 = anyone can use", true);
+        tgIdIn.setTag("tgIdInput");
+        if (cfg.tgAllowed > 0) tgIdIn.setText(String.valueOf(cfg.tgAllowed));
+        root.addView(tgIdIn);
 
-        root.addView(sectionLabel("Bot Token  /  get from @BotFather"));
-        EditText tgInput = inputField("123456:ABC-DEF...", false);
-        tgInput.setTag("tgInput");
-        if (!cfg.tgToken.isEmpty()) tgInput.setText(cfg.tgToken.substring(0, Math.min(10, cfg.tgToken.length())) + "...");
-        root.addView(tgInput);
-
-        root.addView(sectionLabel("Your Telegram ID  /  get from @userinfobot"));
-        EditText tgIdInput = inputField("0 = anyone can use", true);
-        tgIdInput.setTag("tgIdInput");
-        if (cfg.tgAllowed > 0) tgIdInput.setText(String.valueOf(cfg.tgAllowed));
-        root.addView(tgIdInput);
-
-        // Commands cheatsheet
-        TextView cmds = new TextView(this);
-        cmds.setText(
-            "Commands:\n" +
-            "\uD83D\uDCEC /run <cmd>      - execute any task\n" +
-            "\uD83D\uDD17 /chain <goal>   - ReAct autonomous agent\n" +
-            "\uD83E\uDDE0 /agent <goal>   - step-by-step planner\n" +
-            "\uD83D\uDCCA /status         - system health\n" +
-            "\uD83D\uDCF7 /screen         - screenshot"
-        );
-        cmds.setTextColor(0xFF445544);
-        cmds.setTextSize(12);
-        cmds.setLineSpacing(0, 1.5f);
-        cmds.setTypeface(android.graphics.Typeface.MONOSPACE);
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        cp.setMargins(dp(24), dp(20), dp(24), 0);
-        cmds.setLayoutParams(cp);
-        cmds.setBackgroundColor(0xFF0d1a0d);
-        cmds.setPadding(dp(16), dp(16), dp(16), dp(16));
-        root.addView(cmds);
-
-        return root;
+        LinearLayout cmdsCard = new LinearLayout(this);
+        cmdsCard.setOrientation(LinearLayout.VERTICAL);
+        cmdsCard.setBackgroundColor(C_CARD);
+        cmdsCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        LinearLayout.LayoutParams ccp = new LinearLayout.LayoutParams(MATCH, WRAP);
+        ccp.setMargins(dp(24), dp(8), dp(24), 0);
+        cmdsCard.setLayoutParams(ccp);
+        for (String[] cmd : new String[][]{
+                {"/run <task>",    "Execute any task"},
+                {"/chain <goal>",  "ReAct autonomous agent"},
+                {"/agent <goal>",  "Step-by-step planner"},
+                {"/status",        "System health"},
+                {"/screen",        "Screenshot"}}) {
+            LinearLayout row = new LinearLayout(this);
+            row.setPadding(0, dp(4), 0, dp(4));
+            TextView c1 = new TextView(this); c1.setText(cmd[0]);
+            c1.setTextColor(C_ACCENT2); c1.setTextSize(12);
+            c1.setTypeface(android.graphics.Typeface.MONOSPACE);
+            c1.setLayoutParams(new LinearLayout.LayoutParams(dp(150), WRAP));
+            TextView c2 = new TextView(this); c2.setText(cmd[1]);
+            c2.setTextColor(C_MUTED); c2.setTextSize(12);
+            row.addView(c1); row.addView(c2);
+            cmdsCard.addView(row);
+        }
+        root.addView(cmdsCard);
+        sv.addView(root);
+        return sv;
     }
 
     private View buildReadyPage() {
+        ScrollView sv = sv();
         LinearLayout root = pageRoot();
         root.setGravity(Gravity.CENTER);
 
-        // Animated checkmark
         TextView check = new TextView(this);
         check.setText("\u2714");
-        check.setTextSize(64);
-        check.setTextColor(0xFFff8c00);
+        check.setTextSize(72);
+        check.setTextColor(C_ACCENT);
         check.setGravity(Gravity.CENTER);
         check.setTag("readyCheck");
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(100), dp(100));
+        check.setShadowLayer(dp(24), 0, 0, C_ACCENT2);
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(dp(110), dp(110));
         cp.gravity = Gravity.CENTER_HORIZONTAL;
         cp.setMargins(0, 0, 0, dp(24));
         check.setLayoutParams(cp);
+        root.addView(check);
 
         TextView title = bigText("Kira is Ready.");
-        title.setTag("readyTitle");
+        title.setShadowLayer(dp(10), 0, 0, C_ACCENT);
+        root.addView(title);
+        root.addView(hint("Your autonomous AI agent is configured.\nStart chatting or use /agent to begin."));
 
-        TextView sub = hint("Your autonomous AI agent is configured.\nStart chatting or use /agent to begin.");
-
-        // Stats preview
         LinearLayout statsRow = new LinearLayout(this);
         statsRow.setOrientation(LinearLayout.HORIZONTAL);
         statsRow.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams srp = new LinearLayout.LayoutParams(MATCH, WRAP);
         srp.setMargins(dp(24), dp(32), dp(24), 0);
         statsRow.setLayoutParams(srp);
-
-        for (String[] stat : new String[][] {
-            {"176", "Tools"},
-            {"17", "Providers"},
-            {"7070", "Rust Port"},
-        }) {
+        for (String[] stat : new String[][]{{"176","Tools"},{"8+","Providers"},{"∞","Memory"}}) {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
             card.setGravity(Gravity.CENTER);
-            card.setBackgroundColor(0xFF141414);
+            card.setBackgroundColor(C_CARD);
             card.setPadding(dp(20), dp(16), dp(20), dp(16));
             LinearLayout.LayoutParams scp = new LinearLayout.LayoutParams(0, WRAP, 1);
             scp.setMargins(dp(4), 0, dp(4), 0);
             card.setLayoutParams(scp);
-
             TextView num = new TextView(this);
-            num.setText(stat[0]);
-            num.setTextColor(0xFFff8c00);
-            num.setTextSize(22);
-            num.setTypeface(null, android.graphics.Typeface.BOLD);
-            num.setGravity(Gravity.CENTER);
-
-            TextView label = new TextView(this);
-            label.setText(stat[1]);
-            label.setTextColor(0xFF555555);
-            label.setTextSize(11);
-            label.setGravity(Gravity.CENTER);
-
-            card.addView(num);
-            card.addView(label);
+            num.setText(stat[0]); num.setTextColor(C_ACCENT); num.setTextSize(24);
+            num.setTypeface(null, android.graphics.Typeface.BOLD); num.setGravity(Gravity.CENTER);
+            num.setShadowLayer(dp(8), 0, 0, C_ACCENT);
+            TextView lbl = new TextView(this);
+            lbl.setText(stat[1]); lbl.setTextColor(C_MUTED); lbl.setTextSize(11);
+            lbl.setGravity(Gravity.CENTER);
+            card.addView(num); card.addView(lbl);
             statsRow.addView(card);
         }
-
-        root.addView(check);
-        root.addView(title);
-        root.addView(sub);
         root.addView(statsRow);
-        return root;
+        sv.addView(root);
+        return sv;
     }
 
-    // ?? Navigation ????????????????????????????????????????????????????????????
+    // ── Navigation ─────────────────────────────────────────────────────────────
 
     private void advance() {
         collectCurrentPage();
-
-        if (currentPage >= TOTAL_PAGES - 1) {
-            saveAndLaunch();
-            return;
-        }
-
-        View nextView = buildPage(currentPage + 1);
-        nextView.setAlpha(0);
-        nextView.setTranslationX(dp(60));
-        pageContainer.addView(nextView);
-
+        if (currentPage >= TOTAL_PAGES - 1) { saveAndLaunch(); return; }
+        View next = buildPage(currentPage + 1);
+        next.setAlpha(0); next.setTranslationX(dp(60));
+        pageContainer.addView(next);
         AnimatorSet anim = new AnimatorSet();
         anim.setDuration(320);
         anim.setInterpolator(new DecelerateInterpolator(1.5f));
-
         View prev = currentView;
         anim.playTogether(
-            ObjectAnimator.ofFloat(prev,     "alpha",        1f, 0f),
-            ObjectAnimator.ofFloat(prev,     "translationX", 0,  -dp(60)),
-            ObjectAnimator.ofFloat(nextView, "alpha",        0f, 1f),
-            ObjectAnimator.ofFloat(nextView, "translationX", dp(60), 0)
+            ObjectAnimator.ofFloat(prev, "alpha", 1f, 0f),
+            ObjectAnimator.ofFloat(prev, "translationX", 0, -dp(60)),
+            ObjectAnimator.ofFloat(next, "alpha", 0f, 1f),
+            ObjectAnimator.ofFloat(next, "translationX", dp(60), 0)
         );
         anim.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator a) {
-                pageContainer.removeView(prev);
-            }
+            @Override public void onAnimationEnd(Animator a) { pageContainer.removeView(prev); }
         });
         anim.start();
-
-        currentPage++;
-        currentView = nextView;
-        updateDots();
-        updateNextBtn();
-
-        // Bounce animation on next button after transition
+        currentPage++; currentView = next; updateDots(); updateNextBtn();
         handler.postDelayed(() -> {
-            ObjectAnimator bounce = ObjectAnimator.ofFloat(nextBtn, "scaleX", 1f, 1.06f, 1f);
-            bounce.setDuration(300);
-            bounce.setInterpolator(new OvershootInterpolator(3f));
-            ObjectAnimator bounceY = ObjectAnimator.ofFloat(nextBtn, "scaleY", 1f, 1.06f, 1f);
-            bounceY.setDuration(300);
-            bounceY.setInterpolator(new OvershootInterpolator(3f));
-            AnimatorSet bounceSet = new AnimatorSet(); bounceSet.playTogether(bounce, bounceY); bounceSet.start();
+            AnimatorSet b = new AnimatorSet();
+            b.playTogether(
+                ObjectAnimator.ofFloat(nextBtn, "scaleX", 1f, 1.07f, 1f),
+                ObjectAnimator.ofFloat(nextBtn, "scaleY", 1f, 1.07f, 1f));
+            b.setDuration(300); b.setInterpolator(new OvershootInterpolator(3f)); b.start();
         }, 200);
     }
-
-    // ?? Helpers ????????????????????????????????????????????????????????????????
 
     private void collectCurrentPage() {
         switch (currentPage) {
             case 1:
                 EditText ak = pageContainer.findViewWithTag("apiKeyInput");
-                if (ak != null && !ak.getText().toString().startsWith("*")) apiKey = ak.getText().toString().trim();
+                if (ak != null && !ak.getText().toString().startsWith("*"))
+                    apiKey = ak.getText().toString().trim();
+                EditText cu = pageContainer.findViewWithTag("customUrlInput");
+                if (cu != null && cu.getVisibility() == View.VISIBLE && !cu.getText().toString().isEmpty())
+                    baseUrl = cu.getText().toString().trim();
                 break;
             case 2:
                 EditText nm = pageContainer.findViewWithTag("nameInput");
-                if (nm != null && !nm.getText().toString().isEmpty()) name = nm.getText().toString().trim();
+                if (nm != null && !nm.getText().toString().isEmpty())
+                    name = nm.getText().toString().trim();
                 break;
             case 4:
                 EditText tg = pageContainer.findViewWithTag("tgInput");
                 EditText tid = pageContainer.findViewWithTag("tgIdInput");
-                if (tg != null && !tg.getText().toString().contains("...")) tgToken = tg.getText().toString().trim();
+                if (tg != null && !tg.getText().toString().contains("…"))
+                    tgToken = tg.getText().toString().trim();
                 if (tid != null) tgId = tid.getText().toString().trim();
                 break;
         }
+        // v38: push page state to Rust after collecting local fields
+        try {
+            long tgIdLong = 0;
+            try { tgIdLong = tgId.isEmpty() ? 0 : Long.parseLong(tgId); } catch (Exception ignored) {}
+            RustBridge.updateSetupPage(
+                currentPage, apiKey, baseUrl, model, name, tgToken, tgIdLong
+            );
+        } catch (UnsatisfiedLinkError ignored) {}
     }
 
     private void saveAndLaunch() {
-        if (!apiKey.isEmpty())   cfg.apiKey    = apiKey;
-        if (!baseUrl.isEmpty())  cfg.baseUrl   = baseUrl;
-        if (!model.isEmpty())    cfg.model     = model;
-        if (!name.isEmpty())     cfg.userName  = name;
-        if (!tgToken.isEmpty())  cfg.tgToken   = tgToken;
+        if (!apiKey.isEmpty())  cfg.apiKey   = apiKey;
+        if (!baseUrl.isEmpty()) cfg.baseUrl  = baseUrl;
+        if (!model.isEmpty())   cfg.model    = model;
+        if (!name.isEmpty())    cfg.userName = name;
+        if (!tgToken.isEmpty()) cfg.tgToken  = tgToken;
         if (!tgId.isEmpty()) {
             try { cfg.tgAllowed = Long.parseLong(tgId); } catch (Exception ignored) {}
         }
         cfg.setupDone = true;
         cfg.save(this);
-
-        // Final scale + fade animation on checkmark
+        // v38: mark setup done in Rust state
+        try { RustBridge.completeSetup(); } catch (UnsatisfiedLinkError ignored) {}
         View check = currentView.findViewWithTag("readyCheck");
         if (check != null) {
             AnimatorSet pop = new AnimatorSet();
             pop.playTogether(
                 ObjectAnimator.ofFloat(check, "scaleX", 0.5f, 1.3f, 1f),
                 ObjectAnimator.ofFloat(check, "scaleY", 0.5f, 1.3f, 1f),
-                ObjectAnimator.ofFloat(check, "alpha",  0f,   1f)
-            );
-            pop.setDuration(500);
-            pop.setInterpolator(new OvershootInterpolator(2f));
-            pop.start();
+                ObjectAnimator.ofFloat(check, "alpha",  0f, 1f));
+            pop.setDuration(500); pop.setInterpolator(new OvershootInterpolator(2f)); pop.start();
         }
-
         handler.postDelayed(() -> {
             startActivity(new Intent(this, MainActivity.class));
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
@@ -569,8 +760,7 @@ public class SetupActivity extends Activity {
             pageContainer.addView(v);
             currentView = v;
         }
-        updateDots();
-        updateNextBtn();
+        updateDots(); updateNextBtn();
     }
 
     private void buildDots() {
@@ -580,7 +770,7 @@ public class SetupActivity extends Activity {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(8), dp(8));
             lp.setMargins(dp(4), 0, dp(4), 0);
             dot.setLayoutParams(lp);
-            dot.setBackgroundColor(i == 0 ? 0xFFff8c00 : 0xFF333333);
+            dot.setBackgroundColor(i == 0 ? C_ACCENT : C_HINT);
             dots[i] = dot;
             dotsRow.addView(dot);
         }
@@ -588,9 +778,9 @@ public class SetupActivity extends Activity {
 
     private void updateDots() {
         for (int i = 0; i < dots.length; i++) {
-            dots[i].setBackgroundColor(i == currentPage ? 0xFFff8c00 : 0xFF333333);
+            dots[i].setBackgroundColor(i == currentPage ? C_ACCENT : C_HINT);
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
-            lp.width  = dp(i == currentPage ? 20 : 8);
+            lp.width = dp(i == currentPage ? 22 : 8);
             lp.height = dp(8);
             dots[i].setLayoutParams(lp);
         }
@@ -604,38 +794,46 @@ public class SetupActivity extends Activity {
             nextBtn.setText("Get Started");
             skipBtn.setVisibility(View.VISIBLE);
         } else {
-            nextBtn.setText("Next");
+            nextBtn.setText("Next  \u2192");
             skipBtn.setVisibility(View.VISIBLE);
         }
     }
 
     private void cycleQuote() {
-        if (currentPage != 0) return;
+        if (currentPage != 0) { handler.postDelayed(this::cycleQuote, 4000); return; }
         quoteIndex = (quoteIndex + 1) % QUOTES.length;
-        TextView qText = (currentView != null) ? (TextView) currentView.findViewWithTag("quoteText") : null;
-        if (qText != null) {
-            ObjectAnimator fadeOut = ObjectAnimator.ofFloat(qText, "alpha", 1f, 0f);
-            fadeOut.setDuration(400);
-            fadeOut.addListener(new AnimatorListenerAdapter() {
+        TextView qt = (currentView != null) ? currentView.findViewWithTag("quoteText") : null;
+        if (qt != null) {
+            ObjectAnimator out = ObjectAnimator.ofFloat(qt, "alpha", 1f, 0f);
+            out.setDuration(350);
+            out.addListener(new AnimatorListenerAdapter() {
                 @Override public void onAnimationEnd(Animator a) {
-                    qText.setText(QUOTES[quoteIndex]);
-                    ObjectAnimator.ofFloat(qText, "alpha", 0f, 1f).setDuration(400).start();
+                    qt.setText(QUOTES[quoteIndex]);
+                    ObjectAnimator.ofFloat(qt, "alpha", 0f, 1f).setDuration(350).start();
                 }
             });
-            fadeOut.start();
+            out.start();
         }
         handler.postDelayed(this::cycleQuote, 4000);
     }
 
-    // ?? View helpers ??????????????????????????????????????????????????????????
+    // ── View helpers ──────────────────────────────────────────────────────────
 
     private static final int MATCH = LinearLayout.LayoutParams.MATCH_PARENT;
     private static final int WRAP  = LinearLayout.LayoutParams.WRAP_CONTENT;
 
+    private ScrollView sv() {
+        ScrollView sv = new ScrollView(this);
+        sv.setLayoutParams(new FrameLayout.LayoutParams(MATCH, MATCH));
+        sv.setVerticalScrollBarEnabled(false);
+        sv.setFillViewport(true);
+        return sv;
+    }
+
     private LinearLayout pageRoot() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setLayoutParams(new FrameLayout.LayoutParams(MATCH, MATCH));
+        root.setLayoutParams(new ScrollView.LayoutParams(MATCH, WRAP));
         root.setPadding(0, dp(80), 0, dp(160));
         root.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         return root;
@@ -643,64 +841,48 @@ public class SetupActivity extends Activity {
 
     private TextView pageIcon(String emoji) {
         TextView tv = new TextView(this);
-        tv.setText(emoji);
-        tv.setTextSize(48);
-        tv.setGravity(Gravity.CENTER);
+        tv.setText(emoji); tv.setTextSize(50); tv.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        lp.setMargins(0, 0, 0, dp(16));
-        tv.setLayoutParams(lp);
+        lp.setMargins(0, 0, 0, dp(16)); tv.setLayoutParams(lp);
         return tv;
     }
 
     private TextView bigText(String text) {
         TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextColor(0xFFffffff);
-        tv.setTextSize(28);
-        tv.setTypeface(null, android.graphics.Typeface.BOLD);
-        tv.setGravity(Gravity.CENTER);
+        tv.setText(text); tv.setTextColor(C_TEXT); tv.setTextSize(30);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD); tv.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        lp.setMargins(dp(24), 0, dp(24), dp(8));
-        tv.setLayoutParams(lp);
+        lp.setMargins(dp(24), 0, dp(24), dp(8)); tv.setLayoutParams(lp);
         return tv;
     }
 
     private TextView hint(String text) {
         TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextColor(0xFF666666);
-        tv.setTextSize(14);
-        tv.setGravity(Gravity.CENTER);
-        tv.setLineSpacing(0, 1.4f);
+        tv.setText(text); tv.setTextColor(C_MUTED); tv.setTextSize(14);
+        tv.setGravity(Gravity.CENTER); tv.setLineSpacing(0, 1.4f);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        lp.setMargins(dp(32), 0, dp(32), dp(28));
-        tv.setLayoutParams(lp);
+        lp.setMargins(dp(32), 0, dp(32), dp(28)); tv.setLayoutParams(lp);
         return tv;
     }
 
     private TextView sectionLabel(String text) {
         TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextColor(0xFF555555);
-        tv.setTextSize(11);
+        tv.setText(text); tv.setTextColor(C_MUTED); tv.setTextSize(11);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        lp.setMargins(dp(24), 0, dp(24), dp(6));
-        tv.setLayoutParams(lp);
+        lp.setMargins(dp(24), 0, dp(24), dp(6)); tv.setLayoutParams(lp);
         return tv;
     }
 
-    private EditText inputField(String hint, boolean numeric) {
+    private EditText inputField(String hintText, boolean numeric) {
         EditText et = new EditText(this);
-        et.setHint(hint);
-        et.setHintTextColor(0xFF444444);
-        et.setTextColor(0xFFffffff);
-        et.setTextSize(15);
-        et.setBackgroundColor(0xFF141414);
-        et.setPadding(dp(20), dp(16), dp(20), dp(16));
+        et.setHint(hintText); et.setHintTextColor(C_HINT);
+        et.setTextColor(C_TEXT); et.setTextSize(15);
+        et.setBackgroundColor(C_CARD);
+        et.setPadding(dp(18), dp(16), dp(18), dp(16));
         et.setInputType(numeric ? InputType.TYPE_CLASS_NUMBER : InputType.TYPE_CLASS_TEXT);
+        et.setShadowLayer(dp(4), 0, dp(2), C_ACCENT);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        lp.setMargins(dp(24), 0, dp(24), dp(16));
-        et.setLayoutParams(lp);
+        lp.setMargins(dp(24), 0, dp(24), dp(14)); et.setLayoutParams(lp);
         return et;
     }
 

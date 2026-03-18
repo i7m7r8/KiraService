@@ -38,7 +38,7 @@ public class KiraTelegram {
     public void start() {
         KiraConfig cfg = KiraConfig.load(ctx);
         if (cfg.tgToken == null || cfg.tgToken.trim().isEmpty()) {
-            Log.w(TAG, "No Telegram token configured — bot not starting");
+            Log.w(TAG, "No Telegram token configured -- bot not starting");
             return;
         }
 
@@ -67,7 +67,7 @@ public class KiraTelegram {
 
     public boolean isRunning() { return running && pollThread != null && pollThread.isAlive(); }
 
-    // ── Poll loop ─────────────────────────────────────────────────────────────
+    // -- Poll loop -------------------------------------------------------------
 
     private void pollLoop() {
         Log.i(TAG, "Poll loop started");
@@ -78,7 +78,7 @@ public class KiraTelegram {
                 KiraConfig cfg = KiraConfig.load(ctx);
 
                 if (cfg.tgToken == null || cfg.tgToken.trim().isEmpty()) {
-                    Log.w(TAG, "Token cleared — stopping bot");
+                    Log.w(TAG, "Token cleared -- stopping bot");
                     break;
                 }
 
@@ -123,7 +123,7 @@ public class KiraTelegram {
         Log.i(TAG, "Poll loop ended");
     }
 
-    // ── Handle update ─────────────────────────────────────────────────────────
+    // -- Handle update ---------------------------------------------------------
 
     private void handleUpdate(JSONObject update, KiraConfig cfg) {
         try {
@@ -140,7 +140,7 @@ public class KiraTelegram {
             String text = message.optString("text", "").trim();
             String name = message.getJSONObject("from").optString("first_name", "user");
 
-            // Auth — allow if tgAllowed is 0 (any) or matches userId
+            // Auth -- allow if tgAllowed is 0 (any) or matches userId
             if (cfg.tgAllowed != 0 && userId != cfg.tgAllowed) {
                 sendMessage(cfg.tgToken, chatId, "not authorized. your id: " + userId);
                 return;
@@ -151,29 +151,29 @@ public class KiraTelegram {
             // Built-in commands
             if (text.equals("/start")) {
                 sendMessage(cfg.tgToken, chatId,
-                    "🦀 *Kira Agent* connected\n\nHey " + name.toLowerCase() + ". I'm running on your phone. What do you need?",
+                    "? *Kira Agent* connected\n\nHey " + name.toLowerCase() + ". I'm running on your phone. What do you need?",
                     true);
                 return;
             }
 
             if (text.equals("/status")) {
-                String status = "📱 *Status*\n"
-                    + "• Accessibility: " + (com.kira.service.KiraAccessibilityService.instance != null ? "✅" : "❌") + "\n"
-                    + "• Shizuku: " + (com.kira.service.ShizukuShell.isAvailable() ? "✅" : "❌") + "\n"
-                    + "• Bot: ✅ running";
+                String status = "? *Status*\n"
+                    + "? Accessibility: " + (com.kira.service.KiraAccessibilityService.instance != null ? "?" : "?") + "\n"
+                    + "? Shizuku: " + (com.kira.service.ShizukuShell.isAvailable() ? "?" : "?") + "\n"
+                    + "? Bot: ? running";
                 sendMessage(cfg.tgToken, chatId, status, true);
                 return;
             }
 
             if (text.equals("/screen")) {
                 String screen = ai.quickTool("read_screen", new JSONObject());
-                sendMessage(cfg.tgToken, chatId, "📱 Screen:\n```\n" + truncate(screen, 3000) + "\n```", true);
+                sendMessage(cfg.tgToken, chatId, "? Screen:\n```\n" + truncate(screen, 3000) + "\n```", true);
                 return;
             }
 
             if (text.equals("/notifs")) {
                 String notifs = ai.quickTool("get_notifications", new JSONObject());
-                sendMessage(cfg.tgToken, chatId, "🔔 Notifications:\n" + truncate(notifs, 3000), true);
+                sendMessage(cfg.tgToken, chatId, "? Notifications:\n" + truncate(notifs, 3000), true);
                 return;
             }
 
@@ -199,7 +199,7 @@ public class KiraTelegram {
                 }
 
                 @Override public void onTool(String name, String result) {
-                    toolLog.append("⚡ ").append(name).append("\n");
+                    toolLog.append("? ").append(name).append("\n");
                 }
 
                 @Override public void onReply(String reply) {
@@ -211,7 +211,7 @@ public class KiraTelegram {
                 }
 
                 @Override public void onError(String error) {
-                    sendMessage(fToken, fChatId, "❌ " + error, false);
+                    sendMessage(fToken, fChatId, "? " + error, false);
                 }
             });
 
@@ -224,7 +224,7 @@ public class KiraTelegram {
         // Future: inline keyboard callbacks
     }
 
-    // ── API calls ─────────────────────────────────────────────────────────────
+    // -- API calls -------------------------------------------------------------
 
     private JSONObject getUpdates(String token, long offset) {
         try {
@@ -312,6 +312,6 @@ public class KiraTelegram {
 
     private String truncate(String s, int max) {
         if (s == null) return "(null)";
-        return s.length() > max ? s.substring(0, max) + "…" : s;
+        return s.length() > max ? s.substring(0, max) + "?" : s;
     }
 }

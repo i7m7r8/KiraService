@@ -10,7 +10,7 @@ import android.content.Intent;
 import android.os.IBinder;
 
 /**
- * Persistent foreground service — keeps Kira alive forever.
+ * Persistent foreground service -- keeps Kira alive forever.
  * Without this, Android kills the process after open_app or any background work.
  */
 public class KiraForegroundService extends Service {
@@ -48,7 +48,7 @@ public class KiraForegroundService extends Service {
 
         return new Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Kira is running")
-            .setContentText("AI agent active — tap to open")
+            .setContentText("AI agent active -- tap to open")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pi)
             .setOngoing(true)

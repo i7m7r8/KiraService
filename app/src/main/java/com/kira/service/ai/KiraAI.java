@@ -40,7 +40,7 @@ public class KiraAI {
         restoreHistory(); // load previous conversations on startup
     }
 
-    // ── Restore history from persistent storage ───────────────────────────────
+    // -- Restore history from persistent storage -------------------------------
 
     private void restoreHistory() {
         try {
@@ -57,7 +57,7 @@ public class KiraAI {
         }
     }
 
-    // ── Main chat ─────────────────────────────────────────────────────────────
+    // -- Main chat -------------------------------------------------------------
 
     public void chat(String userMessage, Callback cb) {
         new Thread(() -> {
@@ -68,7 +68,7 @@ public class KiraAI {
 
                 String system = buildSystemPrompt();
                 String raw    = callLLM(system, history);
-                if (raw == null) { cb.onError("API call failed — check your API key in settings"); return; }
+                if (raw == null) { cb.onError("API call failed -- check your API key in settings"); return; }
 
                 history.add(msg("assistant", raw));
 
@@ -116,11 +116,11 @@ public class KiraAI {
         }).start();
     }
 
-    // ── LLM call ──────────────────────────────────────────────────────────────
+    // -- LLM call --------------------------------------------------------------
 
     private String callLLM(String system, List<JSONObject> msgs) {
         KiraConfig cfg = KiraConfig.load(ctx);
-        if (cfg.apiKey.isEmpty()) return "no API key — go to settings and add one.";
+        if (cfg.apiKey.isEmpty()) return "no API key -- go to settings and add one.";
 
         for (int attempt = 0; attempt < 3; attempt++) {
             try {
@@ -192,7 +192,7 @@ public class KiraAI {
         return null;
     }
 
-    // ── Tool parsing ──────────────────────────────────────────────────────────
+    // -- Tool parsing ----------------------------------------------------------
 
     private List<ToolCall> parseTools(String text) {
         List<ToolCall> calls = new ArrayList<>();
@@ -221,17 +221,17 @@ public class KiraAI {
         return text.replaceAll("<tool:[\\s\\S]*?</tool>", "").trim();
     }
 
-    // ── System prompt ─────────────────────────────────────────────────────────
+    // -- System prompt ---------------------------------------------------------
 
     private String buildSystemPrompt() {
         KiraConfig cfg = KiraConfig.load(ctx);
         String memCtx  = memory.getContext();
         String toolList = tools.getToolList();
 
-        return "You are Kira — " + cfg.userName + "'s AI agent running natively on Android. Female.\n"
+        return "You are Kira -- " + cfg.userName + "'s AI agent running natively on Android. Female.\n"
             + "Not a chatbot. An agent with real tools. You control this phone.\n"
             + "Talk like a person. Short, direct, lowercase, no fluff. No emojis unless asked.\n"
-            + "Never say 'I cannot' — say what's missing instead.\n\n"
+            + "Never say 'I cannot' -- say what's missing instead.\n\n"
             + "## PERSON\nName: " + cfg.userName + "\n\n"
             + "## MEMORY\n" + (memCtx.isEmpty() ? "nothing yet" : memCtx) + "\n\n"
             + "## TOOLS\n" + toolList + "\n\n"
@@ -256,7 +256,7 @@ public class KiraAI {
             + "- remember important facts the user tells you\n";
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // -- Helpers ---------------------------------------------------------------
 
     private boolean isAnthropic(KiraConfig cfg) {
         return cfg.baseUrl.contains("anthropic.com");
@@ -280,7 +280,7 @@ public class KiraAI {
     }
 
 
-    // Quick tool call without AI — for direct Telegram commands
+    // Quick tool call without AI -- for direct Telegram commands
     public String quickTool(String toolName, org.json.JSONObject args) {
         try {
             return tools.execute(toolName, args);

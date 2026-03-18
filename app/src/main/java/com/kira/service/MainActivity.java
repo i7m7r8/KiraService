@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
     private HorizontalScrollView suggestionsScroll;
     private LinearLayout suggestionsRow;
 
-    // Conversation — each turn is stored here for Claude-style resending
+    // Conversation -- each turn is stored here for Claude-style resending
     private final List<ConvTurn> conversation = new ArrayList<>();
 
     // History
@@ -74,7 +74,7 @@ public class MainActivity extends Activity {
     private TextView[]     navIcons, navTexts;
     private LinearLayout[] navItems;
 
-    // ── Turn model ────────────────────────────────────────────────────────────
+    // -- Turn model ------------------------------------------------------------
 
     static class ConvTurn {
         String role;   // "user" | "kira" | "tool" | "error"
@@ -106,7 +106,7 @@ public class MainActivity extends Activity {
         KiraForegroundService.start(this);
     }
 
-    // ── Permissions ───────────────────────────────────────────────────────────
+    // -- Permissions -----------------------------------------------------------
 
     private void requestAllPermissions() {
         String[] perms = {
@@ -140,7 +140,7 @@ public class MainActivity extends Activity {
                 Shizuku.addRequestPermissionResultListener((code, result) -> {
                     if (result == PackageManager.PERMISSION_GRANTED) {
                         uiHandler.post(() -> {
-                            Toast.makeText(this, "✅ Shizuku — god mode active!", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(this, "? Shizuku -- god mode active!", Toast.LENGTH_SHORT).show();
                             updateShizukuStatus();
                         });
                     }
@@ -153,7 +153,7 @@ public class MainActivity extends Activity {
     private void showShizukuDialog() {
         new AlertDialog.Builder(this)
             .setTitle("Enable Full Phone Control")
-            .setMessage("Kira uses Shizuku for ADB-level control (install apps, run shell commands, grant permissions).\n\n1. Install Shizuku from Play Store\n2. Open Shizuku → Start via Wireless Debugging\n3. Return to Kira\n\nBasic screen control still works without Shizuku.")
+            .setMessage("Kira uses Shizuku for ADB-level control (install apps, run shell commands, grant permissions).\n\n1. Install Shizuku from Play Store\n2. Open Shizuku ? Start via Wireless Debugging\n3. Return to Kira\n\nBasic screen control still works without Shizuku.")
             .setPositiveButton("Get Shizuku", (d, w) -> {
                 try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api"))); }
                 catch (Exception e) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app"))); }
@@ -166,13 +166,13 @@ public class MainActivity extends Activity {
         if (KiraAccessibilityService.instance == null) {
             new AlertDialog.Builder(this)
                 .setTitle("Enable Accessibility Service")
-                .setMessage("Kira needs Accessibility Service to read and control your screen.\n\nSettings → Accessibility → Kira → Enable")
+                .setMessage("Kira needs Accessibility Service to read and control your screen.\n\nSettings ? Accessibility ? Kira ? Enable")
                 .setPositiveButton("Open Settings", (d, w) -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
                 .setNegativeButton("Later", null).show();
         }
     }
 
-    // ── View init ─────────────────────────────────────────────────────────────
+    // -- View init -------------------------------------------------------------
 
     private void initViews() {
         FrameLayout frame = findViewById(R.id.contentFrame);
@@ -265,7 +265,7 @@ public class MainActivity extends Activity {
         if (clearHistoryBtn != null) clearHistoryBtn.setOnClickListener(v -> clearHistory());
     }
 
-    // ── Tab nav ───────────────────────────────────────────────────────────────
+    // -- Tab nav ---------------------------------------------------------------
 
     private void showTab(int tab) {
         currentTab = tab;
@@ -283,7 +283,7 @@ public class MainActivity extends Activity {
         if (tab == 3) updateSettingsUI();
     }
 
-    // ── Chat — Claude-style ───────────────────────────────────────────────────
+    // -- Chat -- Claude-style ---------------------------------------------------
 
     private void sendMessage() {
         String text = inputField.getText().toString().trim();
@@ -308,10 +308,10 @@ public class MainActivity extends Activity {
 
         ai.chat(text, new KiraAI.Callback() {
             @Override public void onThinking() {
-                uiHandler.post(() -> { if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "···"); addThinkingBubble(kiraTurn[0]); } });
+                uiHandler.post(() -> { if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); } });
             }
             @Override public void onTool(String name, String result) {
-                ConvTurn toolTurn = new ConvTurn("tool", "⚡ " + name + ": " + result.substring(0, Math.min(100, result.length())));
+                ConvTurn toolTurn = new ConvTurn("tool", "? " + name + ": " + result.substring(0, Math.min(100, result.length())));
                 conversation.add(toolTurn);
                 uiHandler.post(() -> addToolBubble(toolTurn));
             }
@@ -343,7 +343,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    // ── Bubble builders ───────────────────────────────────────────────────────
+    // -- Bubble builders -------------------------------------------------------
 
     private void addUserBubble(ConvTurn turn) {
         LinearLayout wrap = new LinearLayout(this);
@@ -363,9 +363,9 @@ public class MainActivity extends Activity {
         label.setTextColor(0xFF777777);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
-        // Edit button — lets user edit and resend (like Claude's edit feature)
+        // Edit button -- lets user edit and resend (like Claude's edit feature)
         TextView editBtn = new TextView(this);
-        editBtn.setText("✏ edit");
+        editBtn.setText("? edit");
         editBtn.setTextColor(0xFF555555);
         editBtn.setTextSize(10);
         editBtn.setOnClickListener(v -> {
@@ -416,7 +416,7 @@ public class MainActivity extends Activity {
         label.setPadding(0, 0, 0, dp(3));
 
         TextView msg = new TextView(this);
-        msg.setText("···");
+        msg.setText("???");
         msg.setTextColor(0xFF555555);
         msg.setTextSize(14);
         msg.setTag("thinking_msg");
@@ -434,7 +434,7 @@ public class MainActivity extends Activity {
             addKiraBubble(turn);
             return;
         }
-        // Replace the "···" with real content
+        // Replace the "???" with real content
         chatContainer.removeView(thinkingView);
         thinkingView = null;
         conversation.add(turn);
@@ -469,7 +469,7 @@ public class MainActivity extends Activity {
         TextView copyBtn = makeActionBtn("copy");
         copyBtn.setOnClickListener(v -> copyText(turn.text));
 
-        TextView resendBtn = makeActionBtn("↑ resend");
+        TextView resendBtn = makeActionBtn("? resend");
         resendBtn.setOnClickListener(v -> { inputField.setText(turn.text); inputField.setSelection(turn.text.length()); });
 
         header.addView(label);
@@ -501,8 +501,8 @@ public class MainActivity extends Activity {
 
     /**
      * Renders text + code blocks like Claude:
-     * - Plain text → regular text view
-     * - ```code``` → dark terminal box with language label + Copy button
+     * - Plain text ? regular text view
+     * - ```code``` ? dark terminal box with language label + Copy button
      */
     private void renderMixedContent(LinearLayout parent, String text) {
         String[] parts = text.split("```");
@@ -564,7 +564,7 @@ public class MainActivity extends Activity {
                 codeHeader.addView(langLabel);
                 codeHeader.addView(codeCopyBtn);
 
-                // Code body — monospace, horizontally scrollable
+                // Code body -- monospace, horizontally scrollable
                 HorizontalScrollView hScroll = new HorizontalScrollView(this);
                 hScroll.setHorizontalScrollBarEnabled(true);
                 hScroll.setLayoutParams(new LinearLayout.LayoutParams(MATCH, WRAP));
@@ -648,13 +648,13 @@ public class MainActivity extends Activity {
         Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
     }
 
-    // ── Suggestions ───────────────────────────────────────────────────────────
+    // -- Suggestions -----------------------------------------------------------
 
     private void buildSuggestions() {
         String[][] s = {
-            {"📱","Open YouTube"}, {"🔔","Check notifications"}, {"🔋","Battery status"},
-            {"📸","Take screenshot"}, {"🌐","Search web for news"}, {"📋","Read my screen"},
-            {"💬","Show recent SMS"}, {"⚡","Running apps"},
+            {"?","Open YouTube"}, {"?","Check notifications"}, {"?","Battery status"},
+            {"?","Take screenshot"}, {"?","Search web for news"}, {"?","Read my screen"},
+            {"?","Show recent SMS"}, {"?","Running apps"},
         };
         for (String[] item : s) {
             TextView chip = new TextView(this);
@@ -671,31 +671,31 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ── Tools list ────────────────────────────────────────────────────────────
+    // -- Tools list ------------------------------------------------------------
 
     private void buildToolsList() {
         LinearLayout list = toolsFragment.findViewById(R.id.toolsList);
         Object[][] tools = {
-            {"📱","open_app {package}","Open any app — use names like 'youtube', 'whatsapp'"},
-            {"👁","read_screen {}","Read all text on current screen"},
-            {"👆","tap_screen {x,y}","Tap coordinates"},
-            {"🔍","tap_text {text}","Find and tap element by text"},
-            {"⌨","type_text {text}","Type into focused field"},
-            {"🔔","get_notifications {}","All recent notifications"},
-            {"💬","send_sms {number,message}","Send SMS"},
-            {"🔍","web_search {query}","Search DuckDuckGo"},
-            {"⚡","sh_run {cmd}","Run any shell command"},
-            {"📸","sh_screenshot {}","Take screenshot"},
-            {"🧠","remember {key,value}","Store a fact permanently"},
-            {"📞","call_number {number}","Make phone call"},
-            {"🌐","http_get {url}","HTTP GET request"},
-            {"📂","list_files {path}","List directory"},
-            {"📖","read_file {path}","Read file content"},
-            {"🔧","get_setting {namespace,key}","Read system setting"},
-            {"⚙","set_setting {namespace,key,value}","Write system setting"},
-            {"📶","wifi_on {on}","Toggle WiFi"},
-            {"📡","mobile_data {on}","Toggle mobile data"},
-            {"🔋","battery_info {}","Battery status"},
+            {"?","open_app {package}","Open any app -- use names like 'youtube', 'whatsapp'"},
+            {"?","read_screen {}","Read all text on current screen"},
+            {"?","tap_screen {x,y}","Tap coordinates"},
+            {"?","tap_text {text}","Find and tap element by text"},
+            {"?","type_text {text}","Type into focused field"},
+            {"?","get_notifications {}","All recent notifications"},
+            {"?","send_sms {number,message}","Send SMS"},
+            {"?","web_search {query}","Search DuckDuckGo"},
+            {"?","sh_run {cmd}","Run any shell command"},
+            {"?","sh_screenshot {}","Take screenshot"},
+            {"?","remember {key,value}","Store a fact permanently"},
+            {"?","call_number {number}","Make phone call"},
+            {"?","http_get {url}","HTTP GET request"},
+            {"?","list_files {path}","List directory"},
+            {"?","read_file {path}","Read file content"},
+            {"?","get_setting {namespace,key}","Read system setting"},
+            {"?","set_setting {namespace,key,value}","Write system setting"},
+            {"?","wifi_on {on}","Toggle WiFi"},
+            {"?","mobile_data {on}","Toggle mobile data"},
+            {"?","battery_info {}","Battery status"},
         };
         for (Object[] t : tools) {
             LinearLayout row = new LinearLayout(this);
@@ -731,7 +731,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ── History — Claude-style ────────────────────────────────────────────────
+    // -- History -- Claude-style ------------------------------------------------
 
     private void refreshHistory() {
         historyList.removeAllViews();
@@ -777,8 +777,8 @@ public class MainActivity extends Activity {
                 TextView copyKira = makeActionBtn("copy reply");
                 copyKira.setOnClickListener(v -> copyText(kira));
 
-                // Resend — puts user message in input and sends
-                TextView resendBtn = makeActionBtn("↑ resend");
+                // Resend -- puts user message in input and sends
+                TextView resendBtn = makeActionBtn("? resend");
                 resendBtn.setTextColor(0xFFff8c00);
                 resendBtn.setOnClickListener(v -> {
                     showTab(0);
@@ -786,7 +786,7 @@ public class MainActivity extends Activity {
                     sendMessage();
                 });
 
-                // Continue — put in input field only (user can edit before sending)
+                // Continue -- put in input field only (user can edit before sending)
                 TextView continueBtn = makeActionBtn("continue");
                 continueBtn.setOnClickListener(v -> {
                     showTab(0);
@@ -801,13 +801,13 @@ public class MainActivity extends Activity {
 
                 // User message
                 TextView userTv = new TextView(this);
-                userTv.setText(user.length() > 120 ? user.substring(0, 120) + "…" : user);
+                userTv.setText(user.length() > 120 ? user.substring(0, 120) + "?" : user);
                 userTv.setTextColor(0xFFdddddd);
                 userTv.setTextSize(13);
 
                 // Kira reply preview
                 TextView kiraTv = new TextView(this);
-                kiraTv.setText(kira.length() > 150 ? kira.substring(0, 150) + "…" : kira);
+                kiraTv.setText(kira.length() > 150 ? kira.substring(0, 150) + "?" : kira);
                 kiraTv.setTextColor(0xFF888888);
                 kiraTv.setTextSize(12);
                 kiraTv.setPadding(0, dp(4), 0, 0);
@@ -828,22 +828,22 @@ public class MainActivity extends Activity {
     private void showFullDialog(String user, String kira, String time) {
         new AlertDialog.Builder(this)
             .setTitle(time)
-            .setMessage("YOU:\n" + user + "\n\n─────────────\n\nKIRA:\n" + kira)
-            .setPositiveButton("↑ Resend", (d, w) -> { showTab(0); inputField.setText(user); sendMessage(); })
+            .setMessage("YOU:\n" + user + "\n\n-------------\n\nKIRA:\n" + kira)
+            .setPositiveButton("? Resend", (d, w) -> { showTab(0); inputField.setText(user); sendMessage(); })
             .setNeutralButton("Copy Reply", (d, w) -> copyText(kira))
             .setNegativeButton("Close", null)
             .show();
     }
 
-    // ── Settings ──────────────────────────────────────────────────────────────
+    // -- Settings --------------------------------------------------------------
 
     private void updateSettingsUI() {
         cfg = KiraConfig.load(this);
         if (apiKeyHint == null) return;
-        apiKeyHint.setText(cfg.apiKey.isEmpty() ? "Tap to set" : "••••" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
+        apiKeyHint.setText(cfg.apiKey.isEmpty() ? "Tap to set" : "????" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
         modelHint.setText(cfg.model.isEmpty() ? "Not set" : cfg.model);
         baseUrlHint.setText(cfg.baseUrl.isEmpty() ? "Not set" : cfg.baseUrl);
-        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "Not set" : "✅ Configured");
+        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "Not set" : "? Configured");
         tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
         updateShizukuStatus();
     }
@@ -854,7 +854,7 @@ public class MainActivity extends Activity {
             String all = mem.listAll();
             int count = all.isEmpty() || all.equals("(empty)") ? 0 : all.split("\n").length;
             JSONArray hist = mem.loadHistory();
-            if (memoryHint != null) memoryHint.setText(count + " facts · " + hist.length() + " conversations");
+            if (memoryHint != null) memoryHint.setText(count + " facts ? " + hist.length() + " conversations");
             if (historySettingHint != null) historySettingHint.setText(hist.length() + " conversations stored");
         } catch (Exception e) {
             if (memoryHint != null) memoryHint.setText("tap to view");
@@ -899,11 +899,11 @@ public class MainActivity extends Activity {
         if (shizukuStatusTitle == null) return;
         boolean ok = ShizukuShell.isAvailable();
         boolean installed = ShizukuShell.isInstalled();
-        String title = ok ? "Shizuku ✅ God Mode Active" : (installed ? "Shizuku ⚠ Permission Needed (tap)" : "Shizuku ❌ Not Running (tap)");
+        String title = ok ? "Shizuku ? God Mode Active" : (installed ? "Shizuku ? Permission Needed (tap)" : "Shizuku ? Not Running (tap)");
         int color = ok ? 0xFF00cc66 : (installed ? 0xFFffaa00 : 0xFFcc4444);
         shizukuStatusTitle.setText(title);
         shizukuStatusTitle.setTextColor(color);
-        shizukuStatusIcon.setText(ok ? "✓" : (installed ? "!" : "✗"));
+        shizukuStatusIcon.setText(ok ? "?" : (installed ? "!" : "?"));
         shizukuStatusIcon.setTextColor(color);
         shizukuStatus.setBackgroundColor(ok ? 0xFF0a1a0a : (installed ? 0xFF1a1200 : 0xFF1a0a0a));
     }
@@ -912,7 +912,7 @@ public class MainActivity extends Activity {
         if (!Settings.canDrawOverlays(this)) {
             new AlertDialog.Builder(this)
                 .setTitle("Overlay Permission Needed")
-                .setMessage("For the floating window, Kira needs 'Display over other apps'.\n\nSettings → Apps → Kira → Display over other apps → Enable")
+                .setMessage("For the floating window, Kira needs 'Display over other apps'.\n\nSettings ? Apps ? Kira ? Display over other apps ? Enable")
                 .setPositiveButton("Open Settings", (d, w) ->
                     startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))))
                 .setNegativeButton("Cancel", null).show();
@@ -934,7 +934,7 @@ public class MainActivity extends Activity {
         if (KiraAccessibilityService.instance != null) {
             KiraAccessibilityService.instance.restartTelegram();
         }
-        Toast.makeText(this, "Telegram config updated — restarting bot", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Telegram config updated -- restarting bot", Toast.LENGTH_SHORT).show();
     }
 
     interface StringCallback { void onResult(String v); }
@@ -955,7 +955,7 @@ public class MainActivity extends Activity {
         b.show();
     }
 
-    // ── First setup ───────────────────────────────────────────────────────────
+    // -- First setup -----------------------------------------------------------
 
     private void showFirstSetup() {
         setContentView(R.layout.activity_setup);
@@ -984,7 +984,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // -- Helpers ---------------------------------------------------------------
 
     private TextView makeLabel(String text) {
         TextView tv = new TextView(this);

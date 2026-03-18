@@ -20,11 +20,11 @@ import android.widget.Toast;
 import com.kira.service.ai.KiraAI;
 
 /**
- * Floating window controller — like Rou Bao.
+ * Floating window controller -- like Rou Bao.
  *
  * Two views:
- *  1. Bubble — small draggable "K" pill, always on top
- *  2. Panel  — expanded input panel, also draggable, hides bubble while open
+ *  1. Bubble -- small draggable "K" pill, always on top
+ *  2. Panel  -- expanded input panel, also draggable, hides bubble while open
  */
 public class FloatingWindowService extends Service {
 
@@ -58,7 +58,7 @@ public class FloatingWindowService extends Service {
         buildPanel();
     }
 
-    // ── Bubble ────────────────────────────────────────────────────────────────
+    // -- Bubble ----------------------------------------------------------------
 
     private void buildBubble() {
         TextView bubble = new TextView(this);
@@ -86,7 +86,7 @@ public class FloatingWindowService extends Service {
         bubbleView = bubble;
     }
 
-    // ── Panel ─────────────────────────────────────────────────────────────────
+    // -- Panel -----------------------------------------------------------------
 
     private void buildPanel() {
         LinearLayout panel = new LinearLayout(this);
@@ -119,7 +119,7 @@ public class FloatingWindowService extends Service {
         title.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView closeBtn = new TextView(this);
-        closeBtn.setText("✕");
+        closeBtn.setText("?");
         closeBtn.setTextColor(0xFF888888);
         closeBtn.setTextSize(18);
         closeBtn.setPadding(dp(8), 0, 0, 0);
@@ -163,7 +163,7 @@ public class FloatingWindowService extends Service {
         inputField.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView sendBtn = new TextView(this);
-        sendBtn.setText("▶");
+        sendBtn.setText("?");
         sendBtn.setTextColor(0xFF000000);
         sendBtn.setBackgroundColor(0xFFff8c00);
         sendBtn.setTextSize(14);
@@ -181,7 +181,7 @@ public class FloatingWindowService extends Service {
             ai.chat(text, new KiraAI.Callback() {
                 @Override public void onThinking() {}
                 @Override public void onTool(String name, String result) {
-                    uiHandler.post(() -> replyView.setText("⚡ " + name + "…"));
+                    uiHandler.post(() -> replyView.setText("? " + name + "?"));
                 }
                 @Override public void onReply(String reply) {
                     uiHandler.post(() -> {
@@ -191,7 +191,7 @@ public class FloatingWindowService extends Service {
                 }
                 @Override public void onError(String error) {
                     uiHandler.post(() -> {
-                        replyView.setText("❌ " + error);
+                        replyView.setText("? " + error);
                         replyView.setTextColor(0xFFff6666);
                     });
                 }
@@ -206,11 +206,11 @@ public class FloatingWindowService extends Service {
         chips.setOrientation(LinearLayout.HORIZONTAL);
 
         String[][] quickCmds = {
-            {"📱", "Read screen"},
-            {"🔔", "Notifications"},
-            {"🔋", "Battery"},
-            {"📸", "Screenshot"},
-            {"⚡", "Running apps"},
+            {"?", "Read screen"},
+            {"?", "Notifications"},
+            {"?", "Battery"},
+            {"?", "Screenshot"},
+            {"?", "Running apps"},
         };
 
         for (String[] cmd : quickCmds) {
@@ -255,7 +255,7 @@ public class FloatingWindowService extends Service {
         panelView = panel;
     }
 
-    // ── Drag logic ────────────────────────────────────────────────────────────
+    // -- Drag logic ------------------------------------------------------------
 
     private void makeDraggable(View view, WindowManager.LayoutParams lp, boolean isBubble) {
         final int[] ix = {0}, iy = {0};
@@ -295,7 +295,7 @@ public class FloatingWindowService extends Service {
         });
     }
 
-    // ── Show / Hide ───────────────────────────────────────────────────────────
+    // -- Show / Hide -----------------------------------------------------------
 
     private void expandPanel() {
         if (expanded) return;

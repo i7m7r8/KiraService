@@ -50,11 +50,11 @@ public class KiraAccessibilityService extends AccessibilityService {
             telegram.start();
         }
 
-        // Start command polling (Rust → Java)
+        // Start command polling (Rust ? Java)
         pollCommands();
     }
 
-    // ── Rust command polling ──────────────────────────────────────────────────
+    // -- Rust command polling --------------------------------------------------
 
     private void pollCommands() {
         handler.postDelayed(() -> {
@@ -107,7 +107,7 @@ public class KiraAccessibilityService extends AccessibilityService {
         }
     }
 
-    // ── Public methods for KiraTools ──────────────────────────────────────────
+    // -- Public methods for KiraTools ------------------------------------------
 
     public String getScreenText() {
         try {
@@ -270,7 +270,7 @@ public class KiraAccessibilityService extends AccessibilityService {
         } catch (Exception e) { return "{\"error\":\"" + e.getMessage() + "\"}"; }
     }
 
-    // ── Events ────────────────────────────────────────────────────────────────
+    // -- Events ----------------------------------------------------------------
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {

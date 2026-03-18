@@ -9,7 +9,7 @@ import androidx.work.WorkerParameters;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Proactive mode — Kira checks in, watches battery, reminds on schedule.
+ * Proactive mode -- Kira checks in, watches battery, reminds on schedule.
  * Inspired by nanobot autonomous agent patterns.
  */
 public class KiraProactive {

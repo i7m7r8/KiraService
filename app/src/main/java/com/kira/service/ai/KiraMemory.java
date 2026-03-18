@@ -19,7 +19,7 @@ public class KiraMemory {
         this.ctx = ctx.getApplicationContext();
     }
 
-    // ── Key-value memory ──────────────────────────────────────────────────────
+    // -- Key-value memory ------------------------------------------------------
 
     public void remember(String key, String value) {
         prefs().edit().putString(key.trim(), value).apply();
@@ -48,7 +48,7 @@ public class KiraMemory {
         prefs().edit().clear().apply();
     }
 
-    // ── Conversation history ──────────────────────────────────────────────────
+    // -- Conversation history --------------------------------------------------
 
     public void storeConversation(String user, String kira) {
         try {
@@ -79,7 +79,7 @@ public class KiraMemory {
         convPrefs().edit().remove("history").apply();
     }
 
-    // ── Context for AI system prompt ─────────────────────────────────────────
+    // -- Context for AI system prompt -----------------------------------------
 
     public String getContext() {
         try {
@@ -105,7 +105,7 @@ public class KiraMemory {
         } catch (Exception e) { return ""; }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // -- Helpers ---------------------------------------------------------------
 
     private SharedPreferences prefs() {
         return ctx.getSharedPreferences(PREFS_MEM, Context.MODE_PRIVATE);

@@ -160,7 +160,7 @@ public class ShizukuShell {
         result = exec("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + packageName + " 2>&1");
         if (result.contains("Starting")) return "opened " + packageName + " (am)";
 
-        return "could not open " + packageName + " — not installed or no launcher activity";
+        return "could not open " + packageName + " -- not installed or no launcher activity";
     }
 
     /**

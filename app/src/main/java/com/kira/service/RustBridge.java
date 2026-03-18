@@ -256,4 +256,22 @@ public class RustBridge {
     /** Resolve %VAR% tokens and math expressions in a string */
     public static native String resolveParam(String param);
 
+
+    // ── Roboru / E-Robot / Automate visual automation engine ─────────────────
+
+    /** Add or replace a visual flowchart flow. Returns {ok, id} */
+    public static native String addFlow(String json);
+    /** Run a flow by ID. Returns {ok, steps} */
+    public static native String runFlow(String id);
+
+    /** Add a keyword (Robot Framework pattern). Returns {ok, name} */
+    public static native String addKeyword(String json);
+    /** Run a keyword. argsJson: {"arg0":"val0","arg1":"val1"} */
+    public static native String runKeyword(String name, String argsJson);
+
+    /** Add a hyper-automation pipeline. Returns {ok, id} */
+    public static native String addPipeline(String json);
+    /** Run a pipeline by ID. Returns {ok, steps, errors:[]} */
+    public static native String runPipeline(String id);
+
 }

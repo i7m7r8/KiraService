@@ -1415,12 +1415,8 @@ public class MainActivity extends Activity
                 final String finalTag = tagName;
                 uiHandler.post(() -> showKiraDialogMulti(
                     "Update Available",
-                    "Version " + finalTag + " is available on GitHub.
-
-Current: " + currentVersion + "
-
-Download and install the new APK?",
-                    new String[]{"DOWNLOAD & INSTALL", "LATER", "SKIP"},
+                    "New version available\n\n" + finalTag + "\n\nCurrent: " + currentVersion + "\n\nTap INSTALL to download.",
+                    new String[]{"INSTALL", "LATER", "SKIP"},
                     new Runnable[]{
                         () -> downloadAndInstallApk(finalApkUrl, finalTag),
                         null,
@@ -1805,15 +1801,10 @@ Download and install the new APK?",
     }
 
     private void showFullDialog(String user, String kira, String time) {
-        showKiraDialogMulti(time,
-            "YOU:
-" + user + "
-
-──────
-
-KIRA:
-" + kira,
-            new String[]{"↩ RESEND", "COPY", "CLOSE"},
+        String preview = "YOU:\n" + user.substring(0, Math.min(user.length(), 200))
+            + "\n\n------\n\nKIRA:\n" + kira.substring(0, Math.min(kira.length(), 300));
+        showKiraDialogMulti(time, preview,
+            new String[]{"RESEND", "COPY", "CLOSE"},
             new Runnable[]{
                 () -> { showTab(0); inputField.setText(user); sendMessage(); },
                 () -> copyText(kira),

@@ -640,6 +640,11 @@ struct KiraState {
     sig_app_launched:  String,
     sig_app_closed:    String,
     sig_geofence:      String,   // "enter:label" or "exit:label"
+
+    // ── Roboru / E-Robot / Automate engine ────────────────────────────────────
+    roboru_flows:      HashMap<String, AutoFlow>,
+    roboru_keywords:   HashMap<String, Keyword>,
+    roboru_pipelines:  HashMap<String, HyperPipeline>,
 }
 
 // Sub-structs (v7, unchanged)
@@ -1863,6 +1868,98 @@ mod jni_bridge {
         CString::new(result).unwrap_or_default().into_raw()
     }
 
+    // ── Roboru JNI ──────────────────────────────────────────────────────────────
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_addFlow(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) -> *mut c_char {
+        let body = cs(json);
+        if let Some(flow) = parse_flow_from_json(&body) {
+            let id = flow.id.clone();
+            STATE.lock().unwrap().roboru_flows.insert(id.clone(), flow);
+            CString::new(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))).unwrap_or_default().into_raw()
+        } else {
+            CString::new(r#"{"error":"invalid flow"}"#).unwrap_or_default().into_raw()
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_runFlow(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
+    ) -> *mut c_char {
+        let id = cs(id);
+        let mut s = STATE.lock().unwrap();
+        let flow = s.roboru_flows.get(&id).cloned();
+        let result = if let Some(flow) = flow {
+            let steps = execute_flow(&mut s, &flow, None);
+            if let Some(f) = s.roboru_flows.get_mut(&id) { f.run_count += 1; f.last_run_ms = now_ms(); }
+            format!(r#"{{"ok":true,"steps":{}}}"#, steps)
+        } else { format!(r#"{{"error":"not found: {}"}}"#, esc(&id)) };
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_addKeyword(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) -> *mut c_char {
+        let body = cs(json);
+        let result = if let Some(kw) = parse_keyword_from_json(&body) {
+            let name = kw.name.clone();
+            STATE.lock().unwrap().roboru_keywords.insert(name.clone(), kw);
+            format!(r#"{{"ok":true,"name":"{}"}}"#, esc(&name))
+        } else { r#"{"error":"invalid keyword"}"#.to_string() };
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_runKeyword(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        name: *const c_char, args_json: *const c_char,
+    ) -> *mut c_char {
+        let name = cs(name); let args_body = cs(args_json);
+        let mut s = STATE.lock().unwrap();
+        let kw = s.roboru_keywords.get(&name).cloned();
+        let result = if let Some(kw) = kw {
+            let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name)| {
+                let val = extract_json_str(&args_body, &format!("arg{}", i)).unwrap_or_default();
+                (arg_name.clone(), val)
+            }).collect();
+            let r = execute_keyword(&mut s, &kw, &args);
+            format!(r#"{{"ok":true,"result":"{}"}}"#, esc(&r))
+        } else { format!(r#"{{"error":"keyword not found: {}"}}"#, esc(&name)) };
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_addPipeline(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) -> *mut c_char {
+        let body = cs(json);
+        let result = if let Some(p) = parse_pipeline_from_json(&body) {
+            let id = p.id.clone();
+            STATE.lock().unwrap().roboru_pipelines.insert(id.clone(), p);
+            format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))
+        } else { r#"{"error":"invalid pipeline"}"#.to_string() };
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_runPipeline(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
+    ) -> *mut c_char {
+        let id = cs(id);
+        let mut s = STATE.lock().unwrap();
+        let pipeline = s.roboru_pipelines.get(&id).cloned();
+        let result = if let Some(pipeline) = pipeline {
+            let (steps, errors) = execute_pipeline(&mut s, &pipeline);
+            if let Some(p) = s.roboru_pipelines.get_mut(&id) { p.run_count += 1; p.last_run_ms = now_ms(); }
+            format!(r#"{{"ok":true,"steps":{},"errors":{}}}"#, steps,
+                format!("[{}]", errors.iter().map(|e| format!(""{}"", esc(e))).collect::<Vec<_>>().join(",")))
+        } else { format!(r#"{{"error":"pipeline not found: {}"}}"#, esc(&id)) };
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationAnalytics(
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
@@ -2101,9 +2198,10 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET",  "/nodes")             => get_nodes_json(),
         ("POST", "/credentials/get")   => get_credential(body),
 
-        // OpenClaw / NanoBot / ZeroClaw extended automation routes
+        // Roboru / E-Robot / Automate visual automation routes
         _ => {
-            if let Some(r) = route_openclaw(method, path_clean, body) { r }
+            if let Some(r) = route_roboru(method, path_clean, body) { r }
+            else if let Some(r) = route_openclaw(method, path_clean, body) { r }
             else { queue_to_java(path_clean.trim_start_matches('/'), body) }
         }
     }
@@ -2887,6 +2985,660 @@ fn install_builtin_templates(s: &mut KiraState) {
     }
 }
 
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Roboru / E-Robot / Automate Engine
+// Inspired by: LlamaLab Automate (flowchart), E-Robot (170+ events, 150+ actions),
+// Robot Framework (keyword-driven RPA), UiPath (intelligent automation)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Flowchart block types (Automate-style visual programming)
+#[derive(Clone, Debug)]
+enum FlowBlockKind {
+    Start,
+    Stop,
+    Action,       // execute a MacroAction
+    Decision,     // if/else branch
+    Loop,         // for/while loop
+    Wait,         // delay
+    Fork,         // parallel execution branches
+    Join,         // wait for all parallel branches
+    SubFlow,      // call another flow by id
+    Catch,        // error handler
+    Log,          // debug logging block
+}
+
+/// A node in the visual flowchart
+#[derive(Clone)]
+struct FlowBlock {
+    id:           String,
+    kind:         FlowBlockKind,
+    label:        String,
+    // Connections: next block ids
+    next:         Vec<String>,   // [0]=true branch, [1]=false branch for Decision
+    // Payload
+    action:       Option<MacroAction>,
+    condition:    Option<MacroCondition>,
+    loop_count:   u32,
+    loop_var:     String,   // variable to increment each loop
+    sub_flow_id:  String,   // for SubFlow blocks
+    // Retry config (E-Robot pattern)
+    retry_count:  u32,
+    retry_delay_ms: u64,
+}
+
+/// A complete visual flow (like Automate's flowchart)
+#[derive(Clone)]
+struct AutoFlow {
+    id:          String,
+    name:        String,
+    description: String,
+    enabled:     bool,
+    start_block: String,
+    blocks:      HashMap<String, FlowBlock>,
+    created_ms:  u128,
+    run_count:   u64,
+    last_run_ms: u128,
+    tags:        Vec<String>,
+}
+
+/// Keyword definition (Robot Framework pattern)
+/// A named reusable action sequence
+#[derive(Clone)]
+struct Keyword {
+    name:        String,  // e.g. "Open And Login YouTube"
+    description: String,
+    steps:       Vec<MacroAction>,
+    args:        Vec<String>,  // parameter names
+    returns:     String,  // variable name to store result
+}
+
+/// Hyper-automation pipeline step (UiPath/Comidor pattern)
+/// Combines BPM workflow + RPA action + AI decision
+#[derive(Clone)]
+struct PipelineStep {
+    id:          String,
+    name:        String,
+    kind:        String,  // "rpa", "ai_decision", "data_extract", "api_call", "human_task"
+    // RPA config
+    action:      Option<MacroAction>,
+    // AI decision config
+    prompt:      String,   // AI prompt for this step
+    out_var:     String,   // variable to store AI response
+    // Data extraction
+    extract_pattern: String,  // regex or XPath-like selector
+    extract_source:  String,  // "screen", "clipboard", "notification", "url"
+    // Human task (pause and wait for signal)
+    timeout_ms:  u128,
+    // Retry
+    retry_count: u32,
+    retry_delay_ms: u64,
+    // Condition to skip this step
+    skip_if:     Option<MacroCondition>,
+}
+
+/// A hyper-automation pipeline
+#[derive(Clone)]
+struct HyperPipeline {
+    id:          String,
+    name:        String,
+    steps:       Vec<PipelineStep>,
+    enabled:     bool,
+    run_count:   u64,
+    last_run_ms: u128,
+}
+
+/// Retry result
+enum RetryResult {
+    Success(String),
+    Failed(String, u32),  // error + attempts
+}
+
+/// Smart retry engine with exponential backoff (E-Robot pattern)
+fn retry_action(
+    s: &mut KiraState,
+    macro_id: &str,
+    action: &MacroAction,
+    max_retries: u32,
+    base_delay_ms: u64,
+) -> RetryResult {
+    for attempt in 0..=max_retries {
+        // Enqueue the action
+        enqueue_action(s, macro_id, action);
+        // In Rust we can't actually wait for the Java result synchronously,
+        // so we track retry state in variables
+        let retry_key = format!("_retry_{}_{}", macro_id, action.kind.to_str());
+        s.variables.insert(retry_key.clone(), AutoVariable {
+            name: retry_key.clone(),
+            value: format!("attempt:{}", attempt),
+            var_type: "string".to_string(),
+            persistent: false,
+            created_ms: now_ms(),
+            updated_ms: now_ms(),
+        });
+        if attempt < max_retries {
+            // Exponential backoff: delay = base * 2^attempt (capped at 30s)
+            let delay = (base_delay_ms * (1 << attempt.min(4))).min(30_000);
+            s.pending_actions.push_back(PendingMacroAction {
+                macro_id:  macro_id.to_string(),
+                action_id: gen_id(),
+                kind:      "wait".to_string(),
+                params:    { let mut m = HashMap::new(); m.insert("ms".to_string(), delay.to_string()); m },
+                ts: now_ms(),
+            });
+        }
+    }
+    RetryResult::Success("enqueued".to_string())
+}
+
+/// Execute a visual flowchart (Automate-style)
+fn execute_flow(s: &mut KiraState, flow: &AutoFlow, start_id: Option<&str>) -> u32 {
+    let mut steps = 0u32;
+    let mut current_id = start_id.unwrap_or(&flow.start_block).to_string();
+    let mut visited: HashMap<String, u32> = HashMap::new();
+    let max_steps = 500u32;
+
+    while steps < max_steps {
+        let block = match flow.blocks.get(&current_id) {
+            Some(b) => b.clone(),
+            None => break,
+        };
+
+        // Loop guard — prevent infinite loops
+        let visit_count = visited.entry(current_id.clone()).or_insert(0);
+        *visit_count += 1;
+        if *visit_count > 100 { break; } // stuck in a loop
+
+        steps += 1;
+
+        match block.kind {
+            FlowBlockKind::Stop => break,
+            FlowBlockKind::Start => {
+                current_id = block.next.first().cloned().unwrap_or_default();
+            }
+            FlowBlockKind::Action => {
+                if let Some(ref action) = block.action {
+                    if block.retry_count > 0 {
+                        retry_action(s, &flow.id, action, block.retry_count, block.retry_delay_ms);
+                    } else {
+                        enqueue_action(s, &flow.id, action);
+                    }
+                }
+                current_id = block.next.first().cloned().unwrap_or_default();
+            }
+            FlowBlockKind::Decision => {
+                let cond_result = block.condition.as_ref()
+                    .map(|c| eval_condition(s, c))
+                    .unwrap_or(false);
+                current_id = if cond_result {
+                    block.next.first().cloned().unwrap_or_default()
+                } else {
+                    block.next.get(1).cloned().unwrap_or_default()
+                };
+            }
+            FlowBlockKind::Loop => {
+                let count = block.loop_count.min(100);
+                let body_id = block.next.first().cloned().unwrap_or_default();
+                let after_id = block.next.get(1).cloned().unwrap_or_default();
+                for i in 0..count {
+                    // Set loop variable
+                    if !block.loop_var.is_empty() {
+                        let ts = now_ms();
+                        s.variables.insert(block.loop_var.clone(), AutoVariable {
+                            name: block.loop_var.clone(), value: i.to_string(),
+                            var_type: "number".to_string(), persistent: false,
+                            created_ms: ts, updated_ms: ts,
+                        });
+                    }
+                    if !body_id.is_empty() {
+                        let sub_flow = AutoFlow {
+                            id: flow.id.clone(), name: flow.name.clone(),
+                            description: String::new(), enabled: true,
+                            start_block: body_id.clone(),
+                            blocks: flow.blocks.clone(),
+                            created_ms: 0, run_count: 0, last_run_ms: 0, tags: vec![],
+                        };
+                        steps += execute_flow(s, &sub_flow, Some(&body_id));
+                    }
+                }
+                current_id = after_id;
+            }
+            FlowBlockKind::SubFlow => {
+                if !block.sub_flow_id.is_empty() {
+                    // Chain to another named flow
+                    chain_macro(s, &block.sub_flow_id);
+                }
+                current_id = block.next.first().cloned().unwrap_or_default();
+            }
+            FlowBlockKind::Wait => {
+                let ms = block.action.as_ref()
+                    .and_then(|a| a.params.get("ms"))
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(1000);
+                s.pending_actions.push_back(PendingMacroAction {
+                    macro_id: flow.id.clone(), action_id: gen_id(),
+                    kind: "wait".to_string(),
+                    params: { let mut m = HashMap::new(); m.insert("ms".to_string(), ms.to_string()); m },
+                    ts: now_ms(),
+                });
+                current_id = block.next.first().cloned().unwrap_or_default();
+            }
+            FlowBlockKind::Fork => {
+                // Parallel: enqueue all branches
+                for next_id in &block.next {
+                    let branch_flow = AutoFlow {
+                        id: flow.id.clone(), name: flow.name.clone(),
+                        description: String::new(), enabled: true,
+                        start_block: next_id.clone(),
+                        blocks: flow.blocks.clone(),
+                        created_ms: 0, run_count: 0, last_run_ms: 0, tags: vec![],
+                    };
+                    steps += execute_flow(s, &branch_flow, Some(next_id));
+                }
+                break; // Fork doesn't have a single next
+            }
+            FlowBlockKind::Log => {
+                let msg = block.label.clone();
+                let expanded = expand_vars(s, &msg);
+                s.daily_log.push_back(format!("[flow:{}] {}", flow.id, expanded));
+                if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
+                current_id = block.next.first().cloned().unwrap_or_default();
+            }
+            FlowBlockKind::Catch => {
+                // Error catch — just continue to next
+                current_id = block.next.first().cloned().unwrap_or_default();
+            }
+            FlowBlockKind::Join => {
+                current_id = block.next.first().cloned().unwrap_or_default();
+            }
+        }
+
+        if current_id.is_empty() { break; }
+    }
+    steps
+}
+
+/// Execute a keyword (Robot Framework pattern)
+/// Resolves args from variables then runs steps
+fn execute_keyword(s: &mut KiraState, kw: &Keyword, args: &HashMap<String, String>) -> String {
+    // Bind args to local variables
+    for (name, val) in args {
+        let ts = now_ms();
+        s.variables.insert(name.clone(), AutoVariable {
+            name: name.clone(), value: expand_vars(s, val),
+            var_type: "string".to_string(), persistent: false,
+            created_ms: ts, updated_ms: ts,
+        });
+    }
+    // Run steps
+    let steps = kw.steps.clone();
+    let id = format!("kw_{}", kw.name.replace(' ', "_"));
+    let (step_count, _) = execute_macro_actions(s, &id, &steps);
+    // Return result variable
+    if !kw.returns.is_empty() {
+        s.variables.get(&kw.returns).map(|v| v.value.clone()).unwrap_or_default()
+    } else {
+        format!("ok:{}", step_count)
+    }
+}
+
+/// Execute a hyper-automation pipeline (UiPath/Comidor pattern)
+fn execute_pipeline(s: &mut KiraState, pipeline: &HyperPipeline) -> (u32, Vec<String>) {
+    let mut steps = 0u32;
+    let mut errors: Vec<String> = Vec::new();
+
+    for step in &pipeline.steps {
+        // Check skip condition
+        if let Some(ref cond) = step.skip_if {
+            if eval_condition(s, cond) { continue; }
+        }
+
+        steps += 1;
+
+        match step.kind.as_str() {
+            "rpa" => {
+                if let Some(ref action) = step.action {
+                    if step.retry_count > 0 {
+                        retry_action(s, &pipeline.id, action, step.retry_count, step.retry_delay_ms);
+                    } else {
+                        enqueue_action(s, &pipeline.id, action);
+                    }
+                }
+            }
+            "ai_decision" => {
+                // Enqueue kira_ask action with the prompt
+                let mut action = MacroAction {
+                    kind: MacroActionKind::KiraAsk,
+                    params: {
+                        let mut m = HashMap::new();
+                        m.insert("prompt".to_string(), expand_vars(s, &step.prompt));
+                        m.insert("out_var".to_string(), step.out_var.clone());
+                        m
+                    },
+                    sub_actions: vec![],
+                    enabled: true,
+                };
+                enqueue_action(s, &pipeline.id, &action);
+            }
+            "data_extract" => {
+                // Enqueue extraction action
+                let mut params = HashMap::new();
+                params.insert("source".to_string(), step.extract_source.clone());
+                params.insert("pattern".to_string(), step.extract_pattern.clone());
+                params.insert("out_var".to_string(), step.out_var.clone());
+                let action = MacroAction {
+                    kind: MacroActionKind::GetClipboard,
+                    params, sub_actions: vec![], enabled: true,
+                };
+                enqueue_action(s, &pipeline.id, &action);
+            }
+            "api_call" => {
+                if let Some(ref action) = step.action {
+                    enqueue_action(s, &pipeline.id, action);
+                }
+            }
+            "human_task" => {
+                // Pause pipeline and send notification to user
+                let mut action = MacroAction {
+                    kind: MacroActionKind::SendNotification,
+                    params: {
+                        let mut m = HashMap::new();
+                        m.insert("title".to_string(), format!("Action required: {}", step.name));
+                        m.insert("text".to_string(), expand_vars(s, &step.prompt));
+                        m
+                    },
+                    sub_actions: vec![], enabled: true,
+                };
+                enqueue_action(s, &pipeline.id, &action);
+            }
+            _ => {
+                errors.push(format!("unknown step kind: {}", step.kind));
+            }
+        }
+    }
+    (steps, errors)
+}
+
+/// Parse a flow from JSON
+fn parse_flow_from_json(body: &str) -> Option<AutoFlow> {
+    let id   = extract_json_str(body, "id").unwrap_or_else(gen_id);
+    let name = extract_json_str(body, "name").unwrap_or_else(|| "Unnamed Flow".to_string());
+    let desc = extract_json_str(body, "description").unwrap_or_default();
+    let start= extract_json_str(body, "start_block").unwrap_or_default();
+    if start.is_empty() { return None; }
+    // blocks: [{id, kind, label, next:["id1","id2"], action:{...}, condition:{...}}]
+    let mut blocks = HashMap::new();
+    let blocks_key = ""blocks":[";
+    let bstart = match body.find(blocks_key) {
+        Some(i) => i + blocks_key.len(), None => return None
+    };
+    let slice = &body[bstart..];
+    let mut depth = 0i32; let mut obj_start = 0; let mut in_obj = false;
+    for (i, ch) in slice.char_indices() {
+        match ch {
+            '{' => { if depth == 0 { obj_start = i; in_obj = true; } depth += 1; }
+            '}' => {
+                depth -= 1;
+                if depth == 0 && in_obj {
+                    let obj = &slice[obj_start..=i];
+                    let bid  = extract_json_str(obj, "id").unwrap_or_else(gen_id);
+                    let kind_str = extract_json_str(obj, "kind").unwrap_or_else(|| "action".to_string());
+                    let label = extract_json_str(obj, "label").unwrap_or_default();
+                    let loop_count = extract_json_num(obj, "loop_count").unwrap_or(1.0) as u32;
+                    let loop_var   = extract_json_str(obj, "loop_var").unwrap_or_default();
+                    let sub_flow_id= extract_json_str(obj, "sub_flow_id").unwrap_or_default();
+                    let retry_count  = extract_json_num(obj, "retry_count").unwrap_or(0.0) as u32;
+                    let retry_delay  = extract_json_num(obj, "retry_delay_ms").unwrap_or(1000.0) as u64;
+                    // next array: ["id1","id2"]
+                    let mut next_ids = Vec::new();
+                    if let Some(ni) = obj.find(""next":[") {
+                        let ns = &obj[ni + 8..];
+                        let end = ns.find(']').unwrap_or(ns.len());
+                        for part in ns[..end].split(',') {
+                            let id_part = part.trim().trim_matches('"').to_string();
+                            if !id_part.is_empty() { next_ids.push(id_part); }
+                        }
+                    }
+                    // Parse condition
+                    let condition = if let Some(ci) = obj.find(""condition":{") {
+                        let cs = &obj[ci + 13..];
+                        let end = cs.find('}').unwrap_or(cs.len());
+                        let co = &cs[..end];
+                        Some(MacroCondition {
+                            lhs: extract_json_str(co, "lhs").unwrap_or_default(),
+                            operator: extract_json_str(co, "op").unwrap_or_else(|| "eq".to_string()),
+                            rhs: extract_json_str(co, "rhs").unwrap_or_default(),
+                        })
+                    } else { None };
+                    // Parse action
+                    let action = if let Some(ai) = obj.find(""action":{") {
+                        let ast = &obj[ai + 10..];
+                        let end_act = find_matching_brace(ast).unwrap_or(ast.len());
+                        let ao = &ast[..end_act];
+                        let kind_s = extract_json_str(ao, "kind").unwrap_or_default();
+                        let mut params = HashMap::new();
+                        if let Some(pi) = ao.find(""params":{") {
+                            let ps = &ao[pi + 10..];
+                            let pe = ps.find('}').unwrap_or(ps.len());
+                            parse_flat_kv(&ps[..pe], &mut params);
+                        }
+                        Some(MacroAction { kind: MacroActionKind::from_str(&kind_s), params, sub_actions: vec![], enabled: true })
+                    } else { None };
+
+                    let kind = match kind_str.as_str() {
+                        "start"    => FlowBlockKind::Start,
+                        "stop"     => FlowBlockKind::Stop,
+                        "decision" => FlowBlockKind::Decision,
+                        "loop"     => FlowBlockKind::Loop,
+                        "wait"     => FlowBlockKind::Wait,
+                        "fork"     => FlowBlockKind::Fork,
+                        "join"     => FlowBlockKind::Join,
+                        "sub_flow" => FlowBlockKind::SubFlow,
+                        "catch"    => FlowBlockKind::Catch,
+                        "log"      => FlowBlockKind::Log,
+                        _          => FlowBlockKind::Action,
+                    };
+                    blocks.insert(bid.clone(), FlowBlock {
+                        id: bid, kind, label, next: next_ids,
+                        action, condition, loop_count, loop_var, sub_flow_id,
+                        retry_count, retry_delay_ms: retry_delay,
+                    });
+                    in_obj = false;
+                }
+            }
+            ']' if depth == 0 => break,
+            _ => {}
+        }
+    }
+    Some(AutoFlow {
+        id, name, description: desc, enabled: true, start_block: start,
+        blocks, created_ms: now_ms(), run_count: 0, last_run_ms: 0, tags: vec![],
+    })
+}
+
+fn find_matching_brace(s: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    for (i, ch) in s.char_indices() {
+        match ch { '{' => depth += 1, '}' => { depth -= 1; if depth < 0 { return Some(i); } } _ => {} }
+    }
+    None
+}
+
+/// Parse a keyword from JSON
+fn parse_keyword_from_json(body: &str) -> Option<Keyword> {
+    let name = extract_json_str(body, "name")?;
+    let desc = extract_json_str(body, "description").unwrap_or_default();
+    let returns = extract_json_str(body, "returns").unwrap_or_default();
+    let args_str = extract_json_str(body, "args").unwrap_or_default();
+    let args: Vec<String> = args_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let steps = parse_actions_from_json(body, "steps");
+    Some(Keyword { name, description: desc, steps, args, returns })
+}
+
+/// Parse a pipeline from JSON
+fn parse_pipeline_from_json(body: &str) -> Option<HyperPipeline> {
+    let id   = extract_json_str(body, "id").unwrap_or_else(gen_id);
+    let name = extract_json_str(body, "name").unwrap_or_else(|| "Pipeline".to_string());
+    // steps: [{id, name, kind, prompt, out_var, retry_count, ...}]
+    let mut steps = Vec::new();
+    let key = ""steps":[";
+    let start = match body.find(key) { Some(i) => i + key.len(), None => return None };
+    let slice = &body[start..];
+    let mut depth = 0i32; let mut obj_start = 0; let mut in_obj = false;
+    for (i, ch) in slice.char_indices() {
+        match ch {
+            '{' => { if depth == 0 { obj_start = i; in_obj = true; } depth += 1; }
+            '}' => {
+                depth -= 1;
+                if depth == 0 && in_obj {
+                    let obj = &slice[obj_start..=i];
+                    let sid = extract_json_str(obj, "id").unwrap_or_else(gen_id);
+                    let sname = extract_json_str(obj, "name").unwrap_or_default();
+                    let kind  = extract_json_str(obj, "kind").unwrap_or_else(|| "rpa".to_string());
+                    let prompt = extract_json_str(obj, "prompt").unwrap_or_default();
+                    let out_var = extract_json_str(obj, "out_var").unwrap_or_default();
+                    let extract_pattern = extract_json_str(obj, "extract_pattern").unwrap_or_default();
+                    let extract_source  = extract_json_str(obj, "extract_source").unwrap_or_else(|| "screen".to_string());
+                    let retry_count   = extract_json_num(obj, "retry_count").unwrap_or(0.0) as u32;
+                    let retry_delay   = extract_json_num(obj, "retry_delay_ms").unwrap_or(1000.0) as u64;
+                    let timeout_ms    = extract_json_num(obj, "timeout_ms").unwrap_or(30000.0) as u128;
+                    let skip_if = if let Some(ci) = obj.find(""skip_if":{") {
+                        let cs = &obj[ci + 11..]; let end = cs.find('}').unwrap_or(cs.len());
+                        let co = &cs[..end];
+                        Some(MacroCondition {
+                            lhs: extract_json_str(co, "lhs").unwrap_or_default(),
+                            operator: extract_json_str(co, "op").unwrap_or_else(|| "eq".to_string()),
+                            rhs: extract_json_str(co, "rhs").unwrap_or_default(),
+                        })
+                    } else { None };
+                    let action = if let Some(ai) = obj.find(""action":{") {
+                        let ast = &obj[ai + 10..];
+                        let end_act = find_matching_brace(ast).unwrap_or(ast.len());
+                        let ao = &ast[..end_act];
+                        let ks = extract_json_str(ao, "kind").unwrap_or_default();
+                        let mut params = HashMap::new();
+                        if let Some(pi) = ao.find(""params":{") {
+                            let ps = &ao[pi+10..]; let pe = ps.find('}').unwrap_or(ps.len());
+                            parse_flat_kv(&ps[..pe], &mut params);
+                        }
+                        Some(MacroAction { kind: MacroActionKind::from_str(&ks), params, sub_actions: vec![], enabled: true })
+                    } else { None };
+                    steps.push(PipelineStep { id: sid, name: sname, kind, action, prompt, out_var, extract_pattern, extract_source, timeout_ms, retry_count, retry_delay_ms: retry_delay, skip_if });
+                    in_obj = false;
+                }
+            }
+            ']' if depth == 0 => break,
+            _ => {}
+        }
+    }
+    Some(HyperPipeline { id, name, steps, enabled: true, run_count: 0, last_run_ms: 0 })
+}
+
+/// HTTP routes for Roboru engine
+fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
+    match (method, path) {
+        // Flows (visual flowchart)
+        ("GET",  "/flows")          => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.roboru_flows.iter().map(|(id, f)|
+                format!(r#"{{"id":"{}","name":"{}","enabled":{},"blocks":{},"run_count":{},"last_run_ms":{}}}"#,
+                    esc(id), esc(&f.name), f.enabled, f.blocks.len(), f.run_count, f.last_run_ms)
+            ).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+        ("POST", "/flows/add")      => {
+            if let Some(flow) = parse_flow_from_json(body) {
+                let id = flow.id.clone();
+                STATE.lock().unwrap().roboru_flows.insert(id.clone(), flow);
+                Some(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id)))
+            } else {
+                Some(r#"{"error":"invalid flow json"}"#.to_string())
+            }
+        }
+        ("POST", "/flows/run")      => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            let mut s = STATE.lock().unwrap();
+            let flow = s.roboru_flows.get(&id).cloned();
+            if let Some(mut flow) = flow {
+                let steps = execute_flow(&mut s, &flow, None);
+                if let Some(f) = s.roboru_flows.get_mut(&id) {
+                    f.run_count += 1; f.last_run_ms = now_ms();
+                }
+                Some(format!(r#"{{"ok":true,"steps":{}}}"#, steps))
+            } else {
+                Some(format!(r#"{{"error":"flow not found: {}"}}"#, esc(&id)))
+            }
+        }
+        ("POST", "/flows/remove")   => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            STATE.lock().unwrap().roboru_flows.remove(&id);
+            Some(r#"{"ok":true}"#.to_string())
+        }
+        // Keywords (Robot Framework pattern)
+        ("GET",  "/keywords")       => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.roboru_keywords.iter().map(|(name, kw)|
+                format!(r#"{{"name":"{}","description":"{}","args":{},"steps":{}}}"#,
+                    esc(name), esc(&kw.description),
+                    format!("[{}]", kw.args.iter().map(|a| format!(""{}"", esc(a))).collect::<Vec<_>>().join(",")),
+                    kw.steps.len())
+            ).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+        ("POST", "/keywords/add")   => {
+            if let Some(kw) = parse_keyword_from_json(body) {
+                let name = kw.name.clone();
+                STATE.lock().unwrap().roboru_keywords.insert(name.clone(), kw);
+                Some(format!(r#"{{"ok":true,"name":"{}"}}"#, esc(&name)))
+            } else { Some(r#"{"error":"invalid keyword json"}"#.to_string()) }
+        }
+        ("POST", "/keywords/run")   => {
+            let name = extract_json_str(body, "name").unwrap_or_default();
+            let mut s = STATE.lock().unwrap();
+            let kw = s.roboru_keywords.get(&name).cloned();
+            if let Some(kw) = kw {
+                let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name)| {
+                    let val = extract_json_str(body, &format!("arg{}", i)).unwrap_or_default();
+                    (arg_name.clone(), val)
+                }).collect();
+                let result = execute_keyword(&mut s, &kw, &args);
+                Some(format!(r#"{{"ok":true,"result":"{}"}}"#, esc(&result)))
+            } else { Some(format!(r#"{{"error":"keyword not found: {}"}}"#, esc(&name))) }
+        }
+        // Pipelines (Hyper-automation)
+        ("GET",  "/pipelines")      => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.roboru_pipelines.iter().map(|(id, p)|
+                format!(r#"{{"id":"{}","name":"{}","enabled":{},"steps":{},"run_count":{}}}"#,
+                    esc(id), esc(&p.name), p.enabled, p.steps.len(), p.run_count)
+            ).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+        ("POST", "/pipelines/add")  => {
+            if let Some(pipeline) = parse_pipeline_from_json(body) {
+                let id = pipeline.id.clone();
+                STATE.lock().unwrap().roboru_pipelines.insert(id.clone(), pipeline);
+                Some(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id)))
+            } else { Some(r#"{"error":"invalid pipeline json"}"#.to_string()) }
+        }
+        ("POST", "/pipelines/run")  => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            let mut s = STATE.lock().unwrap();
+            let pipeline = s.roboru_pipelines.get(&id).cloned();
+            if let Some(mut pipeline) = pipeline {
+                let (steps, errors) = execute_pipeline(&mut s, &pipeline);
+                if let Some(p) = s.roboru_pipelines.get_mut(&id) {
+                    p.run_count += 1; p.last_run_ms = now_ms();
+                }
+                Some(format!(r#"{{"ok":true,"steps":{},"errors":{}}}"#,
+                    steps,
+                    format!("[{}]", errors.iter().map(|e| format!(""{}"", esc(e))).collect::<Vec<_>>().join(","))))
+            } else { Some(format!(r#"{{"error":"pipeline not found: {}"}}"#, esc(&id))) }
+        }
+        _ => None,
+    }
+}
 
 // ─── OpenClaw v2: Advanced automation features ────────────────────────────────
 

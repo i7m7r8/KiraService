@@ -8,9 +8,6 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,16 +38,6 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi
 
-      - name: Cache Rust
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust-core/target
-          key: ${{ runner.os }}-rust-${{ hashFiles('rust-core/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-rust-
-
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
@@ -66,14 +53,19 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
 
+      - name: Install Gradle 8.4
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.4/bin" >> $GITHUB_PATH
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
       - name: Build APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -93,11 +85,10 @@ jobs:
           name: Kira v${{ steps.ts.outputs.TS }}
           body: |
             ## Kira v3 — Full AI Agent (no Termux)
-            - Real Shizuku integration — permission requested on first launch
-            - Smart app opening with 40+ name mappings
+            - Real Shizuku integration
+            - Smart app opening (youtube, whatsapp, etc.)
             - Resendable conversation history
-            - 50+ tools: screen, shell, SMS, web search, files, sensors
-            - Orange/dark UI with 4-tab navigation
+            - 50+ tools
           files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

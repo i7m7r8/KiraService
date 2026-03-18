@@ -251,13 +251,8 @@ public class MainActivity extends Activity {
                 try { cfg.tgAllowed = val.isEmpty() ? 0 : Long.parseLong(val); cfg.save(this); updateSettingsUI(); } catch (Exception ignored) {}
             }));
 
-        // Accessibility button in settings
-        View accBtn = settingsFragment.findViewById(R.id.settingAccessibility);
-        if (accBtn != null) accBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-
-        // Shizuku button
-        View shizBtn = settingsFragment.findViewById(R.id.settingShizuku);
-        if (shizBtn != null) shizBtn.setOnClickListener(v -> checkShizuku());
+        // Shizuku status card is clickable directly
+        shizukuStatus.setOnClickListener(v -> checkShizuku());
 
         buildToolsList();
         updateSettingsUI();

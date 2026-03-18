@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -63,23 +66,16 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
 
-      - name: List Rust libs
-        run: find app/src/main/rust-libs -name "*.so" -exec ls -lh {} \;
-
-      - name: Setup Gradle 8.4
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.4'
-
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build APK
-        run: gradle assembleDebug --stacktrace
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: Upload APK artifact
+      - name: Build APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Kira-APK
@@ -96,21 +92,12 @@ jobs:
           tag_name: v${{ steps.ts.outputs.TS }}
           name: Kira v${{ steps.ts.outputs.TS }}
           body: |
-            ## Kira — Full AI Agent APK (no Termux needed)
-
-            ### Features
-            - Full AI chat (Groq/OpenAI/Anthropic/OpenRouter)
-            - Phone control via Accessibility Service
-            - Shizuku ADB-level control
-            - Built-in Telegram bot
-            - Persistent memory
-            - Web search, SMS, calls
-
-            ### Install
-            1. Download app-debug.apk
-            2. Enable unknown sources, install
-            3. Open Kira, complete setup
-            4. Enable Accessibility Service
+            ## Kira v3 — Full AI Agent (no Termux)
+            - Real Shizuku integration — permission requested on first launch
+            - Smart app opening with 40+ name mappings
+            - Resendable conversation history
+            - 50+ tools: screen, shell, SMS, web search, files, sensors
+            - Orange/dark UI with 4-tab navigation
           files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

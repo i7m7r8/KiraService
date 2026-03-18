@@ -238,4 +238,22 @@ public class RustBridge {
      */
     public static native String getAutomationStatus();
 
+
+    // ── OpenClaw v2: Advanced automation ─────────────────────────────────────
+
+    /** Analytics: runs per hour/day, success rate, most active macro */
+    public static native String getAutomationAnalytics();
+
+    /** Full text automation report (for AI to summarize) */
+    public static native String getAutomationReport();
+
+    /** Schedule macro to run daily at HH:MM */
+    public static native void scheduleMacroDaily(String macroId, String timeHHMM);
+
+    /** Find macro by name (fuzzy match) — returns {found, id} */
+    public static native String findMacroByName(String name);
+
+    /** Resolve %VAR% tokens and math expressions in a string */
+    public static native String resolveParam(String param);
+
 }

@@ -1864,6 +1864,55 @@ mod jni_bridge {
     }
 
     #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationAnalytics(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
+        let json = get_automation_analytics(&STATE.lock().unwrap());
+        CString::new(json).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationReport(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
+        let report = get_automation_report(&STATE.lock().unwrap());
+        CString::new(report).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_scheduleMacroDaily(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        macro_id: *const c_char, time_hhmm: *const c_char,
+    ) {
+        let id = cs(macro_id); let time = cs(time_hhmm);
+        if !id.is_empty() && !time.is_empty() {
+            schedule_macro_daily(&mut STATE.lock().unwrap(), &id, &time);
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_findMacroByName(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        name: *const c_char,
+    ) -> *mut c_char {
+        let result = find_macro_by_name(&STATE.lock().unwrap(), &cs(name));
+        let json = match result {
+            Some(id) => format!(r#"{{"found":true,"id":"{}"}}"#, esc(&id)),
+            None     => r#"{"found":false}"#.to_string(),
+        };
+        CString::new(json).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_resolveParam(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        param: *const c_char,
+    ) -> *mut c_char {
+        let result = resolve_param(&STATE.lock().unwrap(), &cs(param));
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationStatus(
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) -> *mut c_char {
@@ -2838,6 +2887,146 @@ fn install_builtin_templates(s: &mut KiraState) {
     }
 }
 
+
+// ─── OpenClaw v2: Advanced automation features ────────────────────────────────
+
+/// Macro schedule: run macro at specific time daily (HH:MM format)
+/// Stored as a cron job internally
+fn schedule_macro_daily(s: &mut KiraState, macro_id: &str, time_hhmm: &str) {
+    // Parse HH:MM → store as cron job with interval = 24h
+    // The trigger watcher checks against current time string
+    let job_id = format!("daily_{}_{}", macro_id, time_hhmm.replace(':', ""));
+    s.cron_jobs.retain(|j| j.id != job_id);
+    s.cron_jobs.push(CronJob {
+        id:          job_id,
+        expression:  time_hhmm.to_string(),
+        action:      format!("chain_macro:{}", macro_id),
+        last_run:    0,
+        interval_ms: 86_400_000, // 24h
+        enabled:     true,
+    });
+}
+
+/// Macro group: run multiple macros in sequence or parallel
+fn run_macro_group(s: &mut KiraState, macro_ids: &[&str], parallel: bool) {
+    if !check_rate_limit(s) { return; }
+    if parallel {
+        // Enqueue all at once — Java executes them concurrently
+        for id in macro_ids {
+            let actions: Vec<MacroAction> = s.macros.iter()
+                .find(|m| m.id == *id && m.enabled)
+                .map(|m| m.actions.clone())
+                .unwrap_or_default();
+            if !actions.is_empty() {
+                let (_, _) = execute_macro_actions(s, id, &actions);
+            }
+        }
+    } else {
+        // Sequential: chain them
+        for id in macro_ids {
+            chain_macro(s, id);
+        }
+    }
+}
+
+/// Conditional macro: only run if ALL conditions pass
+fn try_run_macro_conditional(s: &mut KiraState, macro_id: &str) -> bool {
+    let conditions: Vec<MacroCondition> = s.macros.iter()
+        .find(|m| m.id == macro_id)
+        .map(|m| m.conditions.clone())
+        .unwrap_or_default();
+    if !conditions.iter().all(|c| eval_condition(s, c)) { return false; }
+    chain_macro(s, macro_id);
+    true
+}
+
+/// Smart trigger debounce: ignore repeat fires within N ms
+fn is_debounced(s: &KiraState, macro_id: &str, debounce_ms: u128) -> bool {
+    let now = now_ms();
+    if let Some(m) = s.macros.iter().find(|m| m.id == macro_id) {
+        return now - m.last_run_ms < debounce_ms;
+    }
+    false
+}
+
+/// Variable interpolation in action params — supports math expressions
+fn resolve_param(s: &KiraState, param: &str) -> String {
+    let expanded = expand_vars(s, param);
+    // If it looks like an expression (has operators), try to evaluate
+    if expanded.contains('+') || expanded.contains('-') ||
+       expanded.contains('*') || expanded.contains('/') {
+        if let Some(result) = eval_math(expanded.trim()) {
+            return result;
+        }
+    }
+    expanded
+}
+
+/// Get macro by name (case-insensitive) — useful for natural language commands
+fn find_macro_by_name(s: &KiraState, name: &str) -> Option<String> {
+    let lower = name.to_lowercase();
+    s.macros.iter()
+        .find(|m| m.name.to_lowercase().contains(&lower) || m.id == name)
+        .map(|m| m.id.clone())
+}
+
+/// Automation analytics: return summary of recent macro activity
+fn get_automation_analytics(s: &KiraState) -> String {
+    let now = now_ms();
+    let last_24h = s.macro_run_log.iter()
+        .filter(|r| now - r.ts < 86_400_000).count();
+    let last_1h = s.macro_run_log.iter()
+        .filter(|r| now - r.ts < 3_600_000).count();
+    let success_count = s.macro_run_log.iter()
+        .filter(|r| r.success).count();
+    let fail_count = s.macro_run_log.iter()
+        .filter(|r| !r.success).count();
+    let total_steps: u32 = s.macro_run_log.iter().map(|r| r.steps_run).sum();
+    let enabled_macros = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
+    let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
+
+    // Most active macro
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    for r in &s.macro_run_log {
+        *counts.entry(r.macro_name.clone()).or_insert(0) += 1;
+    }
+    let most_active = counts.iter()
+        .max_by_key(|(_, v)| *v)
+        .map(|(k, v)| format!("{} ({}x)", k, v))
+        .unwrap_or_else(|| "none".to_string());
+
+    format!(
+        r#"{{"runs_24h":{},"runs_1h":{},"success":{},"failed":{},"total_steps":{},"enabled_macros":{},"templates":{},"variables":{},"active_profile":"{}","most_active":"{}","pending_actions":{}}}"#,
+        last_24h, last_1h, success_count, fail_count, total_steps,
+        enabled_macros, templates, s.variables.len(),
+        esc(&s.active_profile), esc(&most_active),
+        s.pending_actions.len()
+    )
+}
+
+/// Automation report: full text summary for AI to read
+fn get_automation_report(s: &KiraState) -> String {
+    let now = now_ms();
+    let mut lines = Vec::new();
+    lines.push(format!("=== Kira Automation Report ==="));
+    lines.push(format!("Active profile: {}", s.active_profile));
+    lines.push(format!("Enabled macros: {}", s.macros.iter().filter(|m| m.enabled).count()));
+    lines.push(format!("Total variables: {}", s.variables.len()));
+    lines.push(format!("Pending actions: {}", s.pending_actions.len()));
+    lines.push(String::new());
+    lines.push("Recent runs:".to_string());
+    for r in s.macro_run_log.iter().rev().take(5) {
+        let ago = (now - r.ts) / 1000;
+        lines.push(format!("  • {} — {} steps — {}s ago", r.macro_name, r.steps_run, ago));
+    }
+    lines.push(String::new());
+    lines.push("Variables:".to_string());
+    for (name, var) in s.variables.iter().take(10) {
+        lines.push(format!("  %{}% = {}", name.to_uppercase(), var.value));
+    }
+    lines.join("\n")
+}
+
 /// Export all macros as a single JSON string (for backup / sharing)
 fn export_macros_json(s: &KiraState) -> String {
     let items: Vec<String> = s.macros.iter().map(macro_to_json).collect();
@@ -2921,6 +3110,39 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
             let text = path.find("text=").map(|i| &path[i+5..]).unwrap_or("").replace('+', " ");
             let result = expand_vars(&STATE.lock().unwrap(), &text);
             Some(format!(r#"{{"result":"{}"}}"#, esc(&result)))
+        }
+        ("GET",  "/automation/analytics") => Some(get_automation_analytics(&STATE.lock().unwrap())),
+        ("GET",  "/automation/report")    => {
+            let report = get_automation_report(&STATE.lock().unwrap());
+            Some(format!(r#"{{"report":"{}"}}"#, esc(&report)))
+        }
+        ("POST", "/macros/schedule")      => {
+            let id   = extract_json_str(body, "macro_id").unwrap_or_default();
+            let time = extract_json_str(body, "time").unwrap_or_default();
+            if !id.is_empty() && !time.is_empty() {
+                schedule_macro_daily(&mut STATE.lock().unwrap(), &id, &time);
+            }
+            Some(format!(r#"{{"ok":true,"scheduled":"{}","time":"{}"}}"#, esc(&id), esc(&time)))
+        }
+        ("POST", "/macros/group")         => {
+            let parallel = body.contains(r#""parallel":true"#);
+            let ids_str = extract_json_str(body, "ids").unwrap_or_default();
+            let ids: Vec<&str> = ids_str.split(',').map(|s| s.trim()).collect();
+            run_macro_group(&mut STATE.lock().unwrap(), &ids, parallel);
+            Some(format!(r#"{{"ok":true,"count":{}}}"#, ids.len()))
+        }
+        ("GET",  "/macros/find")          => {
+            let name = body.find("name=").map(|i| &body[i+5..]).unwrap_or("").split('&').next().unwrap_or("");
+            let result = find_macro_by_name(&STATE.lock().unwrap(), name);
+            Some(match result {
+                Some(id) => format!(r#"{{"found":true,"id":"{}"}}"#, esc(&id)),
+                None     => r#"{"found":false}"#.to_string(),
+            })
+        }
+        ("POST", "/macros/conditional")   => {
+            let id = extract_json_str(body, "macro_id").unwrap_or_default();
+            let ran = if !id.is_empty() { try_run_macro_conditional(&mut STATE.lock().unwrap(), &id) } else { false };
+            Some(format!(r#"{{"ok":true,"ran":{}}}"#, ran))
         }
         ("GET",  "/automation/status") => {
             let s = STATE.lock().unwrap();

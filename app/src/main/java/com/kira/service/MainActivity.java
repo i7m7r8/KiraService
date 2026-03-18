@@ -534,7 +534,7 @@ public class MainActivity extends Activity
         msg.setText(turn.text);
         msg.setTextColor(0xFFdddddd);
         msg.setTextSize(14);
-        msg.setBackgroundColor(0xFF2a2a2a);
+        msg.setBackgroundColor(0xBB1a1a2e);
         msg.setPadding(dp(14), dp(10), dp(14), dp(10));
         msg.setLineSpacing(dp(2), 1);
         msg.setTextIsSelectable(true);
@@ -634,7 +634,7 @@ public class MainActivity extends Activity
             msg.setText(turn.text);
             msg.setTextColor(0xFFeeeeee);
             msg.setTextSize(14);
-            msg.setBackgroundColor(0xFF1e1e1e);
+            msg.setBackgroundColor(0xAA0e0e1a);
             msg.setPadding(dp(14), dp(10), dp(14), dp(10));
             msg.setLineSpacing(dp(2), 1);
             msg.setTextIsSelectable(true);
@@ -678,7 +678,7 @@ public class MainActivity extends Activity
 
                 LinearLayout codeBlock = new LinearLayout(this);
                 codeBlock.setOrientation(LinearLayout.VERTICAL);
-                codeBlock.setBackgroundColor(0xFF0d1117);
+                codeBlock.setBackgroundColor(0xDD0d1117);
                 LinearLayout.LayoutParams cbp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cbp.setMargins(0, dp(4), 0, dp(4));
                 codeBlock.setLayoutParams(cbp);
@@ -722,7 +722,7 @@ public class MainActivity extends Activity
                 codeTv.setTypeface(android.graphics.Typeface.MONOSPACE);
                 codeTv.setPadding(dp(12), dp(10), dp(12), dp(10));
                 codeTv.setTextIsSelectable(true);
-                codeTv.setBackgroundColor(0xFF0d1117);
+                codeTv.setBackgroundColor(0xDD0d1117);
 
                 hScroll.addView(codeTv);
                 codeBlock.addView(codeHeader);
@@ -738,7 +738,7 @@ public class MainActivity extends Activity
         tv.setText(turn.text);
         tv.setTextColor(0xFF4a7a4a);
         tv.setTextSize(11);
-        tv.setBackgroundColor(0xFF0d1a0d);
+        tv.setBackgroundColor(0x880d1a0d);
         tv.setPadding(dp(12), dp(5), dp(12), dp(5));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(1), 0, dp(1));
@@ -762,7 +762,7 @@ public class MainActivity extends Activity
         msg.setText(turn.text);
         msg.setTextColor(0xFFff8888);
         msg.setTextSize(13);
-        msg.setBackgroundColor(0xFF2a1010);
+        msg.setBackgroundColor(0xBB1a0808);
         msg.setPadding(dp(14), dp(10), dp(14), dp(10));
         msg.setTextIsSelectable(true);
 
@@ -862,7 +862,7 @@ public class MainActivity extends Activity
         tv.setTextColor(0xFF8888AA);
         tv.setTextSize(12);
         tv.setPadding(dp(12), dp(6), dp(12), dp(6));
-        tv.setBackgroundColor(0xFF111111);
+        tv.setBackgroundColor(0x88080810);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(2), 0, dp(2));
         tv.setLayoutParams(p);
@@ -910,55 +910,136 @@ public class MainActivity extends Activity
     }
 
     private void showProviderPicker() {
-        // v38: provider list comes from Rust (17+ entries, includes custom)
-        String providersJson;
-        try {
-            providersJson = RustBridge.getProviders();
-        } catch (UnsatisfiedLinkError e) {
-            providersJson = "[]";
-        }
-        // Parse the JSON array from Rust \u2014 extract id and name fields
-        java.util.List<String> ids   = new java.util.ArrayList<>();
-        java.util.List<String> names = new java.util.ArrayList<>();
-        try {
-            org.json.JSONArray arr = new org.json.JSONArray(providersJson);
-            for (int i = 0; i < arr.length(); i++) {
-                org.json.JSONObject p = arr.getJSONObject(i);
-                ids.add(p.getString("id"));
-                names.add(p.getString("name") + (p.optBoolean("active") ? " \u2714" : ""));
+        final String[][] PROVIDERS = {
+            {"groq",       "Groq  llama-3.1-8b",              "https://api.groq.com/openai/v1",                          "llama-3.1-8b-instant"},
+            {"openai",     "OpenAI  gpt-4o-mini",              "https://api.openai.com/v1",                               "gpt-4o-mini"},
+            {"anthropic",  "Anthropic  claude-haiku",          "https://api.anthropic.com/v1",                            "claude-3-haiku-20240307"},
+            {"gemini",     "Gemini  2.0 flash",                "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash"},
+            {"deepseek",   "DeepSeek  chat",                   "https://api.deepseek.com/v1",                             "deepseek-chat"},
+            {"openrouter", "OpenRouter  auto",                 "https://openrouter.ai/api/v1",                            "openrouter/auto"},
+            {"ollama",     "Ollama  local",                    "http://localhost:11434/v1",                                "llama3"},
+            {"together",   "Together AI",                      "https://api.together.xyz/v1",                             "meta-llama/Llama-3-8b-chat-hf"},
+            {"mistral",    "Mistral  small",                   "https://api.mistral.ai/v1",                               "mistral-small-latest"},
+            {"cohere",     "Cohere  command-r",                "https://api.cohere.ai/v1",                                "command-r"},
+            {"perplexity", "Perplexity  sonar",                "https://api.perplexity.ai",                               "llama-3.1-sonar-small-128k-online"},
+            {"xai",        "xAI  Grok-2",                     "https://api.x.ai/v1",                                     "grok-2-latest"},
+            {"cerebras",   "Cerebras  llama3.1",               "https://api.cerebras.ai/v1",                              "llama3.1-8b"},
+            {"fireworks",  "Fireworks AI",                     "https://api.fireworks.ai/inference/v1",                   "accounts/fireworks/models/llama-v3p1-8b-instruct"},
+            {"sambanova",  "SambaNova  llama3.1",              "https://api.sambanova.ai/v1",                             "Meta-Llama-3.1-8B-Instruct"},
+            {"novita",     "Novita AI",                        "https://api.novita.ai/v3/openai",                         "llama-3.1-8b-instruct"},
+            {"custom",     "Custom URL...",                    "",                                                         ""},
+        };
+
+        String[] displayNames = new String[PROVIDERS.length];
+        for (int i = 0; i < PROVIDERS.length; i++) {
+            String purl = PROVIDERS[i][2];
+            boolean isActive = purl.equals(cfg.baseUrl) ||
+                ("custom".equals(PROVIDERS[i][0]) && !isKnownProvider(cfg.baseUrl));
+            // Show custom URL if currently set
+            if ("custom".equals(PROVIDERS[i][0]) && !cfg.baseUrl.isEmpty() && !isKnownProvider(cfg.baseUrl)) {
+                displayNames[i] = "Custom: " + cfg.baseUrl + (isActive ? " ✓" : "");
+            } else {
+                displayNames[i] = PROVIDERS[i][1] + (isActive ? "  ✓" : "");
             }
-        } catch (Exception e) {
-            android.widget.Toast.makeText(this, "Provider list error: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
-            return;
         }
-        String[] nameArr = names.toArray(new String[0]);
+
         new android.app.AlertDialog.Builder(this)
             .setTitle("Select AI Provider")
-            .setItems(nameArr, (d, w) -> {
-                String pid = ids.get(w);
-                if ("custom".equals(pid)) {
-                    editSetting("Custom Base URL", cfg.baseUrl, false, val -> {
-                        try { RustBridge.setCustomProvider(val, cfg.model); } catch (UnsatisfiedLinkError ignored) {}
-                        cfg.baseUrl = val; cfg.save(this); updateSettingsUI();
-                    });
+            .setItems(displayNames, (d, w) -> {
+                if ("custom".equals(PROVIDERS[w][0])) {
+                    showCustomProviderDialog();
                 } else {
-                    // Rust switches provider and returns new base_url + model
-                    try {
-                        String result = RustBridge.setActiveProvider(pid);
-                        org.json.JSONObject res = new org.json.JSONObject(result);
-                        if (res.optBoolean("ok")) {
-                            cfg.baseUrl = res.optString("base_url", cfg.baseUrl);
-                            cfg.model   = res.optString("model",    cfg.model);
-                            cfg.save(this); updateSettingsUI();
-                            if (providerHint != null) providerHint.setText(nameArr[w].replace(" \u2714",""));
-                            android.widget.Toast.makeText(this, "Provider: " + nameArr[w], android.widget.Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (Exception e) {
-                        android.widget.Toast.makeText(this, "Switch failed: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
-                    }
+                    cfg.baseUrl = PROVIDERS[w][2];
+                    cfg.model   = PROVIDERS[w][3];
+                    cfg.save(this);
+                    try { RustBridge.setActiveProvider(PROVIDERS[w][0]); } catch (Exception ignored) {}
+                    updateSettingsUI();
+                    android.widget.Toast.makeText(this,
+                        "Provider: " + PROVIDERS[w][1], android.widget.Toast.LENGTH_SHORT).show();
                 }
             }).show();
     }
+
+    private boolean isKnownProvider(String url) {
+        if (url == null || url.isEmpty()) return false;
+        String[] known = {
+            "api.groq.com","api.openai.com","api.anthropic.com",
+            "generativelanguage.googleapis.com","api.deepseek.com",
+            "openrouter.ai","localhost:11434","api.together.xyz",
+            "api.mistral.ai","api.cohere.ai","api.perplexity.ai",
+            "api.x.ai","api.cerebras.ai","api.fireworks.ai",
+            "api.sambanova.ai","api.novita.ai"
+        };
+        for (String k : known) if (url.contains(k)) return true;
+        return false;
+    }
+
+    private void showCustomProviderDialog() {
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(this);
+        b.setTitle("Custom AI Provider");
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(16), dp(24), dp(8));
+        layout.setBackgroundColor(0xFF0e0e18);
+
+        android.widget.TextView urlLabel = new android.widget.TextView(this);
+        urlLabel.setText("Base URL  (e.g. https://your-server/v1)");
+        urlLabel.setTextColor(0xFF8888AA); urlLabel.setTextSize(11);
+        layout.addView(urlLabel);
+
+        android.widget.EditText urlInput = styledEditText(cfg.baseUrl, false);
+        layout.addView(urlInput);
+
+        android.widget.TextView modelLabel = new android.widget.TextView(this);
+        modelLabel.setText("Model name");
+        modelLabel.setTextColor(0xFF8888AA); modelLabel.setTextSize(11);
+        android.widget.LinearLayout.LayoutParams mlp =
+            new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        mlp.topMargin = dp(12);
+        modelLabel.setLayoutParams(mlp);
+        layout.addView(modelLabel);
+
+        android.widget.EditText modelInput = styledEditText(cfg.model, false);
+        layout.addView(modelInput);
+
+        b.setView(layout);
+        b.setPositiveButton("Save", (d, x) -> {
+            String url   = urlInput.getText().toString().trim();
+            String model = modelInput.getText().toString().trim();
+            if (url.isEmpty()) { android.widget.Toast.makeText(this, "URL required", android.widget.Toast.LENGTH_SHORT).show(); return; }
+            cfg.baseUrl = url;
+            if (!model.isEmpty()) cfg.model = model;
+            cfg.save(this);
+            try { RustBridge.setCustomProvider(url, model); } catch (Exception ignored) {}
+            updateSettingsUI();
+            android.widget.Toast.makeText(this, "Custom provider saved", android.widget.Toast.LENGTH_SHORT).show();
+        });
+        b.setNegativeButton("Cancel", null);
+        b.show();
+    }
+
+    private android.widget.EditText styledEditText(String current, boolean numeric) {
+        android.widget.EditText et = new android.widget.EditText(this);
+        et.setText(current);
+        et.setTextColor(0xFFFFFFFF);
+        et.setHintTextColor(0xFF555566);
+        et.setTextSize(14);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xFF1A1A2E);
+        bg.setCornerRadius(dp(6));
+        bg.setStroke(dp(1), 0xFF2a2a44);
+        et.setBackground(bg);
+        et.setPadding(dp(12), dp(10), dp(12), dp(10));
+        et.setInputType(numeric
+            ? android.text.InputType.TYPE_CLASS_NUMBER
+            : (android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));
+        android.widget.LinearLayout.LayoutParams lp =
+            new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        lp.topMargin = dp(4);
+        et.setLayoutParams(lp);
+        return et;
+    }
+
 
     // fetchRust kept for any residual calls but Rust backend not required in v38
     private String fetchRust(String url) {
@@ -1008,7 +1089,7 @@ public class MainActivity extends Activity
             chip.setText(item[0]);
             chip.setTextSize(12);
             chip.setTextColor(0xFFcccccc);
-            chip.setBackgroundColor(0xFF0D0D1A);
+            chip.setBackgroundColor(0x990D0D1A);
             chip.setPadding(dp(12), dp(7), dp(12), dp(7));
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
             p.setMargins(0, 0, dp(8), 0);
@@ -1045,7 +1126,7 @@ public class MainActivity extends Activity
         for (Object[] t : tools) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setBackgroundColor(0xFF1a1a1a);
+            row.setBackgroundColor(0x991a1a2a);
             row.setPadding(dp(14), dp(12), dp(14), dp(12));
             LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(MATCH, WRAP);
             rp.setMargins(0, 0, 0, dp(2));
@@ -1100,7 +1181,7 @@ public class MainActivity extends Activity
 
                 LinearLayout card = new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
-                card.setBackgroundColor(0xFF1a1a1a);
+                card.setBackgroundColor(0xBB0e0e1e);
                 card.setPadding(dp(14), dp(12), dp(14), dp(12));
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cp.setMargins(0, 0, 0, dp(8));
@@ -1183,14 +1264,41 @@ public class MainActivity extends Activity
     // -- Settings --------------------------------------------------------------
 
     private void updateSettingsUI() {
-        cfg = KiraConfig.load(this);
+        cfg = com.kira.service.ai.KiraConfig.load(this);
         if (apiKeyHint == null) return;
-        apiKeyHint.setText(cfg.apiKey.isEmpty() ? "Tap to set" : "????" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
-        modelHint.setText(cfg.model.isEmpty() ? "Not set" : cfg.model);
-        baseUrlHint.setText(cfg.baseUrl.isEmpty() ? "Not set" : cfg.baseUrl);
-        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "Not set" : "? Configured");
+        apiKeyHint.setText(cfg.apiKey.isEmpty() ? "tap to set" :
+            "●●●●" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
+        modelHint.setText(cfg.model.isEmpty() ? "not set" : cfg.model);
+        String urlDisplay = cfg.baseUrl.isEmpty() ? "not set" :
+            cfg.baseUrl.replace("https://","").replace("http://","");
+        if (urlDisplay.length() > 36) urlDisplay = urlDisplay.substring(0, 33) + "…";
+        baseUrlHint.setText(urlDisplay);
+        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "not configured" : "✓ configured");
         tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
         if (visionHint != null) visionHint.setText(cfg.visionModel.isEmpty() ? "not set" : cfg.visionModel);
+        if (providerHint != null) {
+            String pu = cfg.baseUrl;
+            String label;
+            if      (pu.contains("groq.com"))          label = "Groq · llama-3.1-8b";
+            else if (pu.contains("openai.com"))         label = "OpenAI · " + cfg.model;
+            else if (pu.contains("anthropic.com"))      label = "Anthropic · claude";
+            else if (pu.contains("googleapis.com"))     label = "Gemini · " + cfg.model;
+            else if (pu.contains("deepseek.com"))       label = "DeepSeek";
+            else if (pu.contains("openrouter.ai"))      label = "OpenRouter";
+            else if (pu.contains("localhost"))          label = "Ollama (local)";
+            else if (pu.contains("together.xyz"))       label = "Together AI";
+            else if (pu.contains("mistral.ai"))         label = "Mistral";
+            else if (pu.contains("cohere.ai"))          label = "Cohere";
+            else if (pu.contains("perplexity.ai"))      label = "Perplexity";
+            else if (pu.contains("x.ai"))               label = "xAI Grok";
+            else if (pu.contains("cerebras.ai"))        label = "Cerebras";
+            else if (pu.contains("fireworks.ai"))       label = "Fireworks AI";
+            else if (pu.contains("sambanova.ai"))       label = "SambaNova";
+            else if (pu.contains("novita.ai"))          label = "Novita AI";
+            else if (!pu.isEmpty())                     label = "custom: " + urlDisplay;
+            else                                        label = "not set";
+            providerHint.setText(label);
+        }
         updateShizukuStatus();
     }
 

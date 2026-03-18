@@ -403,11 +403,36 @@ public class KiraTools {
 
     // App management
     private String openApp(String input) {
-        String pkg = APP_MAP.getOrDefault(input.toLowerCase().trim(), input.trim());
+        String normalized = input.toLowerCase().trim();
+        String pkg = APP_MAP.getOrDefault(normalized, input.trim());
+
+        // Special case: YouTube — use deep link for most reliable launch
+        if ("com.google.android.youtube".equals(pkg) || normalized.equals("youtube") || normalized.equals("yt")) {
+            try {
+                android.content.Intent ytIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://www.youtube.com"));
+                ytIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(ytIntent);
+                return "opened YouTube";
+            } catch (Exception ignored) {}
+            // Fallback to package launch
+            pkg = "com.google.android.youtube";
+        }
+
+        // Resolve package if fuzzy name was given
         if (!isInstalled(pkg)) {
             String found = findPackage(input);
-            if (found != null) pkg = found;
-            else return "app not found: " + input;
+            if (found != null) {
+                pkg = found;
+            } else {
+                // Try am start with the fuzzy name as package
+                String amResult = ShizukuShell.exec(
+                    "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER " +
+                    "$(pm list packages | grep -i " + input.toLowerCase().replaceAll("[^a-z0-9]","") +
+                    " | head -1 | cut -d: -f2) 2>&1");
+                if (amResult.contains("Starting")) return "opened " + input + " (am-fuzzy)";
+                return "app not found: " + input + ". Is it installed? Try: find_app " + input;
+            }
         }
         return ShizukuShell.openApp(ctx, pkg);
     }

@@ -1,7 +1,9 @@
 package com.kira.service;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
-import android.util.Log;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
@@ -15,279 +17,325 @@ import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
+import android.util.Log;
 
 import com.kira.service.ai.KiraAI;
 
 /**
- * Floating window controller -- like Rou Bao.
- *
- * Two views:
- *  1. Bubble -- small draggable "K" pill, always on top
- *  2. Panel  -- expanded input panel, also draggable, hides bubble while open
+ * Floating overlay window.
+ * - Bubble: small draggable K pill, tap to open panel
+ * - Panel: full input panel, ENTIRE HEADER is draggable
+ * Fixed: correct WindowManager flags for drag + focus
  */
 public class FloatingWindowService extends Service {
 
+    private static final String TAG = "FloatingWin";
+
     private WindowManager wm;
     private View bubbleView;
-    private View panelView;
-    private boolean expanded = false;
+    private LinearLayout panelView;
+    private boolean panelOpen = false;
     private KiraAI ai;
-    private Handler uiHandler;
+    private Handler handler;
 
-    // Bubble layout params
     private WindowManager.LayoutParams bubbleLP;
-    // Panel layout params
     private WindowManager.LayoutParams panelLP;
 
-    public static void start(Context ctx) {
-        ctx.startService(new Intent(ctx, FloatingWindowService.class));
-    }
+    public static void start(Context ctx) { ctx.startService(new Intent(ctx, FloatingWindowService.class)); }
+    public static void stop(Context ctx)  { ctx.stopService(new Intent(ctx, FloatingWindowService.class)); }
 
-    public static void stop(Context ctx) {
-        ctx.stopService(new Intent(ctx, FloatingWindowService.class));
-    }
+    @Override
+    public IBinder onBind(Intent i) { return null; }
 
     @Override
     public void onCreate() {
         super.onCreate();
-        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        uiHandler = new Handler(Looper.getMainLooper());
-        ai = new KiraAI(this);
+        wm      = (WindowManager) getSystemService(WINDOW_SERVICE);
+        handler = new Handler(Looper.getMainLooper());
+        ai      = new KiraAI(this);
+        startForegroundCompat();
         buildBubble();
-        buildPanel();
     }
 
-    // -- Bubble ----------------------------------------------------------------
+    @Override
+    public void onDestroy() {
+        removeSafely(bubbleView);
+        removeSafely(panelView);
+        super.onDestroy();
+    }
 
+    // \u2500\u2500 Foreground notification \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    private void startForegroundCompat() {
+        String chId = "kira_float";
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm != null) nm.createNotificationChannel(
+            new NotificationChannel(chId, "Kira Floating", NotificationManager.IMPORTANCE_MIN));
+        startForeground(3, new Notification.Builder(this, chId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Kira overlay active").build());
+    }
+
+    // \u2500\u2500 Bubble \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     private void buildBubble() {
         TextView bubble = new TextView(this);
+        // K with orange glow
         bubble.setText("K");
         bubble.setTextColor(0xFF000000);
-        bubble.setTextSize(16);
+        bubble.setTextSize(18);
         bubble.setGravity(Gravity.CENTER);
         bubble.setTypeface(null, android.graphics.Typeface.BOLD);
         bubble.setBackgroundColor(0xFFff8c00);
 
-        int dp56 = dp(56);
+        int sz = dp(56);
+        // KEY FIX: FLAG_NOT_FOCUSABLE for drag, FLAG_NOT_TOUCH_MODAL to allow touches outside
         bubbleLP = new WindowManager.LayoutParams(
-            dp56, dp56,
+            sz, sz,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         );
         bubbleLP.gravity = Gravity.TOP | Gravity.START;
-        bubbleLP.x = 0;
+        bubbleLP.x = 20;
         bubbleLP.y = 400;
 
-        makeDraggable(bubble, bubbleLP, true);
+        setDraggable(bubble, bubbleLP, () -> {
+            // on tap: toggle panel
+            if (panelOpen) closePanel(); else openPanel();
+        });
+
         wm.addView(bubble, bubbleLP);
         bubbleView = bubble;
     }
 
-    // -- Panel -----------------------------------------------------------------
-
+    // \u2500\u2500 Panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     private void buildPanel() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackgroundColor(0xF01a1a1a);
-        panel.setPadding(dp(12), dp(8), dp(12), dp(12));
+        panel.setBackgroundColor(0xF21a1a1a);
 
-        // Drag handle bar
-        View dragBar = new View(this);
-        dragBar.setBackgroundColor(0xFF333333);
-        LinearLayout.LayoutParams dbp = new LinearLayout.LayoutParams(dp(40), dp(4));
-        dbp.gravity = Gravity.CENTER_HORIZONTAL;
-        dbp.setMargins(0, 0, 0, dp(8));
-        dragBar.setLayoutParams(dbp);
+        int panelW = dp(300);
+        int panelH = WindowManager.LayoutParams.WRAP_CONTENT;
 
-        // Header row
+        // KEY FIX: Panel needs FLAG_NOT_TOUCH_MODAL but NOT FLAG_NOT_FOCUSABLE
+        // so the EditText can receive keyboard input
+        panelLP = new WindowManager.LayoutParams(
+            panelW, panelH,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        );
+        panelLP.gravity = Gravity.TOP | Gravity.START;
+        panelLP.x = dp(10);
+        panelLP.y = 300;
+        panelLP.softInputMode = android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+
+        // \u2500\u2500 Drag handle (entire header row is draggable) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        hp.setMargins(0, 0, 0, dp(8));
-        header.setLayoutParams(hp);
+        header.setBackgroundColor(0xFF111111);
+        header.setPadding(dp(12), dp(10), dp(12), dp(10));
 
-        TextView title = new TextView(this);
-        title.setText("Kira");
-        title.setTextColor(0xFFff8c00);
-        title.setTextSize(15);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        // Drag indicator dots
+        TextView dragDots = new TextView(this);
+        dragDots.setText("\u2630"); // trigram = hamburger
+        dragDots.setTextColor(0xFF555555);
+        dragDots.setTextSize(14);
+        dragDots.setPadding(0, 0, dp(10), 0);
+
+        TextView kiraTitle = new TextView(this);
+        kiraTitle.setText("Kira");
+        kiraTitle.setTextColor(0xFFff8c00);
+        kiraTitle.setTextSize(14);
+        kiraTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        kiraTitle.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         TextView closeBtn = new TextView(this);
-        closeBtn.setText("?");
-        closeBtn.setTextColor(0xFF888888);
-        closeBtn.setTextSize(18);
-        closeBtn.setPadding(dp(8), 0, 0, 0);
-        closeBtn.setOnClickListener(v -> collapsePanel());
+        closeBtn.setText("\u2715"); // X
+        closeBtn.setTextColor(0xFF666666);
+        closeBtn.setTextSize(16);
+        closeBtn.setPadding(dp(8), dp(4), 0, dp(4));
+        closeBtn.setOnClickListener(v -> closePanel());
 
-        header.addView(title);
+        header.addView(dragDots);
+        header.addView(kiraTitle);
         header.addView(closeBtn);
 
-        // Reply display
-        TextView replyView = new TextView(this);
-        replyView.setText("Ready. What do you need?");
-        replyView.setTextColor(0xFFcccccc);
-        replyView.setTextSize(13);
-        replyView.setBackgroundColor(0xFF111111);
-        replyView.setPadding(dp(10), dp(8), dp(10), dp(8));
-        replyView.setMinLines(2);
-        replyView.setMaxLines(6);
-        replyView.setTextIsSelectable(true);
-        LinearLayout.LayoutParams rvp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        rvp.setMargins(0, 0, 0, dp(8));
-        replyView.setLayoutParams(rvp);
+        // KEY FIX: Make entire HEADER draggable (not just a small drag bar)
+        setDraggable(header, panelLP, null);
 
-        // Input row
+        // \u2500\u2500 Response area \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        TextView responseView = new TextView(this);
+        responseView.setTextColor(0xFFcccccc);
+        responseView.setTextSize(13);
+        responseView.setPadding(dp(12), dp(8), dp(12), dp(4));
+        responseView.setMaxLines(6);
+        responseView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        responseView.setText("How can I help?");
+
+        // \u2500\u2500 Quick chips row \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        android.widget.HorizontalScrollView chipsScroll = new android.widget.HorizontalScrollView(this);
+        chipsScroll.setScrollbars(0);
+        LinearLayout chipsRow = new LinearLayout(this);
+        chipsRow.setOrientation(LinearLayout.HORIZONTAL);
+        chipsRow.setPadding(dp(8), dp(4), dp(8), dp(4));
+
+        String[][] chips = {
+            {"\uD83D\uDCF1", "read_screen"},
+            {"\uD83D\uDD14", "notifications"},
+            {"\uD83D\uDD0B", "battery"},
+            {"\u26A1", "/agent "},
+        };
+        for (String[] chip : chips) {
+            TextView tv = new TextView(this);
+            tv.setText(chip[0]);
+            tv.setTextSize(16);
+            tv.setBackgroundColor(0xFF222222);
+            tv.setPadding(dp(10), dp(6), dp(10), dp(6));
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            cp.setMargins(0, 0, dp(6), 0);
+            tv.setLayoutParams(cp);
+            final String cmd = chip[1];
+            tv.setOnClickListener(v -> sendCommand(cmd, responseView));
+            chipsRow.addView(tv);
+        }
+        chipsScroll.addView(chipsRow);
+
+        // \u2500\u2500 Input row \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         LinearLayout inputRow = new LinearLayout(this);
         inputRow.setOrientation(LinearLayout.HORIZONTAL);
+        inputRow.setPadding(dp(8), dp(4), dp(8), dp(10));
         inputRow.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams irp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        irp.setMargins(0, 0, 0, dp(6));
-        inputRow.setLayoutParams(irp);
 
-        EditText inputField = new EditText(this);
-        inputField.setHint("Ask Kira anything...");
-        inputField.setTextColor(0xFFffffff);
-        inputField.setHintTextColor(0xFF555555);
-        inputField.setTextSize(13);
-        inputField.setBackgroundColor(0xFF2a2a2a);
-        inputField.setPadding(dp(10), dp(8), dp(10), dp(8));
-        inputField.setSingleLine(true);
-        inputField.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        EditText input = new EditText(this);
+        input.setHint("Ask Kira...");
+        input.setHintTextColor(0xFF555555);
+        input.setTextColor(0xFFffffff);
+        input.setTextSize(13);
+        input.setBackgroundColor(0xFF222222);
+        input.setPadding(dp(10), dp(8), dp(10), dp(8));
+        input.setSingleLine(true);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        ip.setMargins(0, 0, dp(6), 0);
+        input.setLayoutParams(ip);
 
         TextView sendBtn = new TextView(this);
-        sendBtn.setText("?");
+        sendBtn.setText("\u25B6"); // play
         sendBtn.setTextColor(0xFF000000);
-        sendBtn.setBackgroundColor(0xFFff8c00);
         sendBtn.setTextSize(14);
         sendBtn.setGravity(Gravity.CENTER);
-        int p = dp(10);
-        sendBtn.setPadding(p, dp(8), p, dp(8));
-
+        sendBtn.setBackgroundColor(0xFFff8c00);
+        sendBtn.setPadding(dp(12), dp(8), dp(12), dp(8));
         sendBtn.setOnClickListener(v -> {
-            String text = inputField.getText().toString().trim();
-            if (text.isEmpty()) return;
-            inputField.setText("");
-            replyView.setText("thinking...");
-            replyView.setTextColor(0xFF555555);
-
-            ai.chat(text, new KiraAI.Callback() {
-                @Override public void onThinking() {}
-                @Override public void onTool(String name, String result) {
-                    uiHandler.post(() -> replyView.setText("? " + name + "?"));
-                }
-                @Override public void onReply(String reply) {
-                    uiHandler.post(() -> {
-                        replyView.setText(reply);
-                        replyView.setTextColor(0xFFcccccc);
-                    });
-                }
-                @Override public void onError(String error) {
-                    uiHandler.post(() -> {
-                        replyView.setText("? " + error);
-                        replyView.setTextColor(0xFFff6666);
-                    });
-                }
-            });
+            String q = input.getText().toString().trim();
+            if (!q.isEmpty()) {
+                input.setText("");
+                sendCommand(q, responseView);
+            }
         });
 
-        inputRow.addView(inputField);
+        inputRow.addView(input);
         inputRow.addView(sendBtn);
 
-        // Quick chips
-        LinearLayout chips = new LinearLayout(this);
-        chips.setOrientation(LinearLayout.HORIZONTAL);
-
-        String[][] quickCmds = {
-            {"?", "Read screen"},
-            {"?", "Notifications"},
-            {"?", "Battery"},
-            {"?", "Screenshot"},
-            {"?", "Running apps"},
-        };
-
-        for (String[] cmd : quickCmds) {
-            TextView chip = new TextView(this);
-            chip.setText(cmd[0] + " " + cmd[1]);
-            chip.setTextColor(0xFF888888);
-            chip.setBackgroundColor(0xFF2a2a2a);
-            chip.setTextSize(10);
-            int cp2 = dp(6);
-            chip.setPadding(cp2, dp(3), cp2, dp(3));
-            LinearLayout.LayoutParams cpp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            cpp.setMargins(0, 0, dp(4), 0);
-            chip.setLayoutParams(cpp);
-            chip.setOnClickListener(v -> {
-                inputField.setText(cmd[1]);
-                sendBtn.performClick();
-            });
-            chips.addView(chip);
-        }
-
-        panel.addView(dragBar);
         panel.addView(header);
-        panel.addView(replyView);
+        panel.addView(responseView);
+        panel.addView(chipsScroll);
         panel.addView(inputRow);
-        panel.addView(chips);
 
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        panelLP = new WindowManager.LayoutParams(
-            (int)(screenWidth * 0.9f),
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        );
-        panelLP.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        panelLP.y = dp(80);
-
-        // Make panel draggable via the drag bar
-        makeDraggable(dragBar, panelLP, false);
         panelView = panel;
     }
 
-    // -- Drag logic ------------------------------------------------------------
+    // \u2500\u2500 Open / Close \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    private void openPanel() {
+        if (panelOpen) return;
+        if (panelView == null) buildPanel();
+        try {
+            bubbleView.setVisibility(View.GONE);
+            if (!panelView.isAttachedToWindow()) {
+                wm.addView(panelView, panelLP);
+            }
+            panelOpen = true;
+        } catch (Exception e) { Log.e(TAG, "openPanel: " + e); }
+    }
 
-    private void makeDraggable(View view, WindowManager.LayoutParams lp, boolean isBubble) {
-        final int[] ix = {0}, iy = {0};
-        final float[] tx = {0}, ty = {0};
-        final long[] downTime = {0};
+    private void closePanel() {
+        if (!panelOpen) return;
+        try {
+            removeSafely(panelView);
+            bubbleView.setVisibility(View.VISIBLE);
+            panelOpen = false;
+        } catch (Exception e) { Log.e(TAG, "closePanel: " + e); }
+    }
+
+    // \u2500\u2500 Command sender \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    private void sendCommand(String cmd, TextView responseView) {
+        responseView.setText("\u23F3 thinking..."); // hourglass
+        responseView.setTextColor(0xFF555555);
+        ai.chat(cmd, new KiraAI.Callback() {
+            @Override public void onThinking() {
+                handler.post(() -> responseView.setText("\u23F3 ..."));
+            }
+            @Override public void onTool(String name, String result) {
+                handler.post(() -> responseView.setText("\u26A1 " + name));
+            }
+            @Override public void onReply(String reply) {
+                handler.post(() -> {
+                    responseView.setText(reply.substring(0, Math.min(200, reply.length())));
+                    responseView.setTextColor(0xFFcccccc);
+                });
+            }
+            @Override public void onError(String err) {
+                handler.post(() -> { responseView.setText("err: " + err); responseView.setTextColor(0xFFcc4444); });
+            }
+        });
+    }
+
+    // \u2500\u2500 Drag logic (works for both bubble and panel header) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    /**
+     * KEY FIX: Use raw screen coords (getRawX/getRawY) not view-relative coords.
+     * Both bubble and panel use this same method.
+     * onTap callback fires only if movement < 15dp (it was a tap, not a drag).
+     */
+    private void setDraggable(View view, WindowManager.LayoutParams lp, Runnable onTap) {
+        final float[] downRawX = {0}, downRawY = {0};
+        final int[]   downLpX  = {0}, downLpY  = {0};
+        final boolean[] dragged = {false};
 
         view.setOnTouchListener((v, event) -> {
-            switch (event.getAction()) {
+            switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    ix[0] = lp.x; iy[0] = lp.y;
-                    tx[0] = event.getRawX(); ty[0] = event.getRawY();
-                    downTime[0] = System.currentTimeMillis();
+                    downRawX[0] = event.getRawX();
+                    downRawY[0] = event.getRawY();
+                    downLpX[0]  = lp.x;
+                    downLpY[0]  = lp.y;
+                    dragged[0]  = false;
                     return true;
 
                 case MotionEvent.ACTION_MOVE:
-                    lp.x = ix[0] + (int)(event.getRawX() - tx[0]);
-                    lp.y = iy[0] + (int)(event.getRawY() - ty[0]);
-                    try {
-                        View target = isBubble ? bubbleView : panelView;
+                    float dx = event.getRawX() - downRawX[0];
+                    float dy = event.getRawY() - downRawY[0];
+                    if (Math.abs(dx) > dp(3) || Math.abs(dy) > dp(3)) {
+                        dragged[0] = true;
+                    }
+                    if (dragged[0]) {
+                        lp.x = downLpX[0] + (int) dx;
+                        lp.y = downLpY[0] + (int) dy;
+                        View target = (lp == bubbleLP) ? bubbleView : panelView;
                         if (target != null && target.isAttachedToWindow()) {
-                            wm.updateViewLayout(target, lp);
+                            try { wm.updateViewLayout(target, lp); }
+                            catch (Exception ignored) {}
                         }
-                    } catch (Exception ignored) {}
+                    }
                     return true;
 
                 case MotionEvent.ACTION_UP:
-                    long elapsed = System.currentTimeMillis() - downTime[0];
-                    float dx = Math.abs(event.getRawX() - tx[0]);
-                    float dy = Math.abs(event.getRawY() - ty[0]);
-                    if (isBubble && elapsed < 250 && dx < 12 && dy < 12) {
-                        // Tap on bubble = toggle panel
-                        if (expanded) collapsePanel(); else expandPanel();
+                    if (!dragged[0] && onTap != null) {
+                        onTap.run();
                     }
                     return true;
             }
@@ -295,38 +343,10 @@ public class FloatingWindowService extends Service {
         });
     }
 
-    // -- Show / Hide -----------------------------------------------------------
-
-    private void expandPanel() {
-        if (expanded) return;
-        try {
-            // Hide bubble while panel is open
-            bubbleView.setVisibility(View.GONE);
-            wm.addView(panelView, panelLP);
-            expanded = true;
-        } catch (Exception e) {
-            Log.e("FloatingWin", "expandPanel: " + e.getMessage());
-        }
+    private void removeSafely(View v) {
+        try { if (v != null && v.isAttachedToWindow()) wm.removeView(v); }
+        catch (Exception ignored) {}
     }
-
-    private void collapsePanel() {
-        if (!expanded) return;
-        try {
-            wm.removeView(panelView);
-            expanded = false;
-        } catch (Exception ignored) {}
-        // Restore bubble
-        if (bubbleView != null) bubbleView.setVisibility(View.VISIBLE);
-    }
-
-    @Override
-    public void onDestroy() {
-        collapsePanel();
-        try { if (bubbleView != null) wm.removeView(bubbleView); } catch (Exception ignored) {}
-        super.onDestroy();
-    }
-
-    @Override public IBinder onBind(Intent intent) { return null; }
 
     private int dp(int dp) {
         return (int)(dp * getResources().getDisplayMetrics().density);

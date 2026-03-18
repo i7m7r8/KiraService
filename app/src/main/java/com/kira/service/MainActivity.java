@@ -253,6 +253,13 @@ public class MainActivity extends Activity {
         if (settingVision != null) settingVision.setOnClickListener(v ->
             editSetting("Vision Model", cfg.visionModel, false, val -> { cfg.visionModel = val; cfg.save(this); if (visionHint != null) visionHint.setText(val.isEmpty() ? "not set" : val); }));
 
+
+        View settingNotifListener = settingsFragment.findViewById(R.id.settingNotifListener);
+        if (settingNotifListener != null) settingNotifListener.setOnClickListener(v -> {
+            android.content.Intent ni = new android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS");
+            startActivity(ni);
+        });
+
         settingsFragment.findViewById(R.id.settingAccessibility).setOnClickListener(v ->
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         shizukuStatus.setOnClickListener(v -> checkShizuku());
@@ -320,7 +327,7 @@ public class MainActivity extends Activity {
         conversation.add(userTurn);
         addUserBubble(userTurn);
 
-        headerSubtitle.setText("thinking...");
+        headerSubtitle.setText("\u23F3 thinking...");
         sendBtn.setEnabled(false);
 
         // Thinking placeholder
@@ -436,8 +443,8 @@ public class MainActivity extends Activity {
         label.setPadding(0, 0, 0, dp(3));
 
         TextView msg = new TextView(this);
-        msg.setText("???");
-        msg.setTextColor(0xFF555555);
+        msg.setText("\u23F3 thinking...");
+        msg.setTextColor(0xFF888888);
         msg.setTextSize(14);
         msg.setTag("thinking_msg");
 
@@ -1014,7 +1021,7 @@ public class MainActivity extends Activity {
         int color = ok ? 0xFF00cc66 : (installed ? 0xFFffaa00 : 0xFFcc4444);
         shizukuStatusTitle.setText(title);
         shizukuStatusTitle.setTextColor(color);
-        shizukuStatusIcon.setText(ok ? "?" : (installed ? "!" : "?"));
+        shizukuStatusIcon.setText(ok ? "\u2714" : (installed ? "\u26A0" : "\u2718"));
         shizukuStatusIcon.setTextColor(color);
         shizukuStatus.setBackgroundColor(ok ? 0xFF0a1a0a : (installed ? 0xFF1a1200 : 0xFF1a0a0a));
     }

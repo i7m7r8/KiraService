@@ -386,6 +386,23 @@ public class MainActivity extends Activity {
         suggestionsScroll.setVisibility(View.GONE);
 
         // Agent mode: prefix with /agent or /auto
+        if (text.startsWith("/kb ")) {
+            String query = text.substring(4).trim();
+            new Thread(() -> { String d = fetchRust("http://localhost:7070/kb/search?q=" + java.net.URLEncoder.encode(query)); uiHandler.post(() -> addSystemNotice("KB: " + d)); }).start();
+            return;
+        }
+        if (text.equals("/events")) {
+            new Thread(() -> { String d = fetchRust("http://localhost:7070/events"); uiHandler.post(() -> addSystemNotice("Events: " + d)); }).start();
+            return;
+        }
+        if (text.equals("/metrics")) {
+            new Thread(() -> { String d = fetchRust("http://localhost:7070/metrics"); uiHandler.post(() -> addSystemNotice(d)); }).start();
+            return;
+        }
+        if (text.equals("/budget")) {
+            new Thread(() -> { String d = fetchRust("http://localhost:7070/budget"); uiHandler.post(() -> addSystemNotice("Budget: " + d)); }).start();
+            return;
+        }
         if (text.startsWith("/workflow ") || text.equals("/workflows")) {
             if (text.equals("/workflows")) {
                 new Thread(() -> { String list = new com.kira.service.ai.KiraWorkflow(this).listJson(); uiHandler.post(() -> addSystemNotice("Workflows: " + list)); }).start();
@@ -833,6 +850,29 @@ public class MainActivity extends Activity {
         scrollToBottom();
     }
 
+    private void showProviderPicker() {
+        String[] ps = {"groq","openai","anthropic","gemini","deepseek","openrouter","ollama","together","mistral","cohere","perplexity","xai","cerebras","fireworks","sambanova","novita","custom"};
+        new android.app.AlertDialog.Builder(this).setTitle("Select AI Provider").setItems(ps, (d,w) -> {
+            final String pid = ps[w];
+            new Thread(() -> { try { String b2 = "{\"id\":\""+pid+"\"}";
+                new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/providers/set").post(okhttp3.RequestBody.create(b2,okhttp3.MediaType.parse("application/json"))).build()).execute();
+                uiHandler.post(() -> { if(providerHint!=null)providerHint.setText(pid+" (active)"); }); } catch(Exception ignored){} }).start();
+        }).show();
+    }
+
+    private String fetchRust(String url) {
+        try { return new okhttp3.OkHttpClient.Builder().connectTimeout(3,java.util.concurrent.TimeUnit.SECONDS).readTimeout(5,java.util.concurrent.TimeUnit.SECONDS).build().newCall(new okhttp3.Request.Builder().url(url).build()).execute().body().string(); }
+        catch(Exception e) { return "offline: "+e.getMessage(); }
+    }
+
+    private void showInfoDialog(String title, String msg) {
+        uiHandler.post(() -> new android.app.AlertDialog.Builder(this).setTitle(title).setMessage(msg.length()>3000?msg.substring(0,3000)+"...":msg).setPositiveButton("OK",null).show());
+    }
+
+    private void showConfirmDialog(String msg, Runnable action) {
+        new android.app.AlertDialog.Builder(this).setTitle("Confirm").setMessage(msg).setPositiveButton("Yes",(d,w)->action.run()).setNegativeButton("Cancel",null).show();
+    }
+
     private void scrollToBottom() {
         chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN));
     }
@@ -1155,34 +1195,7 @@ public class MainActivity extends Activity {
         b.show();
     }
 
-    // -- First setup -----------------------------------------------------------
-
-    private void showFirstSetup() {
-        setContentView(R.layout.activity_setup);
-        EditText nameF  = findViewById(R.id.setupName);
-        EditText keyF   = findViewById(R.id.setupApiKey);
-        EditText urlF   = findViewById(R.id.setupBaseUrl);
-        EditText modelF = findViewById(R.id.setupModel);
-        EditText tgTF   = findViewById(R.id.setupTgToken);
-        EditText tgIF   = findViewById(R.id.setupTgId);
-        android.widget.Button saveBtn = findViewById(R.id.setupSave);
-        urlF.setText("https://api.groq.com/openai/v1");
-        modelF.setText("llama-3.1-8b-instant");
-        saveBtn.setOnClickListener(v -> {
-            KiraConfig c = new KiraConfig();
-            c.userName  = nameF.getText().toString().trim();
-            c.apiKey    = keyF.getText().toString().trim();
-            c.baseUrl   = urlF.getText().toString().trim();
-            c.model     = modelF.getText().toString().trim();
-            c.tgToken   = tgTF.getText().toString().trim();
-            String tid  = tgIF.getText().toString().trim();
-            c.tgAllowed = tid.isEmpty() ? 0 : Long.parseLong(tid);
-            c.setupDone = true;
-            if (c.userName.isEmpty()) { nameF.setError("required"); return; }
-            if (c.apiKey.isEmpty())   { keyF.setError("required"); return; }
-            c.save(this); recreate();
-        });
-    }
+    // Setup handled by SetupActivity
 
     // -- Helpers ---------------------------------------------------------------
 

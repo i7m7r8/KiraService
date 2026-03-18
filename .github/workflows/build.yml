@@ -63,11 +63,18 @@ jobs:
       - name: List Rust libs
         run: find app/src/main/rust-libs -name "*.so" -exec ls -lh {} \;
 
+      - name: Setup Gradle 8.4
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Build APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

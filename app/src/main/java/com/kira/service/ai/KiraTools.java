@@ -214,9 +214,24 @@ public class KiraTools {
                 case "agent_handoff":  { String to = args.optString("to","main"); String msg = args.getString("message"); com.kira.service.RustBridge.pushContextTurn("system","handoff->"+to+": "+msg); return "handed off to " + to; }
                 case "post_skill":     { com.kira.service.RustBridge.registerSkill(args.getString("name"),args.optString("description",""),args.optString("trigger",""),args.getString("content")); return "skill registered: " + args.getString("name"); }
                 case "list_skills":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/skills").build()).execute().body().string(); } catch(Exception e){ return "error: "+e.getMessage(); } }
+
+                // NanoClaw: Checkpoints
+                case "save_checkpoint": { new KiraCheckpoint(ctx).save(args.optString("id","task_"+System.currentTimeMillis()), args.optInt("step",0), args.optString("state",""), args.optString("goal","")); return "checkpoint saved"; }
+                case "list_checkpoints":{ return new KiraCheckpoint(ctx).getAllJson(); }
+                case "resume_task":     { org.json.JSONObject cp = new KiraCheckpoint(ctx).get(args.getString("id")); return cp != null ? "Resume from step " + cp.optInt("step") + ": " + cp.optString("goal") : "checkpoint not found"; }
+                // ZeroClaw: Provider switching
+                case "switch_provider": { try { String pid=args.getString("id"); new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/providers/set").post(okhttp3.RequestBody.create("{\"id\":\""+pid+"\"}",okhttp3.MediaType.parse("application/json"))).build()).execute(); return "switched to provider: "+pid; } catch(Exception e){ return "error: "+e.getMessage(); } }
+                case "list_providers":  { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/providers").build()).execute().body().string(); } catch(Exception e){ return "error"; } }
+                // OpenClaw: Custom skill registration
+                case "register_skill":  { new KiraSkillEngine(ctx).registerCustomSkill(args.getString("name"), args.getString("trigger"), args.getString("content")); return "skill registered: " + args.getString("name"); }
+                // OpenClaw: SOUL.md - agent identity
+                case "set_persona":     { com.kira.service.RustBridge.pushContextTurn("system","[PERSONA] " + args.getString("persona")); return "persona updated"; }
+                // ZeroClaw: Agent handoff
+                case "handoff":         { new KiraCheckpoint(ctx).sendHandoff(args.optString("to","main"), args.getString("message"), args.optString("context","")); return "handoff sent"; }
+                case "check_handoffs":  { java.util.List<org.json.JSONObject> hs = new KiraCheckpoint(ctx).getUnreadHandoffs(args.optString("session","main")); return hs.isEmpty() ? "no handoffs" : hs.toString(); }
+
                 // NanoClaw: Session management
                 case "new_session":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/sessions/new").post(okhttp3.RequestBody.create(args.toString(),okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error: "+e.getMessage(); } }
-                case "save_checkpoint":{ com.kira.service.RustBridge.logTaskStep("checkpoint_"+System.currentTimeMillis(),0,args.getString("id"),args.getString("data"),true); return "checkpoint saved"; }
                 // AndyClaw: Policy
                 case "allow_tool":     { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/policy/allow").post(okhttp3.RequestBody.create("{\"tool\":\""+args.getString("tool")+"\"}",okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error"; } }
                 case "deny_tool":      { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/policy/deny").post(okhttp3.RequestBody.create("{\"tool\":\""+args.getString("tool")+"\"}",okhttp3.MediaType.parse("application/json"))).build()).execute().body().string(); } catch(Exception e){ return "error"; } }

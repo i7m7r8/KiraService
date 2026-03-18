@@ -11,7 +11,7 @@ android {
         minSdk 26
         targetSdk 34
         // Auto-increment: minutes since 2024-01-01 (always increases, fixes reinstall conflict)
-        versionCode (int)((new Date().time - 1704067200000L) / 60000L)
+        versionCode (int)((System.currentTimeMillis() - 1704067200000L) / 60000L)
         versionName "7.0.0"
         ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         externalNativeBuild { cmake { cppFlags "" } }

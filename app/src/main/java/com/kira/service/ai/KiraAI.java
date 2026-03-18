@@ -36,6 +36,8 @@ public class KiraAI {
     public KiraAI(Context ctx) {
         this.ctx    = ctx.getApplicationContext();
         this.memory = new KiraMemory(ctx);
+        this.skillEngine = new KiraSkillEngine(ctx);
+        skillEngine.loadCustomSkillsFromMemory();
         this.tools  = new KiraTools(ctx);
         restoreHistory(); // load previous conversations on startup
     }
@@ -58,6 +60,38 @@ public class KiraAI {
     }
 
     // -- Main chat -------------------------------------------------------------
+
+
+    /**
+     * ZeroClaw: Get active provider base URL and model.
+     * Falls back to config if Rust server isn't running.
+     */
+    private String[] getActiveProvider() {
+        try {
+            okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build();
+            okhttp3.Response resp = client.newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070/providers").build()
+            ).execute();
+            if (resp.body() != null) {
+                org.json.JSONArray providers = new org.json.JSONArray(resp.body().string());
+                for (int i = 0; i < providers.length(); i++) {
+                    org.json.JSONObject p = providers.getJSONObject(i);
+                    if (p.optBoolean("active", false)) {
+                        String baseUrl = p.optString("base_url", "");
+                        String model   = p.optString("model", "");
+                        if (!baseUrl.isEmpty()) return new String[]{baseUrl, model};
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        // Fallback to config
+        KiraConfig cfg = KiraConfig.load(ctx);
+        return new String[]{
+            cfg.baseUrl.isEmpty() ? "https://api.groq.com/openai/v1" : cfg.baseUrl,
+            cfg.model.isEmpty()   ? "llama-3.1-8b-instant" : cfg.model
+        };
+    }
 
     public void chat(String userMessage, Callback cb) {
         new Thread(() -> {

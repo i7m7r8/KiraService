@@ -1,6 +1,6 @@
 [package]
 name = "kira-core"
-version = "7.0.0"
+version = "9.0.0"
 edition = "2021"
 
 [lib]
@@ -8,20 +8,16 @@ name = "kira_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-# Core
 lazy_static  = "1.4"
 serde        = { version = "1", features = ["derive"] }
 serde_json   = "1"
 
-# Crypto (ZeroClaw: encrypted key storage)
-# Use pure-Rust so no C deps needed for Android cross-compile
-
 [profile.release]
-opt-level   = "z"   # ZeroClaw: minimize binary size
-lto         = true
+opt-level     = "z"
+lto           = true
 codegen-units = 1
-panic       = "abort"
-strip       = true
+panic         = "abort"
+strip         = true
 
 [profile.dev]
-opt-level   = 1
+opt-level = 1

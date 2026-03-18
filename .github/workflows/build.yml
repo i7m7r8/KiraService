@@ -1,4 +1,4 @@
-name: Build Kira APK
+name: Build Kira v40 APK
 
 on:
   push:
@@ -53,42 +53,65 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
 
-      - name: Install Gradle 8.4
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /opt
-          echo "/opt/gradle-8.4/bin" >> $GITHUB_PATH
+      - name: List rust-libs (debug)
+        run: find app/src/main/rust-libs -type f | sort
 
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build APK
-        run: gradle assembleRelease --stacktrace
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx2g"
 
-      - name: Upload APK
+      - name: Build Release APK (unsigned)
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx2g"
+
+      - name: List APK outputs (debug)
+        run: find app/build/outputs/apk -type f | sort
+
+      - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kira-APK
-          path: app/build/outputs/apk/debug/app-release-unsigned.apk
+          name: Kira-v40-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload Release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kira-v40-release-unsigned
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 30
 
       - name: Get timestamp
         id: ts
         run: echo "TS=$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.ts.outputs.TS }}
-          name: Kira v${{ steps.ts.outputs.TS }}
+          tag_name: v40-${{ steps.ts.outputs.TS }}
+          name: Kira v40 — ${{ steps.ts.outputs.TS }}
           body: |
-            ## Kira v3 — Full AI Agent (no Termux)
-            - Real Shizuku integration
-            - Smart app opening (youtube, whatsapp, etc.)
-            - Resendable conversation history
-            - 50+ tools
-          files: app/build/outputs/apk/debug/app-release-unsigned.apk
+            ## Kira v40 — Full AI Automation Agent
+
+            ### What's new in v40
+            - **Tasker/MacroDroid-equivalent automation engine** (pure Rust)
+              - IF/THEN/ELSE macro chains with 40+ trigger types
+              - 60+ action types: HTTP, shell, media, torch, TTS, brightness, open app...
+              - Variable engine with math/string expressions
+              - Named profiles: Work / Home / Sleep / Car with auto-switch
+              - Flow control: loops, delays, condition branches
+            - Rust automation engine v9 (all v39 features preserved)
+
+            ### Installation
+            Install **app-debug.apk** (no signing required).
+            Enable "Install from unknown sources" in Android settings.
+          files: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release-unsigned.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

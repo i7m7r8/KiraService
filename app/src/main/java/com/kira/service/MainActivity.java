@@ -287,8 +287,31 @@ public class MainActivity extends Activity
         View cardAcc2    = settingsFragment.findViewById(R.id.cardAccessibility);
         View cardNotif   = settingsFragment.findViewById(R.id.cardNotifListener);
         if (cardShizuku != null) cardShizuku.setOnClickListener(v -> {
-            try { startActivity(new android.content.Intent("rikka.shizuku.action.REQUEST_PERMISSION")); }
-            catch (Exception e) { android.widget.Toast.makeText(this,"Install Shizuku from Play Store",android.widget.Toast.LENGTH_SHORT).show(); }
+            boolean permOk   = ShizukuShell.isAvailable();
+            boolean binderUp = ShizukuShell.isInstalled();
+            boolean apkEx    = ShizukuShell.isApkInstalled(this);
+            if (permOk) {
+                // Already active — show status
+                android.widget.Toast.makeText(this, "Shizuku god mode active ✓", android.widget.Toast.LENGTH_SHORT).show();
+            } else if (binderUp) {
+                // Running but no permission — request it
+                ShizukuShell.requestPermission(SHIZUKU_CODE);
+            } else if (apkEx) {
+                // Installed but not running — open Shizuku to start it
+                try {
+                    android.content.Intent i = getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api");
+                    if (i != null) { i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); }
+                    else android.widget.Toast.makeText(this, "Open Shizuku app and tap Start", android.widget.Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    android.widget.Toast.makeText(this, "Open Shizuku app and tap Start", android.widget.Toast.LENGTH_LONG).show();
+                }
+            } else {
+                // Not installed — go to Play Store
+                try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("market://details?id=moe.shizuku.privileged.api"))); }
+                catch (Exception e) { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://shizuku.rikka.app"))); }
+            }
         });
         if (cardAcc2  != null) cardAcc2.setOnClickListener(v -> startActivity(new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         if (cardNotif != null) cardNotif.setOnClickListener(v -> startActivity(new android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")));
@@ -384,9 +407,12 @@ public class MainActivity extends Activity
         settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            navIcons[i].setTextColor(on ? 0xFFDC143C : 0xFF333355);
-            navTexts[i].setTextColor(on ? 0xFFDC143C : 0xFF333355);
-            navItems[i].setBackgroundColor(on ? 0xFF1a0008 : 0x00000000);
+            int activeColor = 0xFFDC143C;
+            int idleColor   = 0xFF222233;
+            navIcons[i].setTextColor(on ? activeColor : idleColor);
+            navTexts[i].setTextColor(on ? activeColor : idleColor);
+            // Active tab: subtle crimson underline via background
+            navItems[i].setBackgroundColor(on ? 0x15DC143C : 0x00000000);
         }
         if (tab == 2) refreshHistory();
         if (tab == 3) updateSettingsUI();
@@ -534,7 +560,7 @@ public class MainActivity extends Activity
         msg.setText(turn.text);
         msg.setTextColor(0xFFdddddd);
         msg.setTextSize(14);
-        msg.setBackgroundColor(0xBB1a1a2e);
+        msg.setBackgroundColor(0xAA0a0a1a);
         msg.setPadding(dp(14), dp(10), dp(14), dp(10));
         msg.setLineSpacing(dp(2), 1);
         msg.setTextIsSelectable(true);
@@ -634,7 +660,7 @@ public class MainActivity extends Activity
             msg.setText(turn.text);
             msg.setTextColor(0xFFeeeeee);
             msg.setTextSize(14);
-            msg.setBackgroundColor(0xAA0e0e1a);
+            msg.setBackgroundColor(0x880e0e18);
             msg.setPadding(dp(14), dp(10), dp(14), dp(10));
             msg.setLineSpacing(dp(2), 1);
             msg.setTextIsSelectable(true);
@@ -1052,12 +1078,127 @@ public class MainActivity extends Activity
         } catch(Exception e) { return "(unavailable)"; }
     }
 
+    /** Custom Kira info dialog — no stock Android chrome */
     private void showInfoDialog(String title, String msg) {
-        uiHandler.post(() -> new android.app.AlertDialog.Builder(this).setTitle(title).setMessage(msg.length()>3000?msg.substring(0,3000)+"...":msg).setPositiveButton("OK",null).show());
+        uiHandler.post(() -> showKiraDialog(title, msg.length() > 3000 ? msg.substring(0, 3000) + "…" : msg, "OK", "CLOSE", null));
     }
 
     private void showConfirmDialog(String msg, Runnable action) {
-        new android.app.AlertDialog.Builder(this).setTitle("Confirm").setMessage(msg).setPositiveButton("Yes",(d,w)->action.run()).setNegativeButton("Cancel",null).show();
+        showKiraDialog("Confirm", msg, "YES", "CANCEL", action);
+    }
+
+    private void showKiraDialog(String title, String msg, String posLabel, String negLabel, Runnable posAction) {
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xBB000000);
+        overlay.setLayoutParams(new android.widget.FrameLayout.LayoutParams(MATCH, MATCH));
+
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(0xFF0c0c18);
+        cardBg.setCornerRadius(dp(4));
+        cardBg.setStroke(dp(1), 0xFF1a1a2e);
+        card.setBackground(cardBg);
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.88f), WRAP);
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Accent bar
+        android.view.View bar = new android.view.View(this);
+        bar.setBackgroundColor(0xFFDC143C);
+        bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(bar);
+
+        // Title
+        android.widget.TextView titleTv = new android.widget.TextView(this);
+        titleTv.setText(title);
+        titleTv.setTextColor(0xFFFFFFFF);
+        titleTv.setTextSize(14);
+        titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        android.widget.LinearLayout.LayoutParams ttLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        ttLp.setMargins(dp(18), dp(14), dp(18), dp(8));
+        titleTv.setLayoutParams(ttLp);
+        card.addView(titleTv);
+
+        // Separator
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(0xFF111122);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Message (scrollable for long content)
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        android.widget.LinearLayout.LayoutParams svLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        svLp.setMargins(0, 0, 0, 0);
+        sv.setLayoutParams(svLp);
+        // constrain via LayoutParams
+        svLp.height = dp(300); svLp.weight = 0;
+
+        android.widget.TextView msgTv = new android.widget.TextView(this);
+        msgTv.setText(msg);
+        msgTv.setTextColor(0xFF8888AA);
+        msgTv.setTextSize(12);
+        msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        msgTv.setLineSpacing(dp(2), 1);
+        android.widget.LinearLayout.LayoutParams msgLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        msgLp.setMargins(dp(18), dp(12), dp(18), dp(14));
+        msgTv.setLayoutParams(msgLp);
+        sv.addView(msgTv);
+        card.addView(sv);
+
+        // Button row
+        android.view.View btnSep = new android.view.View(this);
+        btnSep.setBackgroundColor(0xFF0e0e1e);
+        btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(btnSep);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        btnRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(48)));
+
+        android.widget.TextView negBtn = new android.widget.TextView(this);
+        negBtn.setText(negLabel);
+        negBtn.setTextColor(0xFF333355);
+        negBtn.setTextSize(11);
+        negBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        negBtn.setGravity(android.view.Gravity.CENTER);
+        negBtn.setClickable(true); negBtn.setFocusable(true);
+        negBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        android.view.View bd = new android.view.View(this);
+        bd.setBackgroundColor(0xFF0e0e1e);
+        bd.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
+
+        android.widget.TextView posBtn = new android.widget.TextView(this);
+        posBtn.setText(posLabel);
+        posBtn.setTextColor(0xFFDC143C);
+        posBtn.setTextSize(11);
+        posBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        posBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        posBtn.setGravity(android.view.Gravity.CENTER);
+        posBtn.setClickable(true); posBtn.setFocusable(true);
+        posBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        btnRow.addView(negBtn);
+        btnRow.addView(bd);
+        btnRow.addView(posBtn);
+        card.addView(btnRow);
+
+        overlay.addView(card);
+
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+
+        Runnable dismiss = () -> root.removeView(overlay);
+
+        negBtn.setOnClickListener(v -> dismiss.run());
+        overlay.setOnClickListener(v -> dismiss.run());
+        card.setOnClickListener(v -> {});
+        posBtn.setOnClickListener(v -> {
+            dismiss.run();
+            if (posAction != null) posAction.run();
+        });
     }
 
     private void scrollToBottom() {
@@ -1087,10 +1228,15 @@ public class MainActivity extends Activity
         for (String[] item : s) {
             TextView chip = new TextView(this);
             chip.setText(item[0]);
-            chip.setTextSize(12);
-            chip.setTextColor(0xFFcccccc);
-            chip.setBackgroundColor(0x990D0D1A);
-            chip.setPadding(dp(12), dp(7), dp(12), dp(7));
+            chip.setTextSize(11);
+            chip.setTextColor(0xFF8888AA);
+            chip.setTypeface(android.graphics.Typeface.MONOSPACE);
+            android.graphics.drawable.GradientDrawable chipBg = new android.graphics.drawable.GradientDrawable();
+            chipBg.setColor(0xAA080814);
+            chipBg.setCornerRadius(dp(2));
+            chipBg.setStroke(dp(1), 0xFF111130);
+            chip.setBackground(chipBg);
+            chip.setPadding(dp(10), dp(6), dp(10), dp(6));
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
             p.setMargins(0, 0, dp(8), 0);
             chip.setLayoutParams(p);
@@ -1126,8 +1272,13 @@ public class MainActivity extends Activity
         for (Object[] t : tools) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setBackgroundColor(0x991a1a2a);
+            android.graphics.drawable.GradientDrawable rowBg = new android.graphics.drawable.GradientDrawable();
+            rowBg.setColor(0xAA060610);
+            rowBg.setCornerRadius(0);
+            row.setBackground(rowBg);
             row.setPadding(dp(14), dp(12), dp(14), dp(12));
+            // Left accent bar via start padding — fake left border
+            row.setPadding(dp(12), dp(10), dp(14), dp(10));
             LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(MATCH, WRAP);
             rp.setMargins(0, 0, 0, dp(2));
             row.setLayoutParams(rp);
@@ -1145,7 +1296,7 @@ public class MainActivity extends Activity
             info.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
             TextView name = new TextView(this); name.setText((String)t[1]);
-            name.setTextColor(0xFFffffff); name.setTextSize(13);
+            name.setTextColor(0xFFCCCCDD); name.setTextSize(12);
             name.setTypeface(android.graphics.Typeface.MONOSPACE);
 
             TextView desc = new TextView(this); desc.setText((String)t[2]);
@@ -1181,7 +1332,10 @@ public class MainActivity extends Activity
 
                 LinearLayout card = new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
-                card.setBackgroundColor(0xBB0e0e1e);
+                android.graphics.drawable.GradientDrawable histBg = new android.graphics.drawable.GradientDrawable();
+                histBg.setColor(0xAA060610);
+                histBg.setStroke(dp(1), 0xFF0e0e22);
+                card.setBackground(histBg);
                 card.setPadding(dp(14), dp(12), dp(14), dp(12));
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cp.setMargins(0, 0, 0, dp(8));
@@ -1351,15 +1505,31 @@ public class MainActivity extends Activity
 
     private void updateShizukuStatus() {
         if (shizukuStatusTitle == null) return;
-        boolean ok = ShizukuShell.isAvailable();
-        boolean installed = ShizukuShell.isInstalled();
-        String title = ok ? "Shizuku ? God Mode Active" : (installed ? "Shizuku ? Permission Needed (tap)" : "Shizuku ? Not Running (tap)");
-        int color = ok ? 0xFFDC143C : (installed ? 0xFFffaa00 : 0xFFcc4444);
+        boolean permOk    = ShizukuShell.isAvailable();        // binder alive + permission granted
+        boolean binderUp  = ShizukuShell.isInstalled();        // binder alive (no permission yet)
+        boolean apkExists = ShizukuShell.isApkInstalled(this); // APK installed on device
+
+        String title; int color; String icon; int bg;
+        if (permOk) {
+            title = "Shizuku ✓  god mode active";
+            color = 0xFFDC143C; icon = "✓"; bg = 0xFF080f08;
+        } else if (binderUp) {
+            title = "Shizuku running  —  tap to grant permission";
+            color = 0xFFffaa00; icon = "!"; bg = 0xFF0f0c00;
+        } else if (apkExists) {
+            title = "Shizuku installed  —  tap to start service";
+            color = 0xFFffaa00; icon = "▶"; bg = 0xFF0f0c00;
+        } else {
+            title = "Shizuku not installed  —  tap to get it";
+            color = 0xFF555566; icon = "↓"; bg = 0xFF0a0a14;
+        }
         shizukuStatusTitle.setText(title);
         shizukuStatusTitle.setTextColor(color);
-        shizukuStatusIcon.setText(ok ? "?" : (installed ? "!" : "?"));
+        shizukuStatusIcon.setText(icon);
         shizukuStatusIcon.setTextColor(color);
-        if (shizukuStatus != null) shizukuStatus.setBackgroundColor(ok ? 0xFF0a1a0a : (installed ? 0xFF1a1200 : 0xFF1a0a0a));
+        if (shizukuStatus != null) shizukuStatus.setBackgroundColor(bg);
+        // Sync to Rust state
+        try { RustBridge.updateShizukuStatus(binderUp, permOk, ""); } catch (Exception ignored) {}
     }
 
     private void toggleFloating() {
@@ -1393,21 +1563,161 @@ public class MainActivity extends Activity
 
     interface StringCallback { void onResult(String v); }
 
+    /**
+     * Modern Kira dialog — replaces stock Android AlertDialog.
+     * Dark obsidian panel, crimson accent bar, styled EditText.
+     */
     private void editSetting(String title, String current, boolean numeric, StringCallback cb) {
-        AlertDialog.Builder b = new AlertDialog.Builder(this);
-        b.setTitle(title);
-        EditText et = new EditText(this);
+        // Full-screen dim overlay
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xBB000000);
+        android.widget.FrameLayout.LayoutParams ovLp = new android.widget.FrameLayout.LayoutParams(MATCH, MATCH);
+        overlay.setLayoutParams(ovLp);
+
+        // Card panel
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(0xFF0c0c18);
+        cardBg.setCornerRadius(dp(4));
+        cardBg.setStroke(dp(1), 0xFF1a1a2e);
+        card.setBackground(cardBg);
+
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.88f), WRAP);
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Top accent bar (crimson line)
+        android.view.View accentBar = new android.view.View(this);
+        accentBar.setBackgroundColor(0xFFDC143C);
+        accentBar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(accentBar);
+
+        // Title row
+        android.widget.LinearLayout titleRow = new android.widget.LinearLayout(this);
+        titleRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        titleRow.setPadding(dp(20), dp(16), dp(20), dp(12));
+
+        android.widget.TextView titleTv = new android.widget.TextView(this);
+        titleTv.setText(title);
+        titleTv.setTextColor(0xFFFFFFFF);
+        titleTv.setTextSize(15);
+        titleTv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
+        titleRow.addView(titleTv);
+
+        // Small K monogram
+        android.widget.TextView kMono = new android.widget.TextView(this);
+        kMono.setText("K");
+        kMono.setTextColor(0x44DC143C);
+        kMono.setTextSize(22);
+        kMono.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        titleRow.addView(kMono);
+        card.addView(titleRow);
+
+        // Separator
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(0xFF111122);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Input field
+        android.widget.EditText et = new android.widget.EditText(this);
         et.setText(current);
-        et.setTextColor(0xFFffffff);
-        if (numeric) et.setInputType(InputType.TYPE_CLASS_NUMBER);
-        LinearLayout w = new LinearLayout(this);
-        w.setPadding(dp(48), dp(16), dp(48), 0);
-        w.addView(et);
-        b.setView(w);
-        b.setPositiveButton("Save", (d, x) -> cb.onResult(et.getText().toString().trim()));
-        b.setNegativeButton("Cancel", null);
-        b.show();
+        et.setTextColor(0xFFFFFFFF);
+        et.setHintTextColor(0xFF333355);
+        et.setTextSize(15);
+        et.setTypeface(android.graphics.Typeface.MONOSPACE);
+        et.setSingleLine(!numeric);
+        et.setMaxLines(numeric ? 1 : 3);
+        android.graphics.drawable.GradientDrawable inputBg = new android.graphics.drawable.GradientDrawable();
+        inputBg.setColor(0xFF080814);
+        inputBg.setCornerRadius(dp(3));
+        inputBg.setStroke(dp(1), 0xFF1e1e3a);
+        et.setBackground(inputBg);
+        et.setPadding(dp(14), dp(12), dp(14), dp(12));
+        et.setInputType(numeric
+            ? android.text.InputType.TYPE_CLASS_NUMBER
+            : (android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));
+        android.widget.LinearLayout.LayoutParams etLp =
+            new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        etLp.setMargins(dp(16), dp(14), dp(16), dp(16));
+        et.setLayoutParams(etLp);
+        card.addView(et);
+
+        // Button row
+        android.view.View btnSep = new android.view.View(this);
+        btnSep.setBackgroundColor(0xFF0e0e1e);
+        btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(btnSep);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        btnRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(52)));
+
+        android.widget.TextView cancelBtn = new android.widget.TextView(this);
+        cancelBtn.setText("CANCEL");
+        cancelBtn.setTextColor(0xFF444466);
+        cancelBtn.setTextSize(12);
+        cancelBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        cancelBtn.setGravity(android.view.Gravity.CENTER);
+        cancelBtn.setClickable(true); cancelBtn.setFocusable(true);
+        cancelBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        android.view.View btnDivider = new android.view.View(this);
+        btnDivider.setBackgroundColor(0xFF0e0e1e);
+        btnDivider.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
+
+        android.widget.TextView saveBtn = new android.widget.TextView(this);
+        saveBtn.setText("SAVE");
+        saveBtn.setTextColor(0xFFDC143C);
+        saveBtn.setTextSize(12);
+        saveBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        saveBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        saveBtn.setGravity(android.view.Gravity.CENTER);
+        saveBtn.setClickable(true); saveBtn.setFocusable(true);
+        saveBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        btnRow.addView(cancelBtn);
+        btnRow.addView(btnDivider);
+        btnRow.addView(saveBtn);
+        card.addView(btnRow);
+
+        overlay.addView(card);
+
+        // Add overlay to window
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+
+        // Show keyboard
+        et.requestFocus();
+        uiHandler.postDelayed(() -> {
+            android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        }, 150);
+
+        // Dismiss + callbacks
+        Runnable dismiss = () -> {
+            root.removeView(overlay);
+            android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
+        };
+
+        cancelBtn.setOnClickListener(v -> dismiss.run());
+        overlay.setOnClickListener(v -> dismiss.run()); // tap outside = dismiss
+        card.setOnClickListener(v -> {}); // consume clicks so card doesn't dismiss
+
+        saveBtn.setOnClickListener(v -> {
+            String val = et.getText().toString().trim();
+            dismiss.run();
+            cb.onResult(val);
+        });
     }
+
 
     // Setup handled by SetupActivity
 

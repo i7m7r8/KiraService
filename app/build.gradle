@@ -19,7 +19,7 @@ android {
     }
     buildTypes {
         debug   { debuggable true }
-        release { minifyEnabled false; signingConfig signingConfigs.debug }
+        release { minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'); signingConfig signingConfigs.debug }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
@@ -89,5 +89,4 @@ dependencies {
     implementation 'com.google.mlkit:text-recognition:16.0.1'
 
     // Memory leak detection (debug only)
-    debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.12'
 }

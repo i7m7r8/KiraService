@@ -63,7 +63,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleRelease --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
@@ -71,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Kira-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-release-unsigned.apk
           retention-days: 30
 
       - name: Get timestamp
@@ -89,6 +89,6 @@ jobs:
             - Smart app opening (youtube, whatsapp, etc.)
             - Resendable conversation history
             - 50+ tools
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/debug/app-release-unsigned.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

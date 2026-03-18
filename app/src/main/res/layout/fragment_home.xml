@@ -1,53 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:background="#0a0a0a">
+    android:orientation="vertical"
+    android:background="#00000000">
 
+    <!-- Kira header - neon glow title -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="vertical" android:paddingStart="20dp" android:paddingEnd="20dp"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingStart="20dp" android:paddingEnd="16dp"
         android:paddingTop="20dp" android:paddingBottom="8dp">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Kira" android:textSize="32sp" android:textStyle="bold"
-            android:textColor="#ff8c00"/>
-        <TextView android:id="@+id/headerSubtitle" android:layout_width="wrap_content"
-            android:layout_height="wrap_content" android:text="ready."
-            android:textSize="14sp" android:textColor="#555555" android:layout_marginTop="2dp"/>
+
+        <!-- K logo glyph with shadow -->
+        <TextView android:layout_width="44dp" android:layout_height="44dp"
+            android:text="K" android:textSize="26sp" android:textStyle="bold"
+            android:gravity="center" android:textColor="#DC143C"
+            android:background="#1ADC143C"
+            android:shadowColor="#DC143C" android:shadowRadius="14"
+            android:shadowDx="0" android:shadowDy="0"/>
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical"
+            android:paddingStart="12dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="KIRA" android:textSize="22sp" android:textStyle="bold"
+                android:textColor="#DC143C" android:letterSpacing="0.3"
+                android:shadowColor="#DC143C" android:shadowRadius="10"
+                android:shadowDx="0" android:shadowDy="0"/>
+            <TextView android:id="@+id/headerSubtitle"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="autonomous agent / ready"
+                android:textSize="11sp" android:textColor="#55556A"/>
+        </LinearLayout>
+
+        <!-- Live status dot -->
+        <TextView android:id="@+id/statusDot"
+            android:layout_width="8dp" android:layout_height="8dp"
+            android:background="#DC143C"
+            android:shadowColor="#DC143C" android:shadowRadius="8"/>
     </LinearLayout>
 
+    <!-- Crimson divider line -->
+    <View android:layout_width="match_parent" android:layout_height="1dp"
+        android:background="#22DC143C" android:layout_marginStart="20dp" android:layout_marginEnd="20dp"/>
+
+    <!-- Chat messages -->
     <ScrollView android:id="@+id/chatScroll"
         android:layout_width="match_parent" android:layout_height="0dp"
-        android:layout_weight="1" android:paddingStart="16dp" android:paddingEnd="16dp"
-        android:clipToPadding="false">
+        android:layout_weight="1"
+        android:paddingStart="16dp" android:paddingEnd="16dp"
+        android:clipToPadding="false" android:scrollbars="none">
         <LinearLayout android:id="@+id/chatContainer"
             android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="vertical" android:paddingBottom="12dp"/>
     </ScrollView>
 
+    <!-- Quick command chips -->
     <HorizontalScrollView android:id="@+id/suggestionsScroll"
         android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:scrollbars="none" android:paddingStart="16dp" android:paddingBottom="6dp">
+        android:scrollbars="none" android:paddingStart="14dp" android:paddingBottom="6dp">
         <LinearLayout android:id="@+id/suggestionsRow"
             android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:orientation="horizontal"/>
     </HorizontalScrollView>
 
+    <!-- Input bar - frosted glass panel -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:background="#141414"
-        android:paddingStart="12dp" android:paddingEnd="12dp"
+        android:orientation="horizontal"
+        android:background="#DD0a0a14"
+        android:paddingStart="12dp" android:paddingEnd="10dp"
         android:paddingTop="8dp" android:paddingBottom="8dp"
         android:gravity="center_vertical">
+
         <EditText android:id="@+id/inputField"
-            android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-            android:hint="Tell Kira what to do... (/agent for auto-mode)"
-            android:textColor="#ffffff" android:textColorHint="#444444"
-            android:background="#1e1e1e" android:paddingStart="14dp" android:paddingEnd="14dp"
-            android:paddingTop="10dp" android:paddingBottom="10dp"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Ask Kira anything...  /agent for auto-pilot"
+            android:textColor="#FFFFFF" android:textColorHint="#33336A"
+            android:background="#1AFFFFFF"
+            android:paddingStart="16dp" android:paddingEnd="16dp"
+            android:paddingTop="11dp" android:paddingBottom="11dp"
             android:imeOptions="actionSend" android:inputType="textMultiLine"
             android:maxLines="4" android:textSize="14sp"/>
+
+        <!-- Send button - crimson neon -->
         <TextView android:id="@+id/sendBtn"
-            android:layout_width="44dp" android:layout_height="44dp"
+            android:layout_width="46dp" android:layout_height="46dp"
             android:text="&#x25B6;" android:textSize="16sp" android:gravity="center"
-            android:textColor="#000000" android:background="#ff8c00"
+            android:textColor="#FFFFFF"
+            android:background="#DC143C"
+            android:shadowColor="#DC143C" android:shadowRadius="12"
+            android:shadowDx="0" android:shadowDy="0"
             android:layout_marginStart="8dp"/>
     </LinearLayout>
 </LinearLayout>

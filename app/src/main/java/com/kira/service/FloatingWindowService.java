@@ -70,9 +70,14 @@ public class FloatingWindowService extends Service {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) nm.createNotificationChannel(
             new NotificationChannel(chId, "Kira Floating", NotificationManager.IMPORTANCE_MIN));
-        startForeground(3, new Notification.Builder(this, chId)
+        Notification notif = new Notification.Builder(this, chId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Kira overlay active").build());
+            .setContentTitle("Kira overlay active").build();
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            startForeground(3, notif, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(3, notif);
+        }
     }
 
     // \u2500\u2500 Bubble \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -80,11 +85,11 @@ public class FloatingWindowService extends Service {
         TextView bubble = new TextView(this);
         // K with orange glow
         bubble.setText("K");
-        bubble.setTextColor(0xFF000000);
+        bubble.setTextColor(0xFFFFFFFF);
         bubble.setTextSize(18);
         bubble.setGravity(Gravity.CENTER);
         bubble.setTypeface(null, android.graphics.Typeface.BOLD);
-        bubble.setBackgroundColor(0xFFff8c00);
+        bubble.setBackgroundColor(0xFFDC143C);
 
         int sz = dp(56);
         // KEY FIX: FLAG_NOT_FOCUSABLE for drag, FLAG_NOT_TOUCH_MODAL to allow touches outside
@@ -149,7 +154,7 @@ public class FloatingWindowService extends Service {
 
         TextView kiraTitle = new TextView(this);
         kiraTitle.setText("Kira");
-        kiraTitle.setTextColor(0xFFff8c00);
+        kiraTitle.setTextColor(0xFFDC143C);
         kiraTitle.setTextSize(14);
         kiraTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         kiraTitle.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -226,10 +231,10 @@ public class FloatingWindowService extends Service {
 
         TextView sendBtn = new TextView(this);
         sendBtn.setText("\u25B6"); // play
-        sendBtn.setTextColor(0xFF000000);
+        sendBtn.setTextColor(0xFFFFFFFF);
         sendBtn.setTextSize(14);
         sendBtn.setGravity(Gravity.CENTER);
-        sendBtn.setBackgroundColor(0xFFff8c00);
+        sendBtn.setBackgroundColor(0xFFDC143C);
         sendBtn.setPadding(dp(12), dp(8), dp(12), dp(8));
         sendBtn.setOnClickListener(v -> {
             String q = input.getText().toString().trim();

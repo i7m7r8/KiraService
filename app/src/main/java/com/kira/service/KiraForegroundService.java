@@ -26,7 +26,12 @@ public class KiraForegroundService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         createChannel();
-        startForeground(NOTIF_ID, buildNotification());
+        Notification kn = buildNotification();
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIF_ID, kn, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        } else {
+            startForeground(NOTIF_ID, kn);
+        }
         return START_STICKY; // restart if killed
     }
 

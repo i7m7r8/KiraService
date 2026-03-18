@@ -7,6 +7,10 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -34,7 +38,8 @@ import rikka.shizuku.Shizuku;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity
+        implements SensorEventListener {
 
     private static final int SHIZUKU_CODE    = 1001;
     private static final int PERMISSION_CODE = 1002;
@@ -51,6 +56,9 @@ public class MainActivity extends Activity {
 
     // Home
     private LinearLayout chatContainer;
+    private com.kira.service.ui.GalaxyView galaxyView;
+    private SensorManager sensorManager;
+    private Sensor accelSensor;
     private ScrollView   chatScroll;
     private EditText     inputField;
     private TextView     sendBtn, headerSubtitle;
@@ -117,6 +125,10 @@ public class MainActivity extends Activity {
         cfg = KiraConfig.load(this);
 
 
+        // Init accelerometer for star parallax
+        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        if (sensorManager != null)
+            accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         ai = new KiraAI(this);
         agent = new com.kira.service.ai.KiraAgent(this);
         chain = new com.kira.service.ai.KiraChain(this);
@@ -301,10 +313,10 @@ public class MainActivity extends Activity {
             }));
         View rowAutoApprove = settingsFragment.findViewById(R.id.rowAutoApprove);
         TextView autoTv = settingsFragment.findViewById(R.id.autoApproveToggle);
-        if (autoTv != null) { autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFF00cc66:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF003311:0xFF222222); }
+        if (autoTv != null) { autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFFDC143C:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF1A0008:0xFF222222); }
         if (rowAutoApprove != null && autoTv != null) rowAutoApprove.setOnClickListener(v -> {
             cfg.agentAutoApprove = !cfg.agentAutoApprove; cfg.save(MainActivity.this);
-            autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFF00cc66:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF003311:0xFF222222);
+            autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFFDC143C:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF1A0008:0xFF222222);
         });
         View rowHeartbeat = settingsFragment.findViewById(R.id.rowHeartbeat);
         if (rowHeartbeat != null) rowHeartbeat.setOnClickListener(v ->
@@ -372,8 +384,8 @@ public class MainActivity extends Activity {
         settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            navIcons[i].setTextColor(on ? 0xFFDC143C : 0xFF444460);
-            navTexts[i].setTextColor(on ? 0xFFDC143C : 0xFF444460);
+            navIcons[i].setTextColor(on ? 0xFFDC143C : 0xFF333355);
+            navTexts[i].setTextColor(on ? 0xFFDC143C : 0xFF333355);
             navItems[i].setBackgroundColor(on ? 0xFF1a0008 : 0x00000000);
         }
         if (tab == 2) refreshHistory();
@@ -546,7 +558,7 @@ public class MainActivity extends Activity {
         wrap.setLayoutParams(wp);
 
         TextView label = makeLabel("KIRA");
-        label.setTextColor(0xFFff8c00);
+        label.setTextColor(0xFFDC143C);
         label.setPadding(0, 0, 0, dp(3));
 
         TextView msg = new TextView(this);
@@ -680,14 +692,14 @@ public class MainActivity extends Activity {
 
                 TextView langLabel = new TextView(this);
                 langLabel.setText(lang.isEmpty() ? "code" : lang);
-                langLabel.setTextColor(0xFF888888);
+                langLabel.setTextColor(0xFF8888AA);
                 langLabel.setTextSize(11);
                 langLabel.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
                 final String finalCode = code.trim();
                 TextView codeCopyBtn = new TextView(this);
                 codeCopyBtn.setText("Copy");
-                codeCopyBtn.setTextColor(0xFFff8c00);
+                codeCopyBtn.setTextColor(0xFFDC143C);
                 codeCopyBtn.setTextSize(11);
                 codeCopyBtn.setOnClickListener(v -> {
                     copyText(finalCode);
@@ -847,7 +859,7 @@ public class MainActivity extends Activity {
     private void addSystemNotice(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
-        tv.setTextColor(0xFF888888);
+        tv.setTextColor(0xFF8888AA);
         tv.setTextSize(12);
         tv.setPadding(dp(12), dp(6), dp(12), dp(6));
         tv.setBackgroundColor(0xFF111111);
@@ -856,6 +868,45 @@ public class MainActivity extends Activity {
         tv.setLayoutParams(p);
         chatContainer.addView(tv);
         scrollToBottom();
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER) return;
+        float ax = event.values[0]; // tilt left/right
+        float ay = event.values[1]; // tilt forward/back
+        // Push to Rust for EMA smoothing
+        RustBridge.updateTilt(ax, ay);
+        // Read smoothed parallax back and update GalaxyView
+        if (galaxyView == null) return;
+        try {
+            String j = RustBridge.getStarParallax();
+            if (j == null) return;
+            // Parse {"px":0.12,"py":-0.05,...}
+            float px = parseJsonFloat(j, "px");
+            float py = parseJsonFloat(j, "py");
+            galaxyView.setParallax(px, py);
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor s, int acc) {}
+
+    private float parseJsonFloat(String json, String key) {
+        try {
+            int i = json.indexOf("\"" + key + "\":");
+            if (i < 0) return 0f;
+            int start = i + key.length() + 3;
+            int end = start;
+            while (end < json.length() && "0123456789.-Ee".indexOf(json.charAt(end)) >= 0) end++;
+            return Float.parseFloat(json.substring(start, end));
+        } catch (Exception e) { return 0f; }
+    }
+
+    private void seedGalaxyFromRust() {
+        if (galaxyView == null) return;
+        // GalaxyView self-seeds with deterministic RNG - Rust state not needed
+        // Future: pass Rust-generated star positions here
     }
 
     private void showProviderPicker() {
@@ -957,7 +1008,7 @@ public class MainActivity extends Activity {
             chip.setText(item[0]);
             chip.setTextSize(12);
             chip.setTextColor(0xFFcccccc);
-            chip.setBackgroundColor(0xFF222222);
+            chip.setBackgroundColor(0xFF0D0D1A);
             chip.setPadding(dp(12), dp(7), dp(12), dp(7));
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
             p.setMargins(0, 0, dp(8), 0);
@@ -1017,7 +1068,7 @@ public class MainActivity extends Activity {
             name.setTypeface(android.graphics.Typeface.MONOSPACE);
 
             TextView desc = new TextView(this); desc.setText((String)t[2]);
-            desc.setTextColor(0xFF888888); desc.setTextSize(12);
+            desc.setTextColor(0xFF8888AA); desc.setTextSize(12);
 
             info.addView(name); info.addView(desc);
             row.addView(icon); row.addView(info);
@@ -1073,7 +1124,7 @@ public class MainActivity extends Activity {
 
                 // Resend -- puts user message in input and sends
                 TextView resendBtn = makeActionBtn("? resend");
-                resendBtn.setTextColor(0xFFff8c00);
+                resendBtn.setTextColor(0xFFDC143C);
                 resendBtn.setOnClickListener(v -> {
                     showTab(0);
                     inputField.setText(user);
@@ -1102,7 +1153,7 @@ public class MainActivity extends Activity {
                 // Kira reply preview
                 TextView kiraTv = new TextView(this);
                 kiraTv.setText(kira.length() > 150 ? kira.substring(0, 150) + "?" : kira);
-                kiraTv.setTextColor(0xFF888888);
+                kiraTv.setTextColor(0xFF8888AA);
                 kiraTv.setTextSize(12);
                 kiraTv.setPadding(0, dp(4), 0, 0);
 
@@ -1195,7 +1246,7 @@ public class MainActivity extends Activity {
         boolean ok = ShizukuShell.isAvailable();
         boolean installed = ShizukuShell.isInstalled();
         String title = ok ? "Shizuku ? God Mode Active" : (installed ? "Shizuku ? Permission Needed (tap)" : "Shizuku ? Not Running (tap)");
-        int color = ok ? 0xFF00cc66 : (installed ? 0xFFffaa00 : 0xFFcc4444);
+        int color = ok ? 0xFFDC143C : (installed ? 0xFFffaa00 : 0xFFcc4444);
         shizukuStatusTitle.setText(title);
         shizukuStatusTitle.setTextColor(color);
         shizukuStatusIcon.setText(ok ? "?" : (installed ? "!" : "?"));
@@ -1217,7 +1268,7 @@ public class MainActivity extends Activity {
         if (floatingActive) {
             FloatingWindowService.start(this);
             floatingToggle.setText("ON");
-            floatingToggle.setTextColor(0xFFff8c00);
+            floatingToggle.setTextColor(0xFFDC143C);
         } else {
             FloatingWindowService.stop(this);
             floatingToggle.setText("OFF");

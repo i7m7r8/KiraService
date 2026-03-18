@@ -1,66 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v38: Neon crimson nav bar -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:background="#050508">
+    android:background="#050508">
 
-    <FrameLayout android:id="@+id/contentFrame"
-        android:layout_width="match_parent" android:layout_height="0dp"
-        android:layout_weight="1"/>
+    <!-- Galaxy background - always visible under all tabs -->
+    <com.kira.service.ui.GalaxyView
+        android:id="@+id/galaxyView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
 
-    <!-- Crimson-themed bottom nav -->
-    <LinearLayout android:id="@+id/bottomNav"
-        android:layout_width="match_parent" android:layout_height="68dp"
-        android:orientation="horizontal" android:background="#0e0e18"
-        android:paddingBottom="4dp" android:paddingTop="4dp">
+    <!-- Content frame - tabs rendered here -->
+    <FrameLayout
+        android:id="@+id/contentFrame"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingBottom="68dp"/>
+
+    <!-- Bottom nav - floating pill style -->
+    <LinearLayout
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="68dp"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:background="#CC0a0a14"
+        android:paddingBottom="6dp"
+        android:paddingTop="4dp">
 
         <LinearLayout android:id="@+id/navHome"
-            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:orientation="vertical" android:gravity="center"
-            android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="28dp" android:layout_height="28dp"
+            android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:clickable="true" android:focusable="true">
+            <TextView android:id="@+id/navHomeIcon"
+                android:layout_width="28dp" android:layout_height="28dp"
                 android:text="&#x2302;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#DC143C" android:id="@+id/navHomeIcon"
-                android:shadowColor="#DC143C" android:shadowRadius="6"/>
-            <TextView android:id="@+id/navHomeText" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:text="Kira"
-                android:textSize="10sp" android:textColor="#DC143C"/>
+                android:textColor="#DC143C"
+                android:shadowColor="#DC143C" android:shadowRadius="8"
+                android:shadowDx="0" android:shadowDy="0"/>
+            <TextView android:id="@+id/navHomeText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Kira" android:textSize="9sp" android:textColor="#DC143C"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navAbilities"
-            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:orientation="vertical" android:gravity="center"
-            android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="28dp" android:layout_height="28dp"
+            android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:clickable="true" android:focusable="true">
+            <TextView android:id="@+id/navAbilitiesIcon"
+                android:layout_width="28dp" android:layout_height="28dp"
                 android:text="&#x2605;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#444460" android:id="@+id/navAbilitiesIcon"/>
-            <TextView android:id="@+id/navAbilitiesText" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:text="Tools"
-                android:textSize="10sp" android:textColor="#444460"/>
+                android:textColor="#334"/>
+            <TextView android:id="@+id/navAbilitiesText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Tools" android:textSize="9sp" android:textColor="#334"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navHistory"
-            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:orientation="vertical" android:gravity="center"
-            android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="28dp" android:layout_height="28dp"
+            android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:clickable="true" android:focusable="true">
+            <TextView android:id="@+id/navHistoryIcon"
+                android:layout_width="28dp" android:layout_height="28dp"
                 android:text="&#x2630;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#444460" android:id="@+id/navHistoryIcon"/>
-            <TextView android:id="@+id/navHistoryText" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:text="History"
-                android:textSize="10sp" android:textColor="#444460"/>
+                android:textColor="#334"/>
+            <TextView android:id="@+id/navHistoryText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="History" android:textSize="9sp" android:textColor="#334"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navSettings"
-            android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:orientation="vertical" android:gravity="center"
-            android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="28dp" android:layout_height="28dp"
+            android:layout_width="0dp" android:layout_height="match_parent"
+            android:layout_weight="1" android:orientation="vertical"
+            android:gravity="center" android:clickable="true" android:focusable="true">
+            <TextView android:id="@+id/navSettingsIcon"
+                android:layout_width="28dp" android:layout_height="28dp"
                 android:text="&#x2699;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#444460" android:id="@+id/navSettingsIcon"/>
-            <TextView android:id="@+id/navSettingsText" android:layout_width="wrap_content"
-                android:layout_height="wrap_content" android:text="Settings"
-                android:textSize="10sp" android:textColor="#444460"/>
+                android:textColor="#334"/>
+            <TextView android:id="@+id/navSettingsText"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Settings" android:textSize="9sp" android:textColor="#334"/>
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</FrameLayout>

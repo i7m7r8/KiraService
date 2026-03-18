@@ -179,7 +179,7 @@ public class FloatingWindowService extends Service {
 
         // \u2500\u2500 Quick chips row \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         android.widget.HorizontalScrollView chipsScroll = new android.widget.HorizontalScrollView(this);
-        chipsScroll.setScrollbars(0);
+        chipsScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout chipsRow = new LinearLayout(this);
         chipsRow.setOrientation(LinearLayout.HORIZONTAL);
         chipsRow.setPadding(dp(8), dp(4), dp(8), dp(4));

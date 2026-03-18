@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.kira.service.KiraForegroundService;
 import com.kira.service.ai.KiraAI;
+import com.kira.service.KiraEventBus;
 import com.kira.service.ai.KiraConfig;
 
 import org.json.JSONArray;

@@ -215,6 +215,12 @@ public class KiraTools {
                 case "post_skill":     { com.kira.service.RustBridge.registerSkill(args.getString("name"),args.optString("description",""),args.optString("trigger",""),args.getString("content")); return "skill registered: " + args.getString("name"); }
                 case "list_skills":    { try { return new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder().url("http://localhost:7070/skills").build()).execute().body().string(); } catch(Exception e){ return "error: "+e.getMessage(); } }
 
+
+                // OpenClaw: Workflows (.agent/workflows pattern)
+                case "list_workflows":   return new KiraWorkflow(ctx).listJson();
+                case "run_workflow":     { String goal = new KiraWorkflow(ctx).buildGoal(args.getString("name")); return "workflow goal: " + goal + " (use /agent or /chain to run)"; }
+                case "save_workflow":    { new KiraWorkflow(ctx).save(args.getString("name"), args.getString("description"), args.optString("steps","")); return "workflow saved: " + args.getString("name"); }
+
                 // NanoClaw: Checkpoints
                 case "save_checkpoint": { new KiraCheckpoint(ctx).save(args.optString("id","task_"+System.currentTimeMillis()), args.optInt("step",0), args.optString("state",""), args.optString("goal","")); return "checkpoint saved"; }
                 case "list_checkpoints":{ return new KiraCheckpoint(ctx).getAllJson(); }

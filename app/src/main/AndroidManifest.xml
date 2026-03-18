@@ -103,5 +103,11 @@
             </intent-filter>
         </receiver>
 
+
+        <!-- Floating window controller -->
+        <service
+            android:name=".FloatingWindowService"
+            android:exported="false" />
+
     </application>
 </manifest>

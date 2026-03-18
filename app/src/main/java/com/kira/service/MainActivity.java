@@ -18,6 +18,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.HorizontalScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -49,7 +50,7 @@ public class MainActivity extends Activity {
     private EditText inputField;
     private TextView sendBtn, headerSubtitle;
     private LinearLayout suggestionsRow;
-    private ScrollView suggestionsScroll;
+    private HorizontalScrollView suggestionsScroll;
 
     // History
     private LinearLayout historyList;
@@ -58,6 +59,8 @@ public class MainActivity extends Activity {
     // Settings
     private TextView apiKeyHint, modelHint, baseUrlHint, tgTokenHint, tgIdHint;
     private LinearLayout shizukuStatus;
+    private TextView floatingToggle;
+    private boolean floatingActive = false;
     private TextView shizukuStatusTitle, shizukuStatusIcon;
 
     // Nav
@@ -253,6 +256,10 @@ public class MainActivity extends Activity {
 
         // Shizuku status card is clickable directly
         shizukuStatus.setOnClickListener(v -> checkShizuku());
+
+        // Floating window toggle
+        floatingToggle = settingsFragment.findViewById(R.id.floatingToggle);
+        settingsFragment.findViewById(R.id.settingFloating).setOnClickListener(v -> toggleFloating());
 
         buildToolsList();
         updateSettingsUI();
@@ -722,6 +729,34 @@ public class MainActivity extends Activity {
         updateShizukuStatus();
     }
 
+    private void toggleFloating() {
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            new android.app.AlertDialog.Builder(this)
+                .setTitle("Overlay Permission Required")
+                .setMessage("Kira needs 'Display over other apps' permission for the floating window.\n\nSettings → Apps → Kira → Display over other apps → Allow")
+                .setPositiveButton("Open Settings", (d, w) -> {
+                    Intent i = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:" + getPackageName()));
+                    startActivity(i);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+            return;
+        }
+        floatingActive = !floatingActive;
+        if (floatingActive) {
+            FloatingWindowService.start(this);
+            floatingToggle.setText("ON");
+            floatingToggle.setTextColor(0xFFff8c00);
+            floatingToggle.setBackgroundColor(0xFF2a1500);
+        } else {
+            FloatingWindowService.stop(this);
+            floatingToggle.setText("OFF");
+            floatingToggle.setTextColor(0xFF666666);
+            floatingToggle.setBackgroundColor(0xFF2a2a2a);
+        }
+    }
+
     private void updateShizukuStatus() {
         if (shizukuStatusTitle == null) return;
         boolean ok = ShizukuShell.isAvailable();
@@ -735,6 +770,10 @@ public class MainActivity extends Activity {
         shizukuStatus.setBackgroundColor(ok ? 0xFF0a1a0a : (installed ? 0xFF1a1200 : 0xFF1a0a0a));
         if (installed && !ok) {
             shizukuStatus.setOnClickListener(v -> checkShizuku());
+
+        // Floating window toggle
+        floatingToggle = settingsFragment.findViewById(R.id.floatingToggle);
+        settingsFragment.findViewById(R.id.settingFloating).setOnClickListener(v -> toggleFloating());
         }
     }
 

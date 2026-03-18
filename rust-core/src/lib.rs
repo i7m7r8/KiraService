@@ -1,5 +1,8 @@
-use std::collections::HashMap;
-use std::collections::VecDeque;
+//! Kira Core v4 — Ultra-fast Rust HTTP server + state management
+//! Handles: HTTP server, command queue, notification store, screen state
+//! All actual Android calls go through JNI to Java (which has the real APIs)
+
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -8,26 +11,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 // ── Shared state ──────────────────────────────────────────────────────────────
 
+#[derive(Default)]
 struct State {
-    notifications: VecDeque<String>,
-    screen_nodes:  String,
-    pending_cmds:  VecDeque<(String, String)>,
-    results:       HashMap<String, String>,
-}
-
-impl State {
-    fn new() -> Self {
-        State {
-            notifications: VecDeque::new(),
-            screen_nodes:  "[]".to_string(),
-            pending_cmds:  VecDeque::new(),
-            results:       HashMap::new(),
-        }
-    }
+    notifications:  VecDeque<String>,
+    screen_nodes:   String,
+    pending_cmds:   VecDeque<(String, String)>,
+    results:        HashMap<String, String>,
+    battery_cache:  String,
+    device_info:    String,
+    uptime_ms:      u128,
 }
 
 lazy_static::lazy_static! {
-    static ref STATE: Arc<Mutex<State>> = Arc::new(Mutex::new(State::new()));
+    static ref STATE: Arc<Mutex<State>> = Arc::new(Mutex::new(State::default()));
 }
 
 // ── JNI bridge ────────────────────────────────────────────────────────────────
@@ -45,6 +41,11 @@ pub mod jni {
         port: i32,
     ) {
         let port = port as u16;
+        let start = now_ms();
+        {
+            let mut s = STATE.lock().unwrap();
+            s.uptime_ms = start;
+        }
         thread::spawn(move || run_server(port));
     }
 
@@ -60,15 +61,13 @@ pub mod jni {
         let title = unsafe { CStr::from_ptr(title).to_string_lossy().into_owned() };
         let text  = unsafe { CStr::from_ptr(text).to_string_lossy().into_owned() };
         let ts = now_ms();
-        let json = format!(
+        let entry = format!(
             r#"{{"package":"{}","title":"{}","text":"{}","timestamp":{}}}"#,
             esc(&pkg), esc(&title), esc(&text), ts
         );
         let mut s = STATE.lock().unwrap();
-        s.notifications.push_back(json);
-        if s.notifications.len() > 100 {
-            s.notifications.pop_front();
-        }
+        s.notifications.push_back(entry);
+        if s.notifications.len() > 200 { s.notifications.pop_front(); }
     }
 
     #[no_mangle]
@@ -82,14 +81,21 @@ pub mod jni {
     }
 
     #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_updateBattery(
+        _env:  *mut std::ffi::c_void,
+        _class: *mut std::ffi::c_void,
+        json:  *const c_char,
+    ) {
+        let json = unsafe { CStr::from_ptr(json).to_string_lossy().into_owned() };
+        STATE.lock().unwrap().battery_cache = json;
+    }
+
+    #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextCommand(
         _env:  *mut std::ffi::c_void,
         _class: *mut std::ffi::c_void,
     ) -> *mut c_char {
-        let cmd = {
-            let mut s = STATE.lock().unwrap();
-            s.pending_cmds.pop_front()
-        };
+        let cmd = STATE.lock().unwrap().pending_cmds.pop_front();
         match cmd {
             Some((id, body)) => {
                 let json = format!(r#"{{"id":"{}","body":{}}}"#, id, body);
@@ -126,16 +132,18 @@ pub mod jni {
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
 fn run_server(port: u16) {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port))
-        .expect("bind failed");
+    let listener = match TcpListener::bind(format!("0.0.0.0:{}", port)) {
+        Ok(l) => l,
+        Err(e) => { eprintln!("Kira server bind failed: {}", e); return; }
+    };
     for stream in listener.incoming().flatten() {
         thread::spawn(|| handle(stream));
     }
 }
 
 fn handle(mut stream: TcpStream) {
-    let mut buf = [0u8; 16384];
-    let n = match stream.read(&mut buf) { Ok(n) => n, Err(_) => return };
+    let mut buf = [0u8; 32768];
+    let n = match stream.read(&mut buf) { Ok(n) if n > 0 => n, _ => return };
     let req = String::from_utf8_lossy(&buf[..n]);
     let lines: Vec<&str> = req.lines().collect();
     if lines.is_empty() { return; }
@@ -143,37 +151,56 @@ fn handle(mut stream: TcpStream) {
     if parts.len() < 2 { return; }
     let method = parts[0];
     let path   = parts[1];
-    let body   = req.find("\r\n\r\n")
-        .map(|i| req[i+4..].to_string())
-        .unwrap_or_default();
+    let body   = req.find("\r\n\r\n").map(|i| req[i+4..].trim().to_string()).unwrap_or_default();
 
     let resp = route(method, path, &body);
     let http = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\n\r\n{}",
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nX-Engine: rust\r\n\r\n{}",
         resp.len(), resp
     );
     let _ = stream.write_all(http.as_bytes());
 }
 
 fn route(method: &str, path: &str, body: &str) -> String {
+    // Fast path — read-only state queries served directly from Rust
     match (method, path) {
-        ("GET",  "/health")        => r#"{"status":"ok","engine":"rust","version":"2.0"}"#.to_string(),
-        ("GET",  "/screenshot")    => STATE.lock().unwrap().screen_nodes.clone(),
-        ("GET",  "/notifications") => {
+        ("GET", "/health") => {
+            let s = STATE.lock().unwrap();
+            let uptime = now_ms() - s.uptime_ms;
+            format!(r#"{{"status":"ok","engine":"rust","version":"4.0","uptime_ms":{}}}"#, uptime)
+        }
+        ("GET", "/screenshot")    => STATE.lock().unwrap().screen_nodes.clone(),
+        ("GET", "/notifications") => {
             let s = STATE.lock().unwrap();
             format!("[{}]", s.notifications.iter().cloned().collect::<Vec<_>>().join(","))
-        },
-        // All other commands → queue to Java
-        (_, _)   => {
-            let endpoint = &path[1..];
+        }
+        ("GET", "/battery_cache") => {
+            STATE.lock().unwrap().battery_cache.clone()
+        }
+        ("GET", "/stats") => {
+            let s = STATE.lock().unwrap();
+            format!(
+                r#"{{"notifications":{},"pending_cmds":{},"uptime_ms":{}}}"#,
+                s.notifications.len(),
+                s.pending_cmds.len(),
+                now_ms() - s.uptime_ms
+            )
+        }
+        // All other commands → queue to Java accessibility service
+        (_, _) => {
+            let endpoint = path.trim_start_matches('/');
             let id = gen_id();
             let cmd_body = if body.is_empty() { "{}".to_string() } else { body.to_string() };
             let payload = format!(r#"{{"endpoint":"{}","data":{}}}"#, endpoint, cmd_body);
             {
                 STATE.lock().unwrap().pending_cmds.push_back((id.clone(), payload));
             }
-            let timeout = if endpoint == "record_audio" { 30000 } else { 8000 };
-            wait_result(&id, timeout).unwrap_or_else(|| r#"{"error":"timeout"}"#.to_string())
+            let timeout = match endpoint {
+                "record_audio" => 30000,
+                "install_apk"  => 60000,
+                _              => 8000,
+            };
+            wait_result(&id, timeout).unwrap_or_else(|| r#"{"error":"timeout — accessibility service may not be running"}"#.to_string())
         }
     }
 }
@@ -183,17 +210,15 @@ fn wait_result(id: &str, timeout_ms: u64) -> Option<String> {
     loop {
         {
             let mut s = STATE.lock().unwrap();
-            if let Some(r) = s.results.remove(id) {
-                return Some(r);
-            }
+            if let Some(r) = s.results.remove(id) { return Some(r); }
         }
         if start.elapsed().as_millis() as u64 >= timeout_ms { return None; }
-        thread::sleep(std::time::Duration::from_millis(10));
+        thread::sleep(std::time::Duration::from_millis(8));
     }
 }
 
 fn gen_id() -> String {
-    format!("{}{}", now_ms(), now_ms() % 9999)
+    format!("{}{:04}", now_ms(), now_ms() % 9999)
 }
 
 fn now_ms() -> u128 {
@@ -201,5 +226,9 @@ fn now_ms() -> u128 {
 }
 
 fn esc(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "")
+    s.replace('\\', "\\\\")
+     .replace('"',  "\\\"")
+     .replace('\n', "\\n")
+     .replace('\r', "")
+     .replace('\t', " ")
 }

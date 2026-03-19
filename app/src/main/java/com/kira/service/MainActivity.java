@@ -465,6 +465,7 @@ public class MainActivity extends Activity
     // -- Chat -- Claude-style ---------------------------------------------------
 
     private void sendMessage() {
+        if (inputField == null) return;
         String text = inputField.getText().toString().trim();
         if (text.isEmpty()) return;
         sendMessage(text);
@@ -687,7 +688,7 @@ public class MainActivity extends Activity
         copyBtn.setOnClickListener(v -> copyText(turn.text));
 
         TextView resendBtn = makeActionBtn("? resend");
-        resendBtn.setOnClickListener(v -> { if (inputField!=null){inputField.setText(turn.text); inputField.setSelection(turn.text.length()); });
+        resendBtn.setOnClickListener(v -> { if (inputField!=null){ inputField.setText(turn.text); inputField.setSelection(turn.text.length()); inputField.requestFocus(); } });
 
         header.addView(label);
         header.addView(copyBtn);
@@ -886,7 +887,7 @@ public class MainActivity extends Activity
                 });
             }
             @Override public void onError(String e) {
-                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); if (sendBtn != null) sendBtn.setEnabled(true); headerSubtitle.setText("chain error"); });
+                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); if (sendBtn != null) sendBtn.setEnabled(true); if (headerSubtitle != null) headerSubtitle.setText("chain error"); });
             }
         });
     }

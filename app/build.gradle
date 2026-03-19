@@ -118,4 +118,20 @@ dependencies {
 
     // Speech recognition (voice commands)
     implementation 'androidx.activity:activity:1.8.2'
+
+    // Fragment support
+    implementation 'androidx.fragment:fragment:1.6.2'
+
+    // ConstraintLayout
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Lifecycle (prevent leaks)
+    implementation 'androidx.lifecycle:lifecycle-runtime:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-common-java8:2.7.0'
+
+    // RecyclerView (better list performance)
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+
+    // CardView
+    implementation 'androidx.cardview:cardview:1.0.0'
 }

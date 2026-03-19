@@ -213,6 +213,15 @@ public class KiraTools {
                 case "watch_app":     { RustBridge.addTrigger("app_" + args.getString("package"), "app_notif", args.getString("package"), args.getString("action"), args.optBoolean("repeat", false)); return "watching app: " + args.getString("package"); }
                 case "watch_battery": { RustBridge.addTrigger("bat_" + args.optInt("threshold",20), "battery_low", String.valueOf(args.optInt("threshold",20)), args.getString("action"), args.optBoolean("repeat", true)); return "watching battery < " + args.optInt("threshold",20) + "%"; }
                 case "watch_notif":   { RustBridge.addTrigger("notif_" + System.currentTimeMillis(), "keyword_notif", args.getString("keyword"), args.getString("action"), args.optBoolean("repeat", true)); return "watching notifications for: " + args.getString("keyword"); }
+                case "if_then":       { String ifC=args.optString("if",""); String thenA=args.optString("then",""); if(ifC.isEmpty()||thenA.isEmpty()) return "need 'if' and 'then'"; return postRust("/auto/if_then","{"if":""+ifC.replace(""","'")+"","then":""+thenA.replace(""","'")+""}"); }
+                case "watch_app":     { String app=args.optString("app",""); String act=args.optString("action",""); return postRust("/auto/watch_app","{"app":""+app+"","action":""+act.replace(""","'")+""}"); }
+                case "repeat_task":   { String task=args.optString("task",""); int min=args.optInt("every_minutes",30); return postRust("/auto/repeat","{"task":""+task.replace(""","'")+"","every_minutes":"+min+"}"); }
+                case "on_notif":      { String kw=args.optString("keyword",""); String act=args.optString("action",""); String app=args.optString("app",""); return postRust("/auto/on_notif","{"keyword":""+kw+"","action":""+act.replace(""","'")+"","app":""+app+""}"); }
+                case "on_time":       { String t=args.optString("time","08:00"); String act=args.optString("action",""); return postRust("/auto/on_time","{"time":""+t+"","action":""+act.replace(""","'")+""}"); }
+                case "on_charge":     { String act=args.optString("action",""); String st=args.optString("state","plugged"); return postRust("/auto/on_charge","{"action":""+act.replace(""","'")+"","state":""+st+""}"); }
+                case "list_automations": case "list_macros": { return getRust("/auto/list"); }
+                case "delete_automation": { return deleteRust("/auto/"+args.optString("id","")); }
+                case "enable_automation": { return postRust("/auto/enable","{"id":""+args.optString("id","")+"","enabled":"+args.optBoolean("enabled",true)+"}"); }
                 case "list_watches":  { return ShizukuShell.exec("echo watches active"); }
                 case "stop_watch":    { RustBridge.removeTrigger(args.getString("id")); return "stopped watch: " + args.getString("id"); }
 
@@ -414,17 +423,38 @@ public class KiraTools {
         String normalized = input.toLowerCase().trim();
         String pkg = APP_MAP.getOrDefault(normalized, input.trim());
 
-        // Special case: YouTube \u2014 use deep link for most reliable launch
+        // Special case: YouTube — try multiple methods in order
         if ("com.google.android.youtube".equals(pkg) || normalized.equals("youtube") || normalized.equals("yt")) {
-            try {
-                android.content.Intent ytIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW,
-                    android.net.Uri.parse("https://www.youtube.com"));
-                ytIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                ctx.startActivity(ytIntent);
-                return "opened YouTube";
-            } catch (Exception ignored) {}
-            // Fallback to package launch
             pkg = "com.google.android.youtube";
+            // Method 1: Direct getLaunchIntentForPackage (most reliable)
+            try {
+                android.content.pm.PackageManager pm2 = ctx.getPackageManager();
+                android.content.Intent launch = pm2.getLaunchIntentForPackage(pkg);
+                if (launch != null) {
+                    launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        | android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+                    ctx.startActivity(launch);
+                    android.os.SystemClock.sleep(500);
+                    return "opened YouTube";
+                }
+            } catch (Exception e1) {
+                android.util.Log.w("KiraTools", "YouTube method1: " + e1.getMessage());
+            }
+            // Method 2: am start with explicit activity via Shizuku
+            String amR = ShizukuShell.exec(
+                "am start -n com.google.android.youtube/com.google.android.youtube.HomeActivity 2>&1");
+            if (amR.contains("Starting")) return "opened YouTube (am)";
+            // Method 3: am start with package
+            amR = ShizukuShell.exec(
+                "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER" +
+                " -p com.google.android.youtube 2>&1");
+            if (amR.contains("Starting")) return "opened YouTube (am2)";
+            // Method 4: monkey
+            amR = ShizukuShell.exec(
+                "monkey -p com.google.android.youtube -c android.intent.category.LAUNCHER 1 2>&1");
+            if (!amR.contains("No activities") && !amR.contains("error"))
+                return "opened YouTube (monkey)";
+            return "YouTube not installed. Install from Play Store.";
         }
 
         // Resolve package if fuzzy name was given
@@ -826,6 +856,39 @@ public class KiraTools {
         }
     }
 
+    // ── HTTP helpers for Rust engine calls ──────────────────────────────────────
+    private static final okhttp3.OkHttpClient RUST_CLIENT = new okhttp3.OkHttpClient.Builder()
+        .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+        .build();
+
+    private String getRust(String path) {
+        try {
+            okhttp3.Response r = RUST_CLIENT.newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070" + path).get().build()).execute();
+            return r.body() != null ? r.body().string() : "{"error":"empty"}";
+        } catch (Exception e) { return "{"error":"" + e.getMessage().replace(""","'") + ""}"; }
+    }
+
+    private String postRust(String path, String jsonBody) {
+        try {
+            okhttp3.Response r = RUST_CLIENT.newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070" + path)
+                    .post(okhttp3.RequestBody.create(jsonBody,
+                        okhttp3.MediaType.parse("application/json"))).build()).execute();
+            return r.body() != null ? r.body().string() : "{"ok":true}";
+        } catch (Exception e) { return "{"error":"" + e.getMessage().replace(""","'") + ""}"; }
+    }
+
+    private String deleteRust(String path) {
+        try {
+            okhttp3.Response r = RUST_CLIENT.newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070" + path)
+                    .delete().build()).execute();
+            return r.body() != null ? r.body().string() : "{"ok":true}";
+        } catch (Exception e) { return "{"error":"" + e.getMessage().replace(""","'") + ""}"; }
+    }
+
     public String getToolList() {
         return "SCREEN: read_screen, tap_screen, tap_text, swipe_screen, scroll_screen, type_text, "
             + "press_back, press_home, press_recents, lock_screen, clipboard_get, clipboard_set, get_notifications\n"
@@ -841,7 +904,8 @@ public class KiraTools {
             + "DATA: read_sms, read_contacts, read_call_log\n"
             + "ACTIONS: set_alarm, set_timer, vibrate, play_tone, take_photo, calendar_add\n"
             + "WEB: web_search, http_get, curl, scrape_web\n"
-            + "PROACTIVE: schedule_task, watch_battery\n"
+            + "PROACTIVE: schedule_task, watch_battery, watch_notif\n"
+            + "AUTOMATION: if_then, watch_app, repeat_task, on_notif, on_time, on_charge, list_automations, delete_automation, enable_automation\n"
             + "MEMORY: remember, recall, forget, memory_list\n";
     }
 }

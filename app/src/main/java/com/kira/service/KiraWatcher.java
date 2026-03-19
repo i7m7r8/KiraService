@@ -58,6 +58,8 @@ public class KiraWatcher {
         new Thread(() -> {
             try { doCheck(); } catch (Exception e) { Log.e(TAG, "check error", e); }
         }).start();
+        // Poll Rust for any macro actions that fired
+        pollAndExecuteMacroActions();
         scheduleCheck();
     }
 
@@ -111,6 +113,95 @@ public class KiraWatcher {
                     }
                 }
             }
+        }
+    }
+
+    /** Poll Rust for fired macro actions and execute them */
+    private void pollAndExecuteMacroActions() {
+        try {
+            String next = RustBridge.nextMacroAction(null);
+            while (next != null && !next.isEmpty()) {
+                Log.d(TAG, "macro action: " + next);
+                org.json.JSONObject action = new org.json.JSONObject(next);
+                String type    = action.optString("type", "");
+                org.json.JSONObject params = action.optJSONObject("params");
+                if (params == null) params = new org.json.JSONObject();
+
+                switch (type) {
+                    case "kira_chat": {
+                        // Fired macro sends a message to Kira AI
+                        final String msg = params.optString("message","");
+                        if (!msg.isEmpty()) {
+                            final org.json.JSONObject p = params;
+                            handler.post(() -> {
+                                ai.chat(msg, new com.kira.service.ai.KiraAI.Callback() {
+                                    @Override public void onThinking() {}
+                                    @Override public void onTool(String n, String r) {}
+                                    @Override public void onReply(String reply) {
+                                        // Post result to Kira event bus
+                                        KiraEventBus.post("macro_result", reply);
+                                    }
+                                    @Override public void onError(String e) {
+                                        Log.w(TAG, "macro chat error: " + e);
+                                    }
+                                });
+                            });
+                        }
+                        break;
+                    }
+                    case "run_tool": {
+                        // Fired macro runs a tool directly
+                        String toolName = params.optString("tool", "");
+                        if (!toolName.isEmpty()) {
+                            final String finalTool = toolName;
+                            final org.json.JSONObject finalParams = params;
+                            new Thread(() -> {
+                                try {
+                                    String result = tools.runTool(finalTool, finalParams);
+                                    RustBridge.logTaskStep("macro_tool", 1, finalTool, result, true);
+                                } catch (Exception e) {
+                                    Log.w(TAG, "macro tool error: " + e.getMessage());
+                                }
+                            }).start();
+                        }
+                        break;
+                    }
+                    case "send_notification": {
+                        String title = params.optString("title","Kira");
+                        String msg2  = params.optString("message","Automation triggered");
+                        sendNotification(title, msg2);
+                        break;
+                    }
+                    default:
+                        Log.d(TAG, "unhandled macro action type: " + type);
+                }
+                next = RustBridge.nextMacroAction(null);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "pollMacroActions error: " + e.getMessage());
+        }
+    }
+
+    private void sendNotification(String title, String message) {
+        try {
+            android.app.NotificationManager nm = (android.app.NotificationManager)
+                ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            String chId = "kira_automation";
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(new android.app.NotificationChannel(
+                    chId, "Kira Automations",
+                    android.app.NotificationManager.IMPORTANCE_DEFAULT));
+            }
+            android.app.Notification notif = new android.app.Notification.Builder(ctx, chId)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setAutoCancel(true)
+                .build();
+            nm.notify((int)(System.currentTimeMillis() % 10000), notif);
+        } catch (Exception e) {
+            Log.w(TAG, "sendNotification error: " + e.getMessage());
         }
     }
 

@@ -1677,6 +1677,38 @@ public class MainActivity extends Activity
 
     // -- Suggestions -----------------------------------------------------------
 
+    /** Maps tool name to a natural-language example the user can send */
+    private String buildToolExample(String tool) {
+        switch (tool) {
+            case "open_app":          return "open YouTube";
+            case "read_screen":       return "read my screen";
+            case "tap_screen":        return "tap screen at 540 960";
+            case "tap_text":          return "tap the button that says OK";
+            case "type_text":         return "type Hello world";
+            case "swipe_screen":      return "swipe up";
+            case "get_notifications": return "show my notifications";
+            case "send_sms":          return "send SMS to +1234567890 saying hello";
+            case "make_call":         return "call +1234567890";
+            case "web_search":        return "search the web for latest AI news";
+            case "analyze_screen":    return "what is on my screen?";
+            case "find_element":      return "find and tap the search icon";
+            case "sh_run":            return "run shell command: pm list packages";
+            case "sh_screenshot":     return "take a screenshot";
+            case "remember":          return "remember my name is Imran";
+            case "recall":            return "what do you remember about me?";
+            case "battery_info":      return "what is my battery level?";
+            case "list_files":        return "list files in /sdcard/Download";
+            case "get_wifi_info":     return "show my WiFi info";
+            case "watch_notif":       return "watch for notification containing payment";
+            case "schedule_task":     return "in 5 minutes check battery";
+            case "if_then":           return "if battery below 20% then notify me";
+            case "repeat_task":       return "every 30 minutes check notifications";
+            case "open_url":          return "open https://news.ycombinator.com";
+            case "send_email":        return "send email to test@example.com subject hello";
+            default: return "what can you do?";
+        }
+    }
+
     private void buildSuggestions() {
         String[][] s = {
             {"\uD83D\uDCF1 Open YouTube",    "Open YouTube"},
@@ -1714,7 +1746,8 @@ public class MainActivity extends Activity
     private void buildToolsList() {
         LinearLayout list = toolsFragment.findViewById(R.id.toolsList);
         Object[][] tools = {
-            {"\uD83D\uDCF1","open_app {package}","Open any app by name"},
+            // Tap row = paste example. Long-press = send immediately.
+            {"\uD83D\uDCF1","open_app","Open any app by name"},
             {"\uD83D\uDC41","read_screen {}","Read all visible text"},
             {"\uD83D\uDC46","tap_screen {x,y}","Tap coordinates"},
             {"\uD83D\uDD0D","tap_text {text}","Find and tap by text"},
@@ -1748,8 +1781,21 @@ public class MainActivity extends Activity
             row.setLayoutParams(rp);
             row.setClickable(true); row.setFocusable(true);
 
-            final String example = "<tool:" + t[1] + "></tool>";
-            row.setOnClickListener(v -> { showTab(0); });
+            final String toolN = ((String)t[1]);
+            final String toolEx = buildToolExample(toolN);
+            row.setOnClickListener(v -> {
+                showTab(0);
+                if (inputField != null) {
+                    inputField.setText(toolEx);
+                    inputField.setSelection(toolEx.length());
+                    inputField.requestFocus();
+                }
+            });
+            row.setOnLongClickListener(v -> {
+                showTab(0);
+                if (inputField != null) { inputField.setText(toolEx); sendMessage(); }
+                return true;
+            });
 
             TextView icon = new TextView(this);
             icon.setText((String)t[0]); icon.setTextSize(20);

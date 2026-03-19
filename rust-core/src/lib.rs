@@ -2535,7 +2535,6 @@ Context: {}",
         CString::new(STATE.lock().unwrap().ota.to_json()).unwrap_or_default().into_raw()
     }
 
-    }
 }
 
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
@@ -4750,6 +4749,119 @@ fn channel_post(s: &mut KiraState, channel: &str, message: &str) {
 
 // \u{2500}\u{2500} HTTP routes for new features \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
+
+/// Parse a natural-language condition string into (trigger_kind, trigger_value).
+/// Examples:
+///   "battery < 20"      → ("battery_low",  "20")
+///   "screen on"         → ("screen_on",    "")
+///   "wifi connected"    → ("wifi_changed",  "connected")
+///   "app youtube"       → ("app_opened",   "com.google.android.youtube")
+///   "notification otp"  → ("keyword_notif","otp")
+///   "time 07:30"        → ("time_daily",   "07:30")
+///   "charging"          → ("power_connected","")
+///   "unplugged"         → ("power_disconnected","")
+fn parse_nl_condition(cond: &str) -> (String, String) {
+    let c = cond.to_lowercase();
+    let c = c.trim();
+
+    // Battery patterns: "battery < 20", "battery below 20", "battery 20"
+    if c.contains("battery") {
+        let num: String = c.chars().filter(|ch| ch.is_ascii_digit()).collect();
+        if !num.is_empty() { return ("battery_low".to_string(), num); }
+        if c.contains("full") || c.contains("100") { return ("battery_low".to_string(), "95".to_string()); }
+    }
+    // Screen events
+    if c.contains("screen on") || c.contains("screen unlock") || c.contains("unlocked") {
+        return ("screen_on".to_string(), String::new());
+    }
+    if c.contains("screen off") || c.contains("screen lock") || c.contains("locked") {
+        return ("screen_off".to_string(), String::new());
+    }
+    // WiFi
+    if c.contains("wifi") {
+        if c.contains("disconnect") { return ("wifi_changed".to_string(), "disconnected".to_string()); }
+        return ("wifi_changed".to_string(), "connected".to_string());
+    }
+    // Charging / power
+    if c.contains("charging") || c.contains("plugged") || c.contains("power on") {
+        return ("power_connected".to_string(), String::new());
+    }
+    if c.contains("unplug") || c.contains("unplugged") || c.contains("power off") {
+        return ("power_disconnected".to_string(), String::new());
+    }
+    // Time: "time 07:30", "at 07:30", "07:30"
+    if c.contains("time") || c.contains(" at ") || c.contains(":") {
+        let time: String = c.split_whitespace()
+            .find(|w| w.contains(':') && w.len() <= 5)
+            .unwrap_or("08:00")
+            .to_string();
+        return ("time_daily".to_string(), time);
+    }
+    // App opened: "app youtube", "youtube opens"
+    if c.contains("app ") || c.contains(" open") || c.contains(" launch") {
+        let word = c.split_whitespace()
+            .find(|w| !["app","open","opens","launch","when","if"].contains(w))
+            .unwrap_or("").to_string();
+        return ("app_opened".to_string(), app_name_to_pkg(&word));
+    }
+    // Notification keyword: "notification otp", "notif payment"
+    if c.contains("notif") || c.contains("message") || c.contains("alert") {
+        let keyword = c.split_whitespace()
+            .find(|w| !["notification","notif","message","alert","a","the","contains"].contains(w))
+            .unwrap_or("").to_string();
+        return ("keyword_notif".to_string(), keyword);
+    }
+    // Shake / motion
+    if c.contains("shake") { return ("shake".to_string(), String::new()); }
+    // Headphones
+    if c.contains("headphone") || c.contains("earphone") || c.contains("audio plug") {
+        return ("headphone_connected".to_string(), String::new());
+    }
+    // Fallback: use as a keyword trigger
+    ("keyword_notif".to_string(), c.to_string())
+}
+
+/// Map friendly app name → package name.
+/// Covers ~30 most common Android apps.
+fn app_name_to_pkg(name: &str) -> String {
+    let n = name.to_lowercase().trim().to_string();
+    match n.as_str() {
+        "youtube" | "yt"          => "com.google.android.youtube",
+        "whatsapp" | "wa"         => "com.whatsapp",
+        "telegram" | "tg"         => "org.telegram.messenger",
+        "instagram" | "ig"        => "com.instagram.android",
+        "twitter" | "x"           => "com.twitter.android",
+        "facebook" | "fb"         => "com.facebook.katana",
+        "chrome"                  => "com.android.chrome",
+        "gmail"                   => "com.google.android.gm",
+        "maps" | "google maps"    => "com.google.android.apps.maps",
+        "camera"                  => "com.android.camera2",
+        "photos" | "gallery"      => "com.google.android.apps.photos",
+        "calendar"                => "com.google.android.calendar",
+        "clock"                   => "com.google.android.deskclock",
+        "contacts"                => "com.google.android.contacts",
+        "phone" | "dialer"        => "com.google.android.dialer",
+        "messages" | "sms"        => "com.google.android.apps.messaging",
+        "settings"                => "com.android.settings",
+        "spotify"                 => "com.spotify.music",
+        "netflix"                 => "com.netflix.mediaclient",
+        "tiktok"                  => "com.zhiliaoapp.musically",
+        "snapchat"                => "com.snapchat.android",
+        "discord"                 => "com.discord",
+        "reddit"                  => "com.reddit.frontpage",
+        "amazon"                  => "com.amazon.mShop.android.shopping",
+        "uber"                    => "com.ubercab",
+        "zoom"                    => "us.zoom.videomeetings",
+        "drive" | "google drive"  => "com.google.android.apps.docs",
+        "docs" | "google docs"    => "com.google.android.apps.docs",
+        "sheets" | "spreadsheets" => "com.google.android.apps.spreadsheets",
+        "play store" | "play"     => "com.android.vending",
+        "calculator"              => "com.google.android.calculator",
+        "files" | "file manager"  => "com.google.android.apps.nbu.files",
+        _                         => &n,
+    }.to_string()
+}
+
 fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
     match (method, path) {
         // \u{2500}\u{2500} DSL Script execution
@@ -4859,6 +4971,156 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             let min_pct  = extract_json_num(body, "min_pct").unwrap_or(20.0) as i32;
             defer_until_charged(&mut STATE.lock().unwrap(), &macro_id, min_pct);
             Some(format!(r#"{{"ok":true,"deferred":"{}","min_pct":{}}}"#, esc(&macro_id), min_pct))
+        }
+
+        // ── v43: Natural-language automation shortcuts ───────────────────────
+        // Simple HTTP API that maps plain intents → macro objects.
+        // Called by KiraTools.runTool("if_then", ...) and by AI chat.
+
+        // POST /auto/if_then {"if":"battery < 20","then":"notify me low battery"}
+        ("POST", "/auto/if_then") => {
+            let cond_str   = extract_json_str(body, "if").unwrap_or_default();
+            let action_str = extract_json_str(body, "then").unwrap_or_default();
+            let id         = extract_json_str(body, "id").unwrap_or_else(gen_id);
+            if cond_str.is_empty() || action_str.is_empty() {
+                return Some(r#"{"error":"need if and then fields"}"#.to_string());
+            }
+            let (tkind, tval) = parse_nl_condition(&cond_str);
+            let m = parse_macro_from_json(&format!(
+                r#"{{"id":"{}","name":"if {} then {}","enabled":true,"triggers":[{{"kind":"{}","config":{{"value":"{}"}}}}],"conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#,
+                esc(&id), esc(&cond_str), esc(&action_str),
+                esc(&tkind), esc(&tval), esc(&action_str)
+            ));
+            let mid = m.id.clone(); let mname = m.name.clone();
+            STATE.lock().unwrap().macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","trigger":"{}","val":"{}"}}"#,
+                esc(&mid), esc(&mname), esc(&tkind), esc(&tval)))
+        }
+
+        // POST /auto/watch_app {"app":"youtube","action":"log I opened YouTube"}
+        ("POST", "/auto/watch_app") => {
+            let app    = extract_json_str(body, "app").unwrap_or_default();
+            let action = extract_json_str(body, "action").unwrap_or_default();
+            let id     = extract_json_str(body, "id").unwrap_or_else(gen_id);
+            if app.is_empty() { return Some(r#"{"error":"need app"}"#.to_string()); }
+            let pkg = app_name_to_pkg(&app);
+            let m = parse_macro_from_json(&format!(
+                r#"{{"id":"{}","name":"when {} opens","enabled":true,"triggers":[{{"kind":"app_opened","config":{{"package":"{}"}}}}],"conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#,
+                esc(&id), esc(&app), esc(&pkg), esc(&action)
+            ));
+            let mid = m.id.clone();
+            STATE.lock().unwrap().macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","app":"{}","pkg":"{}"}}"#,
+                esc(&mid), esc(&app), esc(&pkg)))
+        }
+
+        // POST /auto/repeat {"task":"check battery","every_minutes":30}
+        ("POST", "/auto/repeat") => {
+            let task    = extract_json_str(body, "task").unwrap_or_default();
+            let minutes = extract_json_num(body, "every_minutes").unwrap_or(30.0) as u64;
+            let id      = extract_json_str(body, "id").unwrap_or_else(gen_id);
+            if task.is_empty() { return Some(r#"{"error":"need task"}"#.to_string()); }
+            let interval_ms = minutes * 60_000;
+            let m = parse_macro_from_json(&format!(
+                r#"{{"id":"{}","name":"every {}min: {}","enabled":true,"triggers":[{{"kind":"interval","config":{{"interval_ms":"{}"}}}}],"conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#,
+                esc(&id), minutes, esc(&task), interval_ms, esc(&task)
+            ));
+            let mid = m.id.clone();
+            STATE.lock().unwrap().macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","task":"{}","every_minutes":{}}}"#,
+                esc(&mid), esc(&task), minutes))
+        }
+
+        // POST /auto/on_notif {"keyword":"OTP","action":"read aloud","app":""}
+        ("POST", "/auto/on_notif") => {
+            let keyword = extract_json_str(body, "keyword").unwrap_or_default();
+            let action  = extract_json_str(body, "action").unwrap_or_default();
+            let app     = extract_json_str(body, "app").unwrap_or_default();
+            let id      = extract_json_str(body, "id").unwrap_or_else(gen_id);
+            let tkind = if app.is_empty() { "keyword_notif" } else { "app_notif" };
+            let tval  = if app.is_empty() { keyword.clone() } else { app_name_to_pkg(&app) };
+            let m = parse_macro_from_json(&format!(
+                r#"{{"id":"{}","name":"on notif '{}': {}","enabled":true,"tags":["notification"],"triggers":[{{"kind":"{}","config":{{"value":"{}"}}}}],"conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#,
+                esc(&id), esc(&keyword), esc(&action),
+                esc(tkind), esc(&tval), esc(&action)
+            ));
+            let mid = m.id.clone(); let mname = m.name.clone();
+            STATE.lock().unwrap().macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","keyword":"{}"}}"#,
+                esc(&mid), esc(&mname), esc(&keyword)))
+        }
+
+        // POST /auto/on_time {"time":"07:30","action":"good morning","days":"daily"}
+        ("POST", "/auto/on_time") => {
+            let time   = extract_json_str(body, "time").unwrap_or_else(|| "08:00".to_string());
+            let action = extract_json_str(body, "action").unwrap_or_default();
+            let id     = extract_json_str(body, "id").unwrap_or_else(gen_id);
+            if action.is_empty() { return Some(r#"{"error":"need action"}"#.to_string()); }
+            let m = parse_macro_from_json(&format!(
+                r#"{{"id":"{}","name":"at {}: {}","enabled":true,"tags":["scheduled"],"triggers":[{{"kind":"time_daily","config":{{"time":"{}"}}}}],"conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#,
+                esc(&id), esc(&time), esc(&action), esc(&time), esc(&action)
+            ));
+            let mid = m.id.clone();
+            let mut s = STATE.lock().unwrap();
+            schedule_macro_daily(&mut s, &id, &time);
+            s.macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","time":"{}","action":"{}"}}"#,
+                esc(&mid), esc(&time), esc(&action)))
+        }
+
+        // POST /auto/on_charge {"action":"run backup","state":"plugged"}
+        ("POST", "/auto/on_charge") => {
+            let action = extract_json_str(body, "action").unwrap_or_default();
+            let state  = extract_json_str(body, "state").unwrap_or_else(|| "plugged".to_string());
+            let id     = extract_json_str(body, "id").unwrap_or_else(gen_id);
+            if action.is_empty() { return Some(r#"{"error":"need action"}"#.to_string()); }
+            let tkind = if state == "unplugged" { "power_disconnected" } else { "power_connected" };
+            let m = parse_macro_from_json(&format!(
+                r#"{{"id":"{}","name":"on {}: {}","enabled":true,"triggers":[{{"kind":"{}","config":{{}}}}],"conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#,
+                esc(&id), esc(&state), esc(&action), esc(tkind), esc(&action)
+            ));
+            let mid = m.id.clone();
+            STATE.lock().unwrap().macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","state":"{}","action":"{}"}}"#,
+                esc(&mid), esc(&state), esc(&action)))
+        }
+
+        // GET /auto/list  — friendly summary of all automations
+        ("GET", "/auto/list") => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.macros.iter().map(|m| {
+                let tsum = m.triggers.first().map(|t| format!("{}", t.kind)).unwrap_or_default();
+                let asum = m.actions.first()
+                    .map(|a| a.params.get("message").cloned().unwrap_or_else(|| a.action_type.clone()))
+                    .unwrap_or_default();
+                format!(r#"{{"id":"{}","name":"{}","enabled":{},"runs":{},"trigger":"{}","action":"{}","tags":[{}]}}"#,
+                    esc(&m.id), esc(&m.name), m.enabled, m.run_count,
+                    esc(&tsum), esc(&asum[..asum.len().min(60)]),
+                    m.tags.iter().map(|t| format!(""{}"",esc(t))).collect::<Vec<_>>().join(","))
+            }).collect();
+            Some(format!(r#"{{"ok":true,"count":{},"automations":[{}]}}"#, items.len(), items.join(",")))
+        }
+
+        // POST /auto/enable {"id":"...","enabled":true}
+        ("POST", "/auto/enable") => {
+            let id  = extract_json_str(body, "id").unwrap_or_default();
+            let ena = !body.contains(r#""enabled":false"#);
+            let mut s = STATE.lock().unwrap();
+            if let Some(m) = s.macros.iter_mut().find(|m| m.id == id) {
+                m.enabled = ena;
+                Some(format!(r#"{{"ok":true,"id":"{}","enabled":{}}}"#, esc(&id), ena))
+            } else {
+                Some(format!(r#"{{"error":"automation '{}' not found"}}"#, esc(&id)))
+            }
+        }
+
+        // DELETE /auto/:id
+        ("DELETE", auto_path) if auto_path.starts_with("/auto/") => {
+            let id = auto_path.trim_start_matches("/auto/");
+            let mut s = STATE.lock().unwrap();
+            let before = s.macros.len();
+            s.macros.retain(|m| m.id != id);
+            Some(format!(r#"{{"ok":true,"removed":{}}}"#, before - s.macros.len()))
         }
 
         _ => None,

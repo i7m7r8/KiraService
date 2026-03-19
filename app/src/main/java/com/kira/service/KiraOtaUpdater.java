@@ -185,8 +185,9 @@ public class KiraOtaUpdater {
 
                 final String finalTag = tag;
                 final String finalUrl = apkUrl;
-                final String finalLog = body.length() > 500
-                    ? body.substring(0, 500) + "…" : body;
+                final String safeBody = (body != null) ? body : "";
+                final String finalLog = safeBody.length() > 500
+                    ? safeBody.substring(0, 500) + "…" : safeBody;
 
                 switch (act) {
                     case "prompt_user":
@@ -211,7 +212,9 @@ public class KiraOtaUpdater {
                 }
             } catch (Exception e) {
                 Log.w(TAG, "OTA check error: " + e.getMessage());
-                notifyError(e.getMessage());
+                String otaErrMsg = e.getMessage();
+                if (otaErrMsg == null) otaErrMsg = e.getClass().getSimpleName();
+                notifyError(otaErrMsg);
             }
         }, "KiraOTA-Check").start();
     }

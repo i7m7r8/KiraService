@@ -41,42 +41,42 @@ import java.util.List;
 public class MainActivity extends Activity
         implements SensorEventListener {
 
-    // ── Theme palette (class-level constants — accessible from all methods) ────
-    // Dark theme
-    private static final int D_BG          = 0xFF07070D;
-    private static final int D_SURFACE     = 0xFF0D0D1A;
-    private static final int D_SURFACE2    = 0xFF131325;
-    private static final int D_BORDER      = 0xFF1E1E35;
-    private static final int D_TEXT        = 0xFFE8E8F0;
-    private static final int D_TEXT2       = 0xFFAAAAAC;
-    private static final int D_TEXT3       = 0xFF66667A;
-    private static final int D_NAV         = 0xF0090913;
-    private static final int D_INPUT_BG    = 0xFF0E0E1C;
-    private static final int D_USER_BUBBLE = 0xFF141428;
-    private static final int D_KIRA_BUBBLE = 0xFF0F0F1E;
-    private static final int D_TOOL_BG     = 0xFF0A1A0A;
-    private static final int D_ERROR_BG    = 0xFF1A0808;
-    private static final int D_CODE_BG     = 0xFF0A0E17;
-    private static final int D_CODE_HDR    = 0xFF141828;
-    // Light theme
-    private static final int L_BG          = 0xFFF7F7FC;
+    // ── Material 3 Theme palette ─────────────────────────────────────────────
+    // Dark theme (Material You / M3 dark baseline)
+    private static final int D_BG          = 0xFF111318;
+    private static final int D_SURFACE     = 0xFF1C1F26;
+    private static final int D_SURFACE2    = 0xFF2A2D35;
+    private static final int D_BORDER      = 0xFF49454F;
+    private static final int D_TEXT        = 0xFFE6E1E5;
+    private static final int D_TEXT2       = 0xFFCAC4D0;
+    private static final int D_TEXT3       = 0xFF938F99;
+    private static final int D_NAV         = 0xFF1C1F26;
+    private static final int D_INPUT_BG    = 0xFF2A2D35;
+    private static final int D_USER_BUBBLE = 0xFF2A2440;
+    private static final int D_KIRA_BUBBLE = 0xFF1C1F26;
+    private static final int D_TOOL_BG     = 0xFF1A2A1A;
+    private static final int D_ERROR_BG    = 0xFF2D1B1E;
+    private static final int D_CODE_BG     = 0xFF1A1D24;
+    private static final int D_CODE_HDR    = 0xFF22252E;
+    // Light theme (Material You / M3 light baseline)
+    private static final int L_BG          = 0xFFFEF7FF;
     private static final int L_SURFACE     = 0xFFFFFFFF;
-    private static final int L_SURFACE2    = 0xFFF0F0F8;
-    private static final int L_BORDER      = 0xFFDDDDE8;
-    private static final int L_TEXT        = 0xFF111120;
-    private static final int L_TEXT2       = 0xFF444458;
-    private static final int L_TEXT3       = 0xFF888899;
-    private static final int L_NAV         = 0xFFF0F0F8;
-    private static final int L_INPUT_BG    = 0xFFEEEEF8;
-    private static final int L_USER_BUBBLE = 0xFFEAEAF8;
+    private static final int L_SURFACE2    = 0xFFF3EDF7;
+    private static final int L_BORDER      = 0xFFCAC4D0;
+    private static final int L_TEXT        = 0xFF1C1B1F;
+    private static final int L_TEXT2       = 0xFF49454F;
+    private static final int L_TEXT3       = 0xFF79747E;
+    private static final int L_NAV         = 0xFFF3EDF7;
+    private static final int L_INPUT_BG    = 0xFFECE6F0;
+    private static final int L_USER_BUBBLE = 0xFFEADDFF;
     private static final int L_KIRA_BUBBLE = 0xFFFFFFFF;
-    private static final int L_TOOL_BG     = 0xFFE8F5E8;
+    private static final int L_TOOL_BG     = 0xFFDCF8E0;
     private static final int L_ERROR_BG    = 0xFFFFF0F0;
-    private static final int L_CODE_BG     = 0xFFF0F2F8;
-    private static final int L_CODE_HDR    = 0xFFE4E8F4;
-    // Shared accent (same in both themes)
-    private static final int ACCENT        = 0xFFDC143C;
-    private static final int ACCENT_DIM    = 0xFF3A0010;
+    private static final int L_CODE_BG     = 0xFFF3EDF7;
+    private static final int L_CODE_HDR    = 0xFFEADDFF;
+    // Shared accent — Material 3 primary purple
+    private static final int ACCENT        = 0xFFBB86FC;
+    private static final int ACCENT_DIM    = 0xFF3700B3;
 
         private static final int SHIZUKU_CODE    = 1001;
     private static final int PERMISSION_CODE = 1002;

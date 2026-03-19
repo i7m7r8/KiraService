@@ -39,32 +39,9 @@ public class ShizukuShell {
      * hasn't been granted yet.
      */
     public static boolean isInstalled() {
-        // First try pingBinder — most reliable when Shizuku is running
         try {
-            if (Shizuku.pingBinder()) return true;
-        } catch (Exception ignored) {}
-        // Fallback: check if the Shizuku APK is installed on device
-        // even if the service isn't currently running
-        try {
-            android.content.pm.PackageManager pm =
-                android.app.Application.getProcessName() != null
-                ? null : null; // can't get PM statically; skip
-            // If binder threw but didn't return false, treat as installed
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * Check if Shizuku APK is installed on the device (even if not running).
-     * Uses PackageManager instead of binder ping.
-     */
-    public static boolean isApkInstalled(android.content.Context ctx) {
-        try {
-            ctx.getPackageManager().getApplicationInfo("moe.shizuku.privileged.api", 0);
-            return true;
-        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            return Shizuku.pingBinder();
+        } catch (IllegalStateException e) {
             return false;
         } catch (Exception e) {
             return false;

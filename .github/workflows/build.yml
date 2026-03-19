@@ -11,9 +11,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # Force gradlew to use the wrapper (never system gradle)
-      GRADLE_USER_HOME: /home/runner/.gradle-kira
 
     steps:
       - name: Checkout
@@ -56,100 +53,54 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
 
-      - name: List rust-libs
-        run: find app/src/main/rust-libs -type f | sort
+      - name: Install Gradle 8.4
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.4/bin" >> $GITHUB_PATH
 
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # Generate a stable keystore so every build has the SAME cert.
-      # Use 1024-bit RSA for speed (debug-quality, sufficient for sideload).
-      # Set KEYSTORE_PASSWORD secret in repo settings for a custom password.
-      - name: Create stable signing keystore
-        run: |
-          PASS="${{ secrets.KEYSTORE_PASSWORD }}"
-          [ -z "$PASS" ] && PASS="kira_stable_2024"
-          keytool -genkeypair \
-            -alias kira \
-            -keyalg RSA -keysize 1024 \
-            -validity 10000 \
-            -keystore kira.jks \
-            -storepass "$PASS" -keypass "$PASS" \
-            -dname "CN=Kira,O=KiraAI,C=US" \
-            -noprompt 2>/dev/null
-          echo "KEYSTORE_PATH=$(pwd)/kira.jks" >> $GITHUB_ENV
-          echo "KEYSTORE_PASS=$PASS"           >> $GITHUB_ENV
-
-      # Extract version from build.gradle for the tag
-      - name: Get version
-        id: ver
-        run: |
-          VER=$(grep versionName app/build.gradle | grep -oP '[\d]+\.[\d]+\.[\d]+' | head -1)
-          TS=$(date +'%Y%m%d-%H%M')
-          echo "VER=$VER"  >> $GITHUB_OUTPUT
-          echo "TS=$TS"    >> $GITHUB_OUTPUT
-          echo "TAG=v${VER}-${TS}" >> $GITHUB_OUTPUT
-
-      # Build ONLY release APK (signed). No debug build needed.
-      - name: Build signed Release APK
-        run: |
-          ./gradlew assembleRelease --no-daemon --no-configuration-cache \
-            -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASS" \
-            -Pandroid.injected.signing.key.alias=kira \
-            -Pandroid.injected.signing.key.password="$KEYSTORE_PASS"
+      - name: Build APK
+        run: gradle assembleRelease --stacktrace
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx3g"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
-      - name: List APK outputs
-        run: find app/build/outputs/apk -type f | sort
-
-      - name: Rename APK
+      - name: Locate APK
+        id: apk
         run: |
-          mkdir -p dist
-          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          cp "$APK" "dist/KiraAgent-v${{ steps.ver.outputs.VER }}.apk"
-          echo "APK_NAME=KiraAgent-v${{ steps.ver.outputs.VER }}.apk" >> $GITHUB_ENV
+          APK=$(find app/build/outputs/apk -name "*.apk" | head -1)
+          echo "APK_PATH=$APK" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK"
+          ls -lh app/build/outputs/apk/release/ 2>/dev/null || ls -lh app/build/outputs/apk/ 2>/dev/null
 
-      - name: Upload artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KiraAgent-${{ steps.ver.outputs.VER }}
-          path: dist/*.apk
+          name: Kira-APK
+          path: ${{ steps.apk.outputs.APK_PATH }}
           retention-days: 30
 
-      # Read CHANGELOG.md if present, else use auto-generated notes
-      - name: Read changelog
-        id: cl
-        run: |
-          if [ -f CHANGELOG.md ]; then
-            # Extract first section (up to second ##)
-            NOTES=$(awk '/^## /{i++} i==1' CHANGELOG.md | tail -n +2 | head -40)
-          else
-            NOTES="Automated release. See commit history for changes."
-          fi
-          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES"     >> $GITHUB_OUTPUT
-          echo "EOF"        >> $GITHUB_OUTPUT
+      - name: Get timestamp
+        id: ts
+        run: echo "TS=$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.TAG }}
-          name: "Kira Agent v${{ steps.ver.outputs.VER }}"
+          tag_name: v${{ steps.ts.outputs.TS }}
+          name: "Kira ${{ steps.ts.outputs.TS }}"
           body: |
-            ## Kira Agent v${{ steps.ver.outputs.VER }}
-            **Released:** ${{ steps.ver.outputs.TS }}
+            ## Kira AI Agent
 
-            ${{ steps.cl.outputs.NOTES }}
+            Galaxy UI + Crimson Neon + Accelerometer Star Parallax
+            OpenClaw / NanoClaw / ZeroClaw / Rou Bao architecture
+            Rust HTTP engine on port 7070
+            Automation engine (Tasker-style triggers + profiles)
+            186 tools, 17 AI providers, no Termux required
 
-            ---
-            ### Install
-            1. Download **${{ env.APK_NAME }}**
-            2. Enable "Install from unknown sources"
-            3. Install — **no uninstall needed** (same signing key every build)
-
-            > Kira will auto-detect this release via OTA check on startup.
-          files: dist/*.apk
+            Install: enable Unknown Sources, install APK
+          files: ${{ steps.apk.outputs.APK_PATH }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

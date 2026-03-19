@@ -102,12 +102,9 @@ public class SetupActivity extends Activity implements SensorEventListener {
 
         pageContainer = new FrameLayout(this);
         pageContainer.setId(R.id.setupPageContainer);
-        // Leave 140dp at the bottom for the nav buttons so they're never covered
-        FrameLayout.LayoutParams pcLp = new FrameLayout.LayoutParams(
+        root.addView(pageContainer, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT);
-        pcLp.bottomMargin = dp(140);
-        root.addView(pageContainer, pcLp);
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         dotsRow = new LinearLayout(this);
         dotsRow.setId(R.id.setupDots);
@@ -131,14 +128,13 @@ public class SetupActivity extends Activity implements SensorEventListener {
 
         skipBtn = new TextView(this);
         skipBtn.setId(R.id.setupSkipBtn);
-        skipBtn.setText("Skip →");
-        skipBtn.setTextColor(0xFFAAAAAA);  // brighter than C_MUTED so it's always readable
+        skipBtn.setText("Skip");
+        skipBtn.setTextColor(C_MUTED);
         skipBtn.setTextSize(15);
-        skipBtn.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        skipBtn.setGravity(Gravity.CENTER_VERTICAL);
         skipBtn.setClickable(true);
         skipBtn.setFocusable(true);
-        // Ensure tap target is large enough
-        btnRow.addView(skipBtn, new LinearLayout.LayoutParams(0, dp(52), 1));
+        btnRow.addView(skipBtn, new LinearLayout.LayoutParams(0, dp(48), 1));
 
         nextBtn = new TextView(this);
         nextBtn.setId(R.id.setupNextBtn);
@@ -883,26 +879,14 @@ public class SetupActivity extends Activity implements SensorEventListener {
 
     private EditText inputField(String hintText, boolean numeric) {
         EditText et = new EditText(this);
-        et.setHint(hintText);
-        // Readable hint: medium grey, clearly visible on dark background
-        et.setHintTextColor(0xFF8888AA);
-        // White text on dark card — maximum readability
-        et.setTextColor(0xFFFFFFFF);
-        et.setTextSize(16);
-        // Solid dark card background with a subtle left accent border via padding
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xFF1A1A2E);          // dark navy — clearly distinct from page bg
-        bg.setCornerRadius(dp(8));
-        bg.setStroke(dp(1), 0xFF333355); // subtle border, not glowing
-        et.setBackground(bg);
-        et.setPadding(dp(16), dp(14), dp(16), dp(14));
-        et.setInputType(numeric
-            ? InputType.TYPE_CLASS_NUMBER
-            : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));
-        // NO setShadowLayer — it bleeds over the hint text making it unreadable
+        et.setHint(hintText); et.setHintTextColor(C_HINT);
+        et.setTextColor(C_TEXT); et.setTextSize(15);
+        et.setBackgroundColor(C_CARD);
+        et.setPadding(dp(18), dp(16), dp(18), dp(16));
+        et.setInputType(numeric ? InputType.TYPE_CLASS_NUMBER : InputType.TYPE_CLASS_TEXT);
+        et.setShadowLayer(dp(4), 0, dp(2), C_ACCENT);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        lp.setMargins(dp(24), 0, dp(24), dp(16));
-        et.setLayoutParams(lp);
+        lp.setMargins(dp(24), 0, dp(24), dp(14)); et.setLayoutParams(lp);
         return et;
     }
 

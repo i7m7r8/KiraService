@@ -5,7 +5,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.util.Log;
 import android.net.Uri;
 import android.os.Bundle;
 import android.hardware.Sensor;
@@ -42,9 +41,41 @@ import java.util.List;
 public class MainActivity extends Activity
         implements SensorEventListener {
 
-    // ── Theme palette driven entirely by Rust getTheme() ────────────────────
-    // All colors are loaded dynamically in loadThemeTokens() from Rust JSON.
-    // Default fallback: Catppuccin Mocha
+    // ── Catppuccin Mocha palette ──────────────────────────────────────────────
+    private static final int D_BG          = 0xFF1E1E2E; // Base
+    private static final int D_SURFACE     = 0xFF181825; // Mantle
+    private static final int D_SURFACE2    = 0xFF181825; // Mantle
+    private static final int D_BORDER      = 0xFF313244; // Surface0
+    private static final int D_TEXT        = 0xFFCDD6F4; // Text
+    private static final int D_TEXT2       = 0xFFBAC2DE; // Subtext1
+    private static final int D_TEXT3       = 0xFF9399B2; // Overlay2
+    private static final int D_NAV         = 0xFF181825; // Mantle
+    private static final int D_INPUT_BG    = 0xFF313244; // Surface0
+    private static final int D_USER_BUBBLE = 0xFF313244; // Surface0
+    private static final int D_KIRA_BUBBLE = 0xFF1E1E2E; // Base
+    private static final int D_TOOL_BG     = 0xFF1E2E1E; // tinted Base
+    private static final int D_ERROR_BG    = 0xFF2E1E1E; // tinted Base
+    private static final int D_CODE_BG     = 0xFF11111B; // Crust
+    private static final int D_CODE_HDR    = 0xFF181825; // Mantle
+    // Light theme (Catppuccin Latte)
+    private static final int L_BG          = 0xFFEFF1F5; // Base
+    private static final int L_SURFACE     = 0xFFFFFFFF;
+    private static final int L_SURFACE2    = 0xFFE6E9EF; // Mantle
+    private static final int L_BORDER      = 0xFFCCD0DA; // Surface0
+    private static final int L_TEXT        = 0xFF4C4F69; // Text
+    private static final int L_TEXT2       = 0xFF5C5F77; // Subtext1
+    private static final int L_TEXT3       = 0xFF6C6F85; // Overlay2
+    private static final int L_NAV         = 0xFFE6E9EF; // Mantle
+    private static final int L_INPUT_BG    = 0xFFDCE0E8; // Surface1
+    private static final int L_USER_BUBBLE = 0xFFDCE0E8; // Surface1
+    private static final int L_KIRA_BUBBLE = 0xFFFFFFFF;
+    private static final int L_TOOL_BG     = 0xFFE8F5E8;
+    private static final int L_ERROR_BG    = 0xFFFFF0F0;
+    private static final int L_CODE_BG     = 0xFFE6E9EF; // Mantle
+    private static final int L_CODE_HDR    = 0xFFCCD0DA; // Surface0
+    // Accent: Catppuccin Lavender
+    private static final int ACCENT        = 0xFFB4BEFE; // Lavender
+    private static final int ACCENT_DIM    = 0xFF2A2A40;
 
         private static final int SHIZUKU_CODE    = 1001;
     private static final int PERMISSION_CODE = 1002;
@@ -131,33 +162,37 @@ public class MainActivity extends Activity
         setContentView(R.layout.activity_main);
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
+        // Auto theme: follow system setting
         int uiMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        // Respect saved preference, else follow system
         boolean savedDark = getSharedPreferences("kira_theme", MODE_PRIVATE)
             .getBoolean("dark", uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES);
         isDarkTheme = savedDark;
         applyTheme();
 
+
+        // Init accelerometer for star parallax
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager != null)
             accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        try {
-            ai = new KiraAI(this);
-            agent = new com.kira.service.ai.KiraAgent(this);
-            chain = new com.kira.service.ai.KiraChain(this);
-        } catch (Throwable e) {
-            android.util.Log.e("KiraMain", "AI init failed: " + e, e);
-        }
+        ai = new KiraAI(this);
+        agent = new com.kira.service.ai.KiraAgent(this);
+        chain = new com.kira.service.ai.KiraChain(this);
         initViews();
         showTab(0);
 
+        // Register Shizuku permission result listener before requesting
         try { Shizuku.addRequestPermissionResultListener(shizukuPermListener); }
         catch (Exception ignored) {}
         requestAllPermissions();
         uiHandler.postDelayed(this::checkShizuku, 500);
         uiHandler.postDelayed(this::checkAccessibility, 2000);
 
-        try { KiraForegroundService.start(this); } catch (Throwable ignored) {}
+        // Start foreground service to keep Telegram alive
+        KiraForegroundService.start(this);
+        // v43: init OTA engine (registers version with Rust, schedules checks)
         initOta();
+        // OTA check (non-blocking, 3s delay)
     }
 
     // -- Permissions -----------------------------------------------------------
@@ -227,8 +262,6 @@ public class MainActivity extends Activity
     // -- View init -------------------------------------------------------------
 
     private void initViews() {
-        try {
-
         FrameLayout frame = findViewById(R.id.contentFrame);
         homeFragment     = getLayoutInflater().inflate(R.layout.fragment_home,     frame, false);
         toolsFragment    = getLayoutInflater().inflate(R.layout.fragment_tools,    frame, false);
@@ -262,14 +295,14 @@ public class MainActivity extends Activity
         suggestionsRow  = homeFragment.findViewById(R.id.suggestionsRow);
         suggestionsScroll = homeFragment.findViewById(R.id.suggestionsScroll);
 
-        if (sendBtn != null) sendBtn.setOnClickListener(v -> sendMessage());
-        if (inputField != null) inputField.setOnEditorActionListener((v, id, e) -> {
+        sendBtn.setOnClickListener(v -> sendMessage());
+        inputField.setOnEditorActionListener((v, id, e) -> {
             if (id == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendMessage(); return true; }
             return false;
         });
         buildSuggestions();
 
-        if (headerSubtitle != null) headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
+        headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
 
         // History
         historyList  = historyFragment.findViewById(R.id.historyList);
@@ -358,10 +391,10 @@ public class MainActivity extends Activity
             }));
         View rowAutoApprove = settingsFragment.findViewById(R.id.rowAutoApprove);
         TextView autoTv = settingsFragment.findViewById(R.id.autoApproveToggle);
-        if (autoTv != null) { autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?T_ACCENT:T_TEXT2); autoTv.setBackgroundColor(cfg.agentAutoApprove?T_SURFACE_VAR:T_SURFACE5); }
+        if (autoTv != null) { autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFFDC143C:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF1A0008:0xFF222222); }
         if (rowAutoApprove != null && autoTv != null) rowAutoApprove.setOnClickListener(v -> {
             cfg.agentAutoApprove = !cfg.agentAutoApprove; cfg.save(MainActivity.this);
-            autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?T_ACCENT:T_TEXT2); autoTv.setBackgroundColor(cfg.agentAutoApprove?T_SURFACE_VAR:T_SURFACE5);
+            autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFFDC143C:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF1A0008:0xFF222222);
         });
         View rowHeartbeat = settingsFragment.findViewById(R.id.rowHeartbeat);
         if (rowHeartbeat != null) rowHeartbeat.setOnClickListener(v ->
@@ -410,10 +443,10 @@ public class MainActivity extends Activity
         View rowHistory2 = settingsFragment.findViewById(R.id.rowHistory);
         if (rowHistory2 != null) rowHistory2.setOnClickListener(v -> showConfirmDialog("Clear all history?", () -> { new com.kira.service.ai.KiraMemory(this).clearHistory(); conversation.clear(); chatContainer.removeAllViews(); }));
 
-        { View _acc = settingsFragment.findViewById(R.id.cardAccessibility);
-          if (_acc != null) _acc.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))); }
-        { View _flt = settingsFragment.findViewById(R.id.rowFloating);
-          if (_flt != null) _flt.setOnClickListener(v -> toggleFloating()); }
+        settingsFragment.findViewById(R.id.cardAccessibility).setOnClickListener(v ->
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        // shizuku card click wired via cardShizuku above
+        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating());
 
         buildToolsList();
         updateSettingsUI();
@@ -429,31 +462,24 @@ public class MainActivity extends Activity
         // rust stats row already handled by rowRustStats above
         if (memoryClearBtn != null) memoryClearBtn.setOnClickListener(v -> clearMemory());
         // clearHistory wired via rowHistory2 above
-    
-        } catch (Exception e) {
-            android.util.Log.e("KiraInit", "initViews crash: " + e.getMessage(), e);
-            android.widget.Toast.makeText(this, "UI init error: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
-        }
     }
 
     // -- Tab nav ---------------------------------------------------------------
 
     private void showTab(int tab) {
         currentTab = tab;
-        if (homeFragment != null) homeFragment.setVisibility(tab == 0 ? View.VISIBLE : View.GONE);
-        if (toolsFragment != null) toolsFragment.setVisibility(tab == 1 ? View.VISIBLE : View.GONE);
-        if (historyFragment != null) historyFragment.setVisibility(tab == 2 ? View.VISIBLE : View.GONE);
-        if (settingsFragment != null) settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
+        homeFragment.setVisibility(tab == 0 ? View.VISIBLE : View.GONE);
+        toolsFragment.setVisibility(tab == 1 ? View.VISIBLE : View.GONE);
+        historyFragment.setVisibility(tab == 2 ? View.VISIBLE : View.GONE);
+        settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            int activeColor = T_ACCENT;
-            int idleColor   = T_TEXT2;
-            if (navIcons != null && navIcons[i] != null)
-                navIcons[i].setTextColor(on ? activeColor : idleColor);
-            if (navTexts != null && navTexts[i] != null)
-                navTexts[i].setTextColor(on ? activeColor : idleColor);
-            if (navItems != null && navItems[i] != null)
-                navItems[i].setBackgroundColor(on ? 0x15B4BEFE : 0x00000000);
+            int activeColor = 0xFFDC143C;
+            int idleColor   = 0xFF222233;
+            navIcons[i].setTextColor(on ? activeColor : idleColor);
+            navTexts[i].setTextColor(on ? activeColor : idleColor);
+            // Active tab: subtle crimson underline via background
+            navItems[i].setBackgroundColor(on ? 0x15DC143C : 0x00000000);
         }
         if (tab == 2) refreshHistory();
         if (tab == 3) updateSettingsUI();
@@ -462,7 +488,6 @@ public class MainActivity extends Activity
     // -- Chat -- Claude-style ---------------------------------------------------
 
     private void sendMessage() {
-        if (inputField == null) return;
         String text = inputField.getText().toString().trim();
         if (text.isEmpty()) return;
         sendMessage(text);
@@ -470,8 +495,8 @@ public class MainActivity extends Activity
 
     private void sendMessage(String text) {
         if (text.isEmpty()) return;
-        if (inputField != null) inputField.setText("");
-        if (suggestionsScroll != null) suggestionsScroll.setVisibility(View.GONE);
+        inputField.setText("");
+        suggestionsScroll.setVisibility(View.GONE);
 
         // Agent mode: prefix with /agent or /auto
         if (text.startsWith("/kb ")) {
@@ -514,13 +539,12 @@ public class MainActivity extends Activity
         conversation.add(userTurn);
         addUserBubble(userTurn);
 
-        if (headerSubtitle != null) headerSubtitle.setText("thinking...");
-        if (sendBtn != null) sendBtn.setEnabled(false);
+        headerSubtitle.setText("thinking...");
+        sendBtn.setEnabled(false);
 
         // Thinking placeholder
         ConvTurn[] kiraTurn = {null};
 
-        if (ai == null) { addErrorBubble(new ConvTurn("error", "AI not ready yet")); return; }
         ai.chat(text, new KiraAI.Callback() {
             @Override public void onThinking() {
                 uiHandler.post(() -> { if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); } });
@@ -540,8 +564,8 @@ public class MainActivity extends Activity
                         conversation.add(kiraTurn[0]);
                         addKiraBubble(kiraTurn[0]);
                     }
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
                     scrollToBottom();
                 });
             }
@@ -551,8 +575,8 @@ public class MainActivity extends Activity
                     ConvTurn errTurn = new ConvTurn("error", error);
                     conversation.add(errTurn);
                     addErrorBubble(errTurn);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("error");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("error");
                 });
             }
         });
@@ -578,16 +602,18 @@ public class MainActivity extends Activity
         labelRow.setPadding(0, 0, 0, dp(3));
 
         TextView label = makeLabel("YOU");
-        label.setTextColor(T_TEXT2);
+        label.setTextColor(t(D_TEXT3, L_TEXT3));
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
         // Edit button -- lets user edit and resend (like Claude's edit feature)
         TextView editBtn = new TextView(this);
         editBtn.setText("? edit");
-        editBtn.setTextColor(T_TEXT2);
+        editBtn.setTextColor(t(D_TEXT3, L_TEXT3));
         editBtn.setTextSize(10);
         editBtn.setOnClickListener(v -> {
-            if (inputField != null) { inputField.setText(turn.text); inputField.setSelection(turn.text.length()); inputField.requestFocus(); }
+            inputField.setText(turn.text);
+            inputField.setSelection(turn.text.length());
+            inputField.requestFocus();
             // Remove all turns from this turn onward (Claude-style branching)
             int idx = conversation.indexOf(turn);
             if (idx >= 0) {
@@ -611,7 +637,7 @@ public class MainActivity extends Activity
 
         wrap.addView(labelRow);
         wrap.addView(msg);
-        if (chatContainer != null) chatContainer.addView(wrap);
+        chatContainer.addView(wrap);
         scrollToBottom();
     }
 
@@ -628,18 +654,18 @@ public class MainActivity extends Activity
         wrap.setLayoutParams(wp);
 
         TextView label = makeLabel("KIRA");
-        label.setTextColor(T_ACCENT);
+        label.setTextColor(0xFFDC143C);
         label.setPadding(0, 0, 0, dp(3));
 
         TextView msg = new TextView(this);
         msg.setText("???");
-        msg.setTextColor(T_TEXT2);
+        msg.setTextColor(t(D_TEXT3, L_TEXT3));
         msg.setTextSize(14);
         msg.setTag("thinking_msg");
 
         wrap.addView(label);
         wrap.addView(msg);
-        if (chatContainer != null) chatContainer.addView(wrap);
+        chatContainer.addView(wrap);
         thinkingView = wrap;
         scrollToBottom();
     }
@@ -651,7 +677,7 @@ public class MainActivity extends Activity
             return;
         }
         // Replace the "???" with real content
-        if (chatContainer != null) chatContainer.removeView(thinkingView);
+        chatContainer.removeView(thinkingView);
         thinkingView = null;
         conversation.add(turn);
         addKiraBubble(turn);
@@ -659,7 +685,7 @@ public class MainActivity extends Activity
 
     private void removeThinkingBubble() {
         if (thinkingView != null) {
-            if (chatContainer != null) chatContainer.removeView(thinkingView);
+            chatContainer.removeView(thinkingView);
             thinkingView = null;
         }
     }
@@ -679,14 +705,14 @@ public class MainActivity extends Activity
         header.setPadding(0, 0, 0, dp(3));
 
         TextView label = makeLabel("KIRA");
-        label.setTextColor(T_ACCENT);
+        label.setTextColor(0xFFDC143C);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
         TextView copyBtn = makeActionBtn("copy");
         copyBtn.setOnClickListener(v -> copyText(turn.text));
 
         TextView resendBtn = makeActionBtn("? resend");
-        resendBtn.setOnClickListener(v -> { if (inputField!=null){ inputField.setText(turn.text); inputField.setSelection(turn.text.length()); inputField.requestFocus(); } });
+        resendBtn.setOnClickListener(v -> { inputField.setText(turn.text); inputField.setSelection(turn.text.length()); });
 
         header.addView(label);
         header.addView(copyBtn);
@@ -704,7 +730,7 @@ public class MainActivity extends Activity
             msg.setText(turn.text);
             msg.setTextColor(0xFFeeeeee);
             msg.setTextSize(14);
-            msg.setBackgroundColor(0x0AFFFFFF);
+            msg.setBackgroundColor(0x880e0e18);
             msg.setPadding(dp(14), dp(10), dp(14), dp(10));
             msg.setLineSpacing(dp(2), 1);
             msg.setTextIsSelectable(true);
@@ -712,7 +738,7 @@ public class MainActivity extends Activity
             wrap.addView(msg);
         }
 
-        if (chatContainer != null) chatContainer.addView(wrap);
+        chatContainer.addView(wrap);
     }
 
     /**
@@ -728,7 +754,7 @@ public class MainActivity extends Activity
                 if (!part.trim().isEmpty()) {
                     TextView tv = new TextView(this);
                     tv.setText(part.trim());
-                    tv.setTextColor(T_TEXT);
+                    tv.setTextColor(t(D_TEXT, L_TEXT));
                     tv.setTextSize(14);
                     tv.setPadding(dp(14), dp(8), dp(14), dp(8));
                     tv.setLineSpacing(dp(2), 1);
@@ -748,7 +774,7 @@ public class MainActivity extends Activity
 
                 LinearLayout codeBlock = new LinearLayout(this);
                 codeBlock.setOrientation(LinearLayout.VERTICAL);
-                codeBlock.setBackgroundColor(T_SURFACE5);
+                codeBlock.setBackgroundColor(t(D_CODE_BG, L_CODE_BG));
                 LinearLayout.LayoutParams cbp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cbp.setMargins(0, dp(4), 0, dp(4));
                 codeBlock.setLayoutParams(cbp);
@@ -757,19 +783,19 @@ public class MainActivity extends Activity
                 LinearLayout codeHeader = new LinearLayout(this);
                 codeHeader.setOrientation(LinearLayout.HORIZONTAL);
                 codeHeader.setGravity(Gravity.CENTER_VERTICAL);
-                codeHeader.setBackgroundColor(T_SURFACE_VAR);
+                codeHeader.setBackgroundColor(t(D_CODE_HDR, L_CODE_HDR));
                 codeHeader.setPadding(dp(12), dp(6), dp(12), dp(6));
 
                 TextView langLabel = new TextView(this);
                 langLabel.setText(lang.isEmpty() ? "code" : lang);
-                langLabel.setTextColor(T_TEXT2);
+                langLabel.setTextColor(t(0xFF8888AA, L_TEXT3));
                 langLabel.setTextSize(11);
                 langLabel.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
                 final String finalCode = code.trim();
                 TextView codeCopyBtn = new TextView(this);
                 codeCopyBtn.setText("Copy");
-                codeCopyBtn.setTextColor(T_ACCENT);
+                codeCopyBtn.setTextColor(0xFFDC143C);
                 codeCopyBtn.setTextSize(11);
                 codeCopyBtn.setOnClickListener(v -> {
                     copyText(finalCode);
@@ -792,7 +818,7 @@ public class MainActivity extends Activity
                 codeTv.setTypeface(android.graphics.Typeface.MONOSPACE);
                 codeTv.setPadding(dp(12), dp(10), dp(12), dp(10));
                 codeTv.setTextIsSelectable(true);
-                codeTv.setBackgroundColor(T_SURFACE5);
+                codeTv.setBackgroundColor(t(D_CODE_BG, L_CODE_BG));
 
                 hScroll.addView(codeTv);
                 codeBlock.addView(codeHeader);
@@ -813,7 +839,7 @@ public class MainActivity extends Activity
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(1), 0, dp(1));
         tv.setLayoutParams(p);
-        if (chatContainer != null) chatContainer.addView(tv);
+        chatContainer.addView(tv);
         scrollToBottom();
     }
 
@@ -838,12 +864,12 @@ public class MainActivity extends Activity
 
         wrap.addView(label);
         wrap.addView(msg);
-        if (chatContainer != null) chatContainer.addView(wrap);
+        chatContainer.addView(wrap);
         scrollToBottom();
     }
 
     private void rebuildChat() {
-        if (chatContainer != null) chatContainer.removeAllViews();
+        chatContainer.removeAllViews();
         for (ConvTurn turn : conversation) {
             switch (turn.role) {
                 case "user":  addUserBubble(turn); break;
@@ -860,11 +886,10 @@ public class MainActivity extends Activity
         ConvTurn userTurn = new ConvTurn("user", "/chain " + goal);
         conversation.add(userTurn);
         addUserBubble(userTurn);
-        if (headerSubtitle != null) headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
-        if (sendBtn != null) sendBtn.setEnabled(false);
+        headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
+        sendBtn.setEnabled(false);
         addSystemNotice("\uD83E\uDDE0 ReAct mode: reason + act loop");
 
-        if (chain == null) { addErrorBubble(new ConvTurn("error", "AI not ready")); return; }
         chain.run(goal, new com.kira.service.ai.KiraChain.ChainCallback() {
             @Override public void onThought(String t) {
                 uiHandler.post(() -> addSystemNotice("\uD83E\uDDE0 " + t));
@@ -880,13 +905,13 @@ public class MainActivity extends Activity
                     ConvTurn t2 = new ConvTurn("kira", answer);
                     conversation.add(t2);
                     addKiraBubble(t2);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("done.");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
             }
             @Override public void onError(String e) {
-                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); if (sendBtn != null) sendBtn.setEnabled(true); if (headerSubtitle != null) headerSubtitle.setText("chain error"); });
+                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); sendBtn.setEnabled(true); headerSubtitle.setText("chain error"); });
             }
         });
     }
@@ -895,12 +920,11 @@ public class MainActivity extends Activity
         ConvTurn userTurn = new ConvTurn("user", "/agent " + goal);
         conversation.add(userTurn);
         addUserBubble(userTurn);
-        if (headerSubtitle != null) headerSubtitle.setText("agent running...");
-        if (sendBtn != null) sendBtn.setEnabled(false);
+        headerSubtitle.setText("agent running...");
+        sendBtn.setEnabled(false);
 
         addSystemNotice("Agent mode: planning task...");
 
-        if (agent == null) { addErrorBubble(new ConvTurn("error", "AI not ready")); return; }
         agent.execute(goal, new com.kira.service.ai.KiraAgent.AgentCallback() {
             @Override public void onPlan(String plan) {
                 uiHandler.post(() -> addSystemNotice("Plan:\n" + plan));
@@ -913,16 +937,16 @@ public class MainActivity extends Activity
                     ConvTurn turn = new ConvTurn("kira", summary);
                     conversation.add(turn);
                     addKiraBubble(turn);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("done.");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
             }
             @Override public void onError(String error) {
                 uiHandler.post(() -> {
                     addErrorBubble(new ConvTurn("error", error));
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("agent error");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("agent error");
                 });
             }
         });
@@ -931,14 +955,14 @@ public class MainActivity extends Activity
     private void addSystemNotice(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
-        tv.setTextColor(T_TEXT2);
+        tv.setTextColor(t(0xFF8888AA, L_TEXT3));
         tv.setTextSize(12);
         tv.setPadding(dp(12), dp(6), dp(12), dp(6));
         tv.setBackgroundColor(0x88080810);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(2), 0, dp(2));
         tv.setLayoutParams(p);
-        if (chatContainer != null) chatContainer.addView(tv);
+        chatContainer.addView(tv);
         scrollToBottom();
     }
 
@@ -948,16 +972,16 @@ public class MainActivity extends Activity
         float ax = event.values[0]; // tilt left/right
         float ay = event.values[1]; // tilt forward/back
         // Push to Rust for EMA smoothing
-        try { RustBridge.updateTilt(ax, ay); } catch (Throwable ignored) {}
+        RustBridge.updateTilt(ax, ay);
         // Read smoothed parallax back and update GalaxyView
         if (galaxyView == null) return;
         try {
-            String j; try { j = RustBridge.getStarParallax(); } catch (Throwable e) { return; }
+            String j = RustBridge.getStarParallax();
             if (j == null) return;
             // Parse {"px":0.12,"py":-0.05,...}
             float px = parseJsonFloat(j, "px");
             float py = parseJsonFloat(j, "py");
-            if (galaxyView != null) galaxyView.setParallax(px, py);
+            galaxyView.setParallax(px, py);
         } catch (Exception ignored) {}
     }
 
@@ -1043,21 +1067,21 @@ public class MainActivity extends Activity
 
         // Accent bar
         android.view.View bar = new android.view.View(this);
-        bar.setBackgroundColor(T_ACCENT);
+        bar.setBackgroundColor(0xFFDC143C);
         bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(bar);
 
         // Title
         android.widget.TextView ttv = new android.widget.TextView(this);
         ttv.setText("SELECT PROVIDER");
-        ttv.setTextColor(T_TEXT);
+        ttv.setTextColor(t(D_TEXT, L_TEXT));
         ttv.setTextSize(13); ttv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         android.widget.LinearLayout.LayoutParams ttp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
         ttp.setMargins(dp(16), dp(12), dp(16), dp(10)); ttv.setLayoutParams(ttp);
         card.addView(ttv);
 
         android.view.View sep = new android.view.View(this);
-        sep.setBackgroundColor(T_OUTLINE);
+        sep.setBackgroundColor(t(D_BORDER, L_BORDER));
         sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(sep);
 
@@ -1083,12 +1107,12 @@ public class MainActivity extends Activity
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setPadding(dp(16), dp(12), dp(16), dp(12));
             boolean isActive = displayNames[i].endsWith("  \u2713");
-            row.setBackgroundColor(isActive ? (isDarkTheme ? 0x22B4BEFE : 0x11B4BEFE) : 0x00000000);
+            row.setBackgroundColor(isActive ? (isDarkTheme ? 0x22DC143C : 0x11DC143C) : 0x00000000);
             row.setClickable(true); row.setFocusable(true);
 
             android.widget.TextView nameTV = new android.widget.TextView(this);
             nameTV.setText(displayNames[i]);
-            nameTV.setTextColor(isActive ? T_ACCENT : (isDarkTheme ? T_TEXT : T_TEXT2));
+            nameTV.setTextColor(isActive ? 0xFFDC143C : (isDarkTheme ? 0xFFccccdd : 0xFF222233));
             nameTV.setTextSize(13);
             nameTV.setTypeface(android.graphics.Typeface.MONOSPACE);
             nameTV.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
@@ -1096,7 +1120,7 @@ public class MainActivity extends Activity
             row.addView(nameTV);
             if (isActive) {
                 android.widget.TextView chk = new android.widget.TextView(this);
-                chk.setText("\u2713"); chk.setTextColor(T_ACCENT); chk.setTextSize(14);
+                chk.setText("\u2713"); chk.setTextColor(0xFFDC143C); chk.setTextSize(14);
                 row.addView(chk);
             }
             row.setOnClickListener(v -> {
@@ -1112,7 +1136,7 @@ public class MainActivity extends Activity
 
             // Separator
             android.view.View rowSep = new android.view.View(this);
-            rowSep.setBackgroundColor(T_OUTLINE);
+            rowSep.setBackgroundColor(t(D_BORDER, L_BORDER));
             rowSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
 
             list.addView(row);
@@ -1123,7 +1147,7 @@ public class MainActivity extends Activity
 
         // Close button
         android.view.View closeSep = new android.view.View(this);
-        closeSep.setBackgroundColor(T_OUTLINE);
+        closeSep.setBackgroundColor(t(D_BORDER, L_BORDER));
         closeSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(closeSep);
         android.widget.TextView closeBtn = new android.widget.TextView(this);
@@ -1162,7 +1186,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView urlLabel = new android.widget.TextView(this);
         urlLabel.setText("Base URL  (e.g. https://your-server/v1)");
-        urlLabel.setTextColor(0xFF8888BB); urlLabel.setTextSize(11);
+        urlLabel.setTextColor(0xFF8888AA); urlLabel.setTextSize(11);
         layout.addView(urlLabel);
 
         android.widget.EditText urlInput = styledEditText(cfg.baseUrl, false);
@@ -1170,7 +1194,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView modelLabel = new android.widget.TextView(this);
         modelLabel.setText("Model name");
-        modelLabel.setTextColor(0xFF8888BB); modelLabel.setTextSize(11);
+        modelLabel.setTextColor(0xFF8888AA); modelLabel.setTextSize(11);
         android.widget.LinearLayout.LayoutParams mlp =
             new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
         mlp.topMargin = dp(12);
@@ -1301,55 +1325,10 @@ public class MainActivity extends Activity
         otaUpdater.scheduleChecks();
     }
 
-    // ── Live theme tokens loaded from Rust getTheme() ─────────────────────
-    // Catppuccin Mocha tokens (defaults, overridden by Rust getTheme)
-    private int T_BG=0xFF1E1E2E, T_SURFACE=0xFF1E1E2E, T_SURFACE2=0xFF181825;
-    private int T_SURFACE5=0xFF45475A, T_SURFACE_VAR=0xFF313244;
-    private int T_TEXT=0xFFCDD6F4, T_TEXT2=0xFF9399B2;
-    private int T_OUTLINE=0xFF585B70, T_OUTLINE_VAR=0xFF313244;
-    private int T_ACCENT=0xFFB4BEFE, T_ON_ACCENT=0xFF1E1E2E;
-    private int T_SECONDARY=0xFFCBA6F7, T_TERTIARY=0xFFFAB387;
-    private int T_ERROR=0xFFF38BA8, T_SUCCESS=0xFFA6E3A1, T_WARNING=0xFFFAB387;
-    private int T_RIPPLE=0x1AB4BEFE;
-    private int T_CORNER_SM=10, T_CORNER_MD=16, T_CORNER_LG=24;
-
-    private void loadThemeTokens() {
-        try {
-            String json = RustBridge.getTheme();
-            if (json == null || json.isEmpty()) return;
-            org.json.JSONObject t = new org.json.JSONObject(json);
-            T_BG          = (int) t.optLong("bg",          T_BG);
-            T_SURFACE     = (int) t.optLong("surface",     T_SURFACE);
-            T_SURFACE2    = (int) t.optLong("surface2",    T_SURFACE2);
-            T_SURFACE5    = (int) t.optLong("surface5",    T_SURFACE5);
-            T_SURFACE_VAR = (int) t.optLong("surface_var", T_SURFACE_VAR);
-            T_TEXT        = (int) t.optLong("on_surface",  T_TEXT);
-            T_TEXT2       = (int) t.optLong("muted",       T_TEXT2);
-            T_OUTLINE     = (int) t.optLong("outline",     T_OUTLINE);
-            T_OUTLINE_VAR = (int) t.optLong("outline_var", T_OUTLINE_VAR);
-            T_ACCENT      = (int) t.optLong("accent",      T_ACCENT);
-            T_ON_ACCENT   = (int) t.optLong("on_accent",   T_ON_ACCENT);
-            T_SECONDARY   = (int) t.optLong("secondary",   T_SECONDARY);
-            T_TERTIARY    = (int) t.optLong("tertiary",    T_TERTIARY);
-            T_ERROR       = (int) t.optLong("error",       T_ERROR);
-            T_SUCCESS     = (int) t.optLong("success",     T_SUCCESS);
-            T_WARNING     = (int) t.optLong("warning",     T_WARNING);
-            T_RIPPLE      = (int) t.optLong("ripple",      T_RIPPLE);
-            T_CORNER_SM   = t.optInt("corner_sm", T_CORNER_SM);
-            T_CORNER_MD   = t.optInt("corner_md", T_CORNER_MD);
-            T_CORNER_LG   = t.optInt("corner_lg", T_CORNER_LG);
-            isDarkTheme   = t.optBoolean("is_dark", true);
-        } catch (Throwable e) {
-            Log.w("KiraTheme", "loadThemeTokens: " + e.getMessage());
-        }
-    }
-
     private void applyTheme() {
-        loadThemeTokens();
-
-        // ── System chrome ────────────────────────────────────────────────────
-        getWindow().setStatusBarColor(T_BG);
-        getWindow().setNavigationBarColor(T_SURFACE2);
+        // ── System chrome ───────────────────────────────────────────────────
+        getWindow().setStatusBarColor(isDarkTheme ? D_BG : L_BG);
+        getWindow().setNavigationBarColor(isDarkTheme ? D_NAV : L_NAV);
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             int flags = getWindow().getDecorView().getSystemUiVisibility();
             if (!isDarkTheme) {
@@ -1362,37 +1341,41 @@ public class MainActivity extends Activity
             getWindow().getDecorView().setSystemUiVisibility(flags);
         }
 
-        // ── Nav bar ──────────────────────────────────────────────────────────
+        // ── Nav bar ─────────────────────────────────────────────────────────
         View nav = findViewById(R.id.bottomNav);
-        if (nav != null) nav.setBackgroundColor((T_SURFACE2 & 0x00FFFFFF) | 0xF0000000);
+        if (nav != null) nav.setBackgroundColor(isDarkTheme ? D_NAV : L_NAV);
+        // Re-colour nav icons to correct active/inactive state
         for (int i = 0; i < 4; i++) {
             boolean on = i == currentTab;
             if (navIcons != null && navIcons[i] != null)
-                navIcons[i].setTextColor(on ? T_ACCENT : T_TEXT2);
+                navIcons[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
             if (navTexts != null && navTexts[i] != null)
-                navTexts[i].setTextColor(on ? T_ACCENT : T_TEXT2);
+                navTexts[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
         }
 
-        // ── Fragment backgrounds (transparent — galaxy shows through) ────────
-        if (homeFragment     != null) homeFragment.setBackgroundColor(0x00000000);
-        if (settingsFragment != null) settingsFragment.setBackgroundColor(0x00000000);
-        if (historyFragment  != null) historyFragment.setBackgroundColor(0x00000000);
-        if (toolsFragment    != null) toolsFragment.setBackgroundColor(0x00000000);
+        // ── Fragment backgrounds ────────────────────────────────────────────
+        // Dark: transparent so GalaxyView shows through
+        // Light: solid warm white
+        int fragBg = isDarkTheme ? 0x00000000 : L_BG;
+        if (homeFragment    != null) homeFragment.setBackgroundColor(fragBg);
+        if (settingsFragment!= null) settingsFragment.setBackgroundColor(fragBg);
+        if (historyFragment != null) historyFragment.setBackgroundColor(fragBg);
+        if (toolsFragment   != null) toolsFragment.setBackgroundColor(fragBg);
 
-        // ── Chat input bar ───────────────────────────────────────────────────
+        // ── Chat input bar ──────────────────────────────────────────────────
         View inputBar = homeFragment != null ? homeFragment.findViewWithTag("inputBar") : null;
-        if (inputBar != null)
-            inputBar.setBackgroundColor((T_SURFACE2 & 0x00FFFFFF) | 0xF2000000);
+        if (inputBar != null) inputBar.setBackgroundColor(isDarkTheme ? 0xF0090913 : 0xF0F0F0FC);
         if (inputField != null) {
-            inputField.setBackgroundColor((T_SURFACE_VAR & 0x00FFFFFF) | 0xCC000000);
-            inputField.setTextColor(T_TEXT);
-            inputField.setHintTextColor(T_TEXT2);
+            inputField.setBackgroundColor(isDarkTheme ? D_INPUT_BG : L_INPUT_BG);
+            inputField.setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
+            inputField.setHintTextColor(isDarkTheme ? D_TEXT3 : L_TEXT3);
         }
 
-        // ── Header ───────────────────────────────────────────────────────────
-        if (headerSubtitle != null) headerSubtitle.setTextColor(T_TEXT2);
+        // ── Header subtitle ─────────────────────────────────────────────────
+        if (headerSubtitle != null)
+            headerSubtitle.setTextColor(isDarkTheme ? D_TEXT3 : L_TEXT3);
 
-        // ── Chat bubbles ─────────────────────────────────────────────────────
+        // ── Chat bubbles ────────────────────────────────────────────────────
         if (chatContainer != null) {
             for (int i = 0; i < chatContainer.getChildCount(); i++) {
                 View child = chatContainer.getChildAt(i);
@@ -1404,21 +1387,22 @@ public class MainActivity extends Activity
                 if (ts.startsWith("user_") && ll.getChildCount() > 1) {
                     View msgV = ll.getChildAt(1);
                     if (msgV instanceof android.widget.TextView) {
-                        msgV.setBackgroundColor((T_SURFACE_VAR & 0x00FFFFFF) | 0xDD000000);
-                        ((android.widget.TextView)msgV).setTextColor(T_TEXT);
+                        msgV.setBackgroundColor(isDarkTheme ? D_USER_BUBBLE : L_USER_BUBBLE);
+                        ((android.widget.TextView)msgV).setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
                     }
                 } else if (ts.startsWith("kira_") && ll.getChildCount() > 1) {
                     View msgV = ll.getChildAt(1);
                     if (msgV instanceof android.widget.TextView) {
-                        msgV.setBackgroundColor((T_SURFACE & 0x00FFFFFF) | 0xCC000000);
-                        ((android.widget.TextView)msgV).setTextColor(T_TEXT);
+                        msgV.setBackgroundColor(isDarkTheme ? D_KIRA_BUBBLE : L_KIRA_BUBBLE);
+                        ((android.widget.TextView)msgV).setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
                     }
                 }
             }
         }
 
-        // ── Settings hints ───────────────────────────────────────────────────
+        // ── Settings hints ──────────────────────────────────────────────────
         if (settingsFragment != null) {
+            int hintCol = isDarkTheme ? D_TEXT3 : L_TEXT3;
             int[] hintIds = { R.id.apiKeyHint, R.id.modelHint, R.id.baseUrlHint,
                 R.id.tgTokenHint, R.id.tgIdHint, R.id.visionHint, R.id.maxStepsHint,
                 R.id.heartbeatHint, R.id.personaHint, R.id.providerHint, R.id.skillsHint,
@@ -1426,24 +1410,24 @@ public class MainActivity extends Activity
                 R.id.rustStatsHint, R.id.memoryHint, R.id.historySettingHint };
             for (int id : hintIds) {
                 android.widget.TextView tv = settingsFragment.findViewById(id);
-                if (tv != null) tv.setTextColor(T_TEXT2);
+                if (tv != null) tv.setTextColor(hintCol);
             }
             if (rustStatsContent != null) {
-                rustStatsContent.setTextColor(T_SUCCESS);
-                rustStatsContent.setBackgroundColor((T_BG & 0x00FFFFFF) | 0xEE000000);
+                rustStatsContent.setTextColor(isDarkTheme ? 0xFF44AA44 : 0xFF226622);
+                rustStatsContent.setBackgroundColor(isDarkTheme ? 0xFF030308 : 0xFFF4F8F4);
             }
             if (memoryContent != null) {
-                memoryContent.setTextColor(T_SUCCESS);
-                memoryContent.setBackgroundColor((T_BG & 0x00FFFFFF) | 0xEE000000);
+                memoryContent.setTextColor(isDarkTheme ? 0xFF44AA44 : 0xFF226622);
+                memoryContent.setBackgroundColor(isDarkTheme ? 0xFF050508 : 0xFFF4F8F4);
             }
         }
 
-        // ── Persist ──────────────────────────────────────────────────────────
+        // ── Save preference ─────────────────────────────────────────────────
         getSharedPreferences("kira_theme", MODE_PRIVATE)
             .edit().putBoolean("dark", isDarkTheme).apply();
     }
 
-    /** Toggle theme */
+    /** Toggle theme and persist */
     private void toggleTheme() {
         isDarkTheme = !isDarkTheme;
         applyTheme();
@@ -1464,8 +1448,8 @@ public class MainActivity extends Activity
 
         android.widget.LinearLayout card = new android.widget.LinearLayout(this);
         card.setOrientation(android.widget.LinearLayout.VERTICAL);
-        int cardColor  = T_SURFACE;
-        int borderColor= T_OUTLINE;
+        int cardColor  = t(D_SURFACE, L_SURFACE);
+        int borderColor= t(D_BORDER, L_BORDER);
         android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
         cardBg.setColor(cardColor); cardBg.setCornerRadius(dp(4)); cardBg.setStroke(dp(1), borderColor);
         card.setBackground(cardBg);
@@ -1476,7 +1460,7 @@ public class MainActivity extends Activity
 
         // Top accent
         android.view.View bar = new android.view.View(this);
-        bar.setBackgroundColor(T_ACCENT);
+        bar.setBackgroundColor(0xFFDC143C);
         bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(bar);
 
@@ -1487,24 +1471,24 @@ public class MainActivity extends Activity
         titleRow.setPadding(dp(18), dp(14), dp(18), dp(10));
         android.widget.TextView titleTv = new android.widget.TextView(this);
         titleTv.setText(title);
-        titleTv.setTextColor(T_TEXT);
+        titleTv.setTextColor(t(D_TEXT, L_TEXT));
         titleTv.setTextSize(14); titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
         android.widget.TextView kBadge = new android.widget.TextView(this);
-        kBadge.setText("K"); kBadge.setTextColor(0x33B4BEFE); kBadge.setTextSize(20);
+        kBadge.setText("K"); kBadge.setTextColor(0x33DC143C); kBadge.setTextSize(20);
         kBadge.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         titleRow.addView(titleTv); titleRow.addView(kBadge);
         card.addView(titleRow);
 
         android.view.View sep = new android.view.View(this);
-        sep.setBackgroundColor(T_OUTLINE);
+        sep.setBackgroundColor(t(D_BORDER, L_BORDER));
         sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(sep);
 
         // Message
         android.widget.TextView msgTv = new android.widget.TextView(this);
         msgTv.setText(msg);
-        msgTv.setTextColor(T_TEXT2);
+        msgTv.setTextColor(t(D_TEXT2, L_TEXT2));
         msgTv.setTextSize(12); msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
         msgTv.setLineSpacing(dp(2), 1);
         android.widget.LinearLayout.LayoutParams msgLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
@@ -1513,7 +1497,7 @@ public class MainActivity extends Activity
 
         // Button row
         android.view.View btnSep = new android.view.View(this);
-        btnSep.setBackgroundColor(T_OUTLINE);
+        btnSep.setBackgroundColor(t(D_BORDER, L_BORDER));
         btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(btnSep);
 
@@ -1531,7 +1515,7 @@ public class MainActivity extends Activity
             final int idx = i;
             if (i > 0) {
                 android.view.View bd = new android.view.View(this);
-                bd.setBackgroundColor(T_OUTLINE);
+                bd.setBackgroundColor(t(D_BORDER, L_BORDER));
                 bd.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
                 btnRow.addView(bd);
             }
@@ -1539,7 +1523,7 @@ public class MainActivity extends Activity
             btn.setText(labels[i]);
             // Last button = primary (crimson), others = muted
             boolean isPrimary = (i == 0);
-            btn.setTextColor(isPrimary ? T_ACCENT : T_TEXT2);
+            btn.setTextColor(isPrimary ? ACCENT : t(D_TEXT3, L_TEXT3));
             btn.setTextSize(11);
             btn.setTypeface(android.graphics.Typeface.MONOSPACE, isPrimary ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             btn.setGravity(android.view.Gravity.CENTER);
@@ -1585,7 +1569,7 @@ public class MainActivity extends Activity
 
         // Accent bar
         android.view.View bar = new android.view.View(this);
-        bar.setBackgroundColor(T_ACCENT);
+        bar.setBackgroundColor(0xFFDC143C);
         bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(bar);
 
@@ -1616,7 +1600,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView msgTv = new android.widget.TextView(this);
         msgTv.setText(msg);
-        msgTv.setTextColor(0xFF8888BB);
+        msgTv.setTextColor(0xFF8888AA);
         msgTv.setTextSize(12);
         msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
         msgTv.setLineSpacing(dp(2), 1);
@@ -1651,7 +1635,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView posBtn = new android.widget.TextView(this);
         posBtn.setText(posLabel);
-        posBtn.setTextColor(T_ACCENT);
+        posBtn.setTextColor(0xFFDC143C);
         posBtn.setTextSize(11);
         posBtn.setTypeface(null, android.graphics.Typeface.BOLD);
         posBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
@@ -1681,7 +1665,6 @@ public class MainActivity extends Activity
     }
 
     private void scrollToBottom() {
-        if (chatScroll == null) return;
         chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN));
     }
 
@@ -1741,7 +1724,7 @@ public class MainActivity extends Activity
             TextView chip = new TextView(this);
             chip.setText(item[0]);
             chip.setTextSize(11);
-            chip.setTextColor(0xFF8888BB);
+            chip.setTextColor(0xFF8888AA);
             chip.setTypeface(android.graphics.Typeface.MONOSPACE);
             android.graphics.drawable.GradientDrawable chipBg = new android.graphics.drawable.GradientDrawable();
             chipBg.setColor(0xAA080814);
@@ -1752,15 +1735,14 @@ public class MainActivity extends Activity
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
             p.setMargins(0, 0, dp(8), 0);
             chip.setLayoutParams(p);
-            chip.setOnClickListener(v -> { if (inputField != null) inputField.setText(item[1]); sendMessage(); });
-            if (suggestionsRow != null) suggestionsRow.addView(chip);
+            chip.setOnClickListener(v -> { inputField.setText(item[1]); sendMessage(); });
+            suggestionsRow.addView(chip);
         }
     }
 
     // -- Tools list ------------------------------------------------------------
 
     private void buildToolsList() {
-        if (toolsFragment == null) return;
         LinearLayout list = toolsFragment.findViewById(R.id.toolsList);
         Object[][] tools = {
             // Tap row = paste example. Long-press = send immediately.
@@ -1804,8 +1786,8 @@ public class MainActivity extends Activity
                 showTab(0);
                 if (inputField != null) {
                     inputField.setText(toolEx);
-                    if (inputField!=null){inputField.setSelection(toolEx.length());
-                    inputField.requestFocus();}
+                    inputField.setSelection(toolEx.length());
+                    inputField.requestFocus();
                 }
             });
             row.setOnLongClickListener(v -> {
@@ -1827,7 +1809,7 @@ public class MainActivity extends Activity
             name.setTypeface(android.graphics.Typeface.MONOSPACE);
 
             TextView desc = new TextView(this); desc.setText((String)t[2]);
-            desc.setTextColor(0xFF8888BB); desc.setTextSize(12);
+            desc.setTextColor(0xFF8888AA); desc.setTextSize(12);
 
             info.addView(name); info.addView(desc);
             row.addView(icon); row.addView(info);
@@ -1838,15 +1820,15 @@ public class MainActivity extends Activity
     // -- History -- Claude-style ------------------------------------------------
 
     private void refreshHistory() {
-        if (historyList == null) return; historyList.removeAllViews();
+        historyList.removeAllViews();
         try {
             KiraMemory mem = new KiraMemory(this);
             JSONArray arr = mem.loadHistory();
             if (arr.length() == 0) {
-                if (historyCount != null) historyCount.setText("No conversations yet");
+                historyCount.setText("No conversations yet");
                 return;
             }
-            if (historyCount != null) historyCount.setText(arr.length() + " conversations");
+            historyCount.setText(arr.length() + " conversations");
 
             for (int i = arr.length() - 1; i >= 0; i--) {
                 JSONObject entry = arr.getJSONObject(i);
@@ -1886,10 +1868,10 @@ public class MainActivity extends Activity
 
                 // Resend -- puts user message in input and sends
                 TextView resendBtn = makeActionBtn("? resend");
-                resendBtn.setTextColor(T_ACCENT);
+                resendBtn.setTextColor(0xFFDC143C);
                 resendBtn.setOnClickListener(v -> {
                     showTab(0);
-                    if (inputField!=null) inputField.setText(user);
+                    inputField.setText(user);
                     sendMessage();
                 });
 
@@ -1897,7 +1879,8 @@ public class MainActivity extends Activity
                 TextView continueBtn = makeActionBtn("continue");
                 continueBtn.setOnClickListener(v -> {
                     showTab(0);
-                    if (inputField!=null){inputField.setText(user); inputField.setSelection(user.length());}
+                    inputField.setText(user);
+                    inputField.setSelection(user.length());
                 });
 
                 headerRow.addView(timeTv);
@@ -1914,7 +1897,7 @@ public class MainActivity extends Activity
                 // Kira reply preview
                 TextView kiraTv = new TextView(this);
                 kiraTv.setText(kira.length() > 150 ? kira.substring(0, 150) + "?" : kira);
-                kiraTv.setTextColor(T_TEXT2);
+                kiraTv.setTextColor(t(D_TEXT2, L_TEXT2));
                 kiraTv.setTextSize(12);
                 kiraTv.setPadding(0, dp(4), 0, 0);
 
@@ -1924,10 +1907,10 @@ public class MainActivity extends Activity
                 card.addView(headerRow);
                 card.addView(userTv);
                 card.addView(kiraTv);
-                if (historyList != null) historyList.addView(card);
+                historyList.addView(card);
             }
         } catch (Exception e) {
-            if (historyCount != null) historyCount.setText("error loading history");
+            historyCount.setText("error loading history");
         }
     }
 
@@ -1937,7 +1920,7 @@ public class MainActivity extends Activity
         showKiraDialogMulti(time, preview,
             new String[]{"RESEND", "COPY", "CLOSE"},
             new Runnable[]{
-                () -> { showTab(0); if (inputField != null) inputField.setText(user); sendMessage(); },
+                () -> { showTab(0); inputField.setText(user); sendMessage(); },
                 () -> copyText(kira),
                 null
             });
@@ -1950,13 +1933,13 @@ public class MainActivity extends Activity
         if (apiKeyHint == null) return;
         apiKeyHint.setText(cfg.apiKey.isEmpty() ? "tap to set" :
             "\u25CF\u25CF\u25CF\u25CF" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
-        if (modelHint != null) modelHint.setText(cfg.model.isEmpty() ? "not set" : cfg.model);
+        modelHint.setText(cfg.model.isEmpty() ? "not set" : cfg.model);
         String urlDisplay = cfg.baseUrl.isEmpty() ? "not set" :
             cfg.baseUrl.replace("https://","").replace("http://","");
         if (urlDisplay.length() > 36) urlDisplay = urlDisplay.substring(0, 33) + "\u2026";
-        if (baseUrlHint != null) baseUrlHint.setText(urlDisplay);
-        if (tgTokenHint != null) tgTokenHint.setText(cfg.tgToken.isEmpty() ? "not configured" : "\u2713 configured");
-        if (tgIdHint != null) tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
+        baseUrlHint.setText(urlDisplay);
+        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "not configured" : "\u2713 configured");
+        tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
         if (visionHint != null) visionHint.setText(cfg.visionModel.isEmpty() ? "not set" : cfg.visionModel);
         if (providerHint != null) {
             String pu = cfg.baseUrl;
@@ -1979,7 +1962,7 @@ public class MainActivity extends Activity
             else if (pu.contains("novita.ai"))          label = "Novita AI";
             else if (!pu.isEmpty())                     label = "custom: " + urlDisplay;
             else                                        label = "not set";
-            if (providerHint != null) providerHint.setText(label);
+            providerHint.setText(label);
         }
         updateShizukuStatus();
     }
@@ -2003,11 +1986,11 @@ public class MainActivity extends Activity
             try {
                 KiraMemory mem = new KiraMemory(this);
                 String all = mem.listAll();
-                if (memoryContent != null) memoryContent.setText(all.isEmpty() ? "(no facts stored yet)" : all);
-            } catch (Exception e) { if (memoryContent != null) memoryContent.setText("error reading memory"); }
-            if (memoryContent != null) memoryContent.setVisibility(View.VISIBLE);
+                memoryContent.setText(all.isEmpty() ? "(no facts stored yet)" : all);
+            } catch (Exception e) { memoryContent.setText("error reading memory"); }
+            memoryContent.setVisibility(View.VISIBLE);
         } else {
-            if (memoryContent != null) memoryContent.setVisibility(View.GONE);
+            memoryContent.setVisibility(View.GONE);
         }
     }
 
@@ -2036,7 +2019,7 @@ public class MainActivity extends Activity
         String title; int color; String icon; int bg;
         if (permOk) {
             title = "Shizuku \u2713  god mode active";
-            color = T_ACCENT; icon = "\u2713"; bg = 0xFF080f08;
+            color = 0xFFDC143C; icon = "\u2713"; bg = 0xFF080f08;
         } else if (binderUp) {
             title = "Shizuku running  \u2014  tap to grant permission";
             color = 0xFFffaa00; icon = "!"; bg = 0xFF0f0c00;
@@ -2047,8 +2030,10 @@ public class MainActivity extends Activity
             title = "Shizuku not installed  \u2014  tap to get it";
             color = 0xFF555566; icon = "\u2193"; bg = 0xFF0a0a14;
         }
-        if (shizukuStatusTitle != null) { shizukuStatusTitle.setText(title); shizukuStatusTitle.setTextColor(color); }
-        if (shizukuStatusIcon != null) { shizukuStatusIcon.setText(icon); shizukuStatusIcon.setTextColor(color); }
+        shizukuStatusTitle.setText(title);
+        shizukuStatusTitle.setTextColor(color);
+        shizukuStatusIcon.setText(icon);
+        shizukuStatusIcon.setTextColor(color);
         if (shizukuStatus != null) shizukuStatus.setBackgroundColor(bg);
         // Sync to Rust state
         try { RustBridge.updateShizukuStatus(binderUp, permOk, ""); } catch (Exception ignored) {}
@@ -2068,10 +2053,12 @@ public class MainActivity extends Activity
         floatingActive = !floatingActive;
         if (floatingActive) {
             FloatingWindowService.start(this);
-            if (floatingToggle != null) { floatingToggle.setText("ON"); floatingToggle.setTextColor(T_ACCENT); }
+            floatingToggle.setText("ON");
+            floatingToggle.setTextColor(0xFFDC143C);
         } else {
             FloatingWindowService.stop(this);
-            if (floatingToggle != null) { floatingToggle.setText("OFF"); floatingToggle.setTextColor(T_TEXT2); }
+            floatingToggle.setText("OFF");
+            floatingToggle.setTextColor(0xFF666666);
         }
     }
 
@@ -2111,7 +2098,7 @@ public class MainActivity extends Activity
 
         // Top accent bar (crimson line)
         android.view.View accentBar = new android.view.View(this);
-        accentBar.setBackgroundColor(T_ACCENT);
+        accentBar.setBackgroundColor(0xFFDC143C);
         accentBar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(accentBar);
 
@@ -2193,7 +2180,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView saveBtn = new android.widget.TextView(this);
         saveBtn.setText("SAVE");
-        saveBtn.setTextColor(T_ACCENT);
+        saveBtn.setTextColor(0xFFDC143C);
         saveBtn.setTextSize(12);
         saveBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
         saveBtn.setTypeface(null, android.graphics.Typeface.BOLD);

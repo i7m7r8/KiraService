@@ -66,7 +66,7 @@ public class KiraSkillEngine {
     private void registerBuiltinSkills() {
         for (String[] skill : BUILTIN_SKILLS) {
             try {
-                com.kira.service.RustBridge.registerSkill(skill[0], skill[0].replace("_skill",""), skill[1], skill[2]);
+                try { com.kira.service.RustBridge.registerSkill(skill[0], skill[0].replace("_skill",""), skill[1], skill[2]); } catch (Throwable ignored) {}
             } catch (Throwable ignored) {}
         }
     }

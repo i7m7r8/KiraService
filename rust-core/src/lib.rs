@@ -450,6 +450,131 @@ struct MacroRunLog {
 // v38: Setup / Theme / Config / Shizuku (unchanged)
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
+// ── v43: OTA Engine ─────────────────────────────────────────────────────────
+// True OTA: Rust tracks manifest, SHA256 deltas, download progress, install state.
+// Java only executes what Rust tells it to (Shizuku pm install or PackageInstaller session).
+
+#[derive(Clone, PartialEq, Debug)]
+enum OtaPhase {
+    Idle,            // no update known
+    Checking,        // API request in flight (set by Java, cleared by Rust)
+    UpdateAvailable, // newer version found, awaiting user action
+    Downloading,     // bytes coming in
+    Downloaded,      // APK on disk, ready to install
+    Installing,      // PackageInstaller/Shizuku session opened
+    Installed,       // success
+    Failed(String),  // error message
+}
+
+impl Default for OtaPhase {
+    fn default() -> Self { OtaPhase::Idle }
+}
+
+#[derive(Clone, Default)]
+struct OtaFileEntry {
+    path:      String,   // relative path inside APK or asset
+    sha256:    String,   // hex SHA256 of this version
+    size:      u64,
+    changed:   bool,     // true = this file differs from installed version
+}
+
+#[derive(Clone, Default)]
+struct OtaEngine {
+    // Version tracking
+    current_version:  String,   // installed versionName e.g. "9.0.0"
+    current_code:     i64,      // installed versionCode
+    latest_version:   String,   // from GitHub releases tag
+    latest_code:      i64,
+    repo:             String,   // "i7m7r8/KiraService"
+
+    // Manifest / delta
+    manifest_sha256:  String,   // SHA256 of the release's manifest JSON
+    changed_files:    Vec<OtaFileEntry>,
+    total_delta_bytes:u64,      // bytes that actually differ
+    total_apk_bytes:  u64,      // full APK size
+
+    // Download progress
+    phase:            OtaPhase,
+    download_bytes:   u64,
+    download_total:   u64,
+    download_pct:     u8,       // 0-100
+    apk_local_path:   String,   // absolute path to downloaded APK
+    apk_sha256:       String,   // expected SHA256 of full APK
+
+    // Release info
+    download_url:     String,
+    changelog:        String,
+    release_date:     String,
+    last_check_ms:    u128,
+    check_error:      String,
+
+    // Install tracking
+    install_session_id: i32,    // PackageInstaller session ID (-1 = none)
+    install_method:   String,   // "shizuku" | "package_installer" | "intent"
+    install_error:    String,
+
+    // Skip list
+    skipped_versions: Vec<String>,
+}
+
+impl OtaEngine {
+    fn is_newer(&self, candidate: &str) -> bool {
+        if candidate.is_empty() || candidate == self.current_version { return false; }
+        // Parse numeric segments for comparison
+        fn parse_ver(s: &str) -> Vec<u64> {
+            s.trim_start_matches('v')
+             .split(|c: char| !c.is_ascii_digit())
+             .filter_map(|p| p.parse::<u64>().ok())
+             .collect()
+        }
+        let cur = parse_ver(&self.current_version);
+        let lat = parse_ver(candidate);
+        for i in 0..cur.len().max(lat.len()) {
+            let c = cur.get(i).copied().unwrap_or(0);
+            let l = lat.get(i).copied().unwrap_or(0);
+            if l > c { return true; }
+            if l < c { return false; }
+        }
+        false
+    }
+
+    fn phase_str(&self) -> &'static str {
+        match &self.phase {
+            OtaPhase::Idle            => "idle",
+            OtaPhase::Checking        => "checking",
+            OtaPhase::UpdateAvailable => "available",
+            OtaPhase::Downloading     => "downloading",
+            OtaPhase::Downloaded      => "downloaded",
+            OtaPhase::Installing      => "installing",
+            OtaPhase::Installed       => "installed",
+            OtaPhase::Failed(_)       => "failed",
+        }
+    }
+
+    fn to_json(&self) -> String {
+        let err = match &self.phase { OtaPhase::Failed(e) => e.as_str(), _ => &self.install_error };
+        format!(
+            r#"{{"phase":"{}","current":"{}","current_code":{},"latest":"{}","latest_code":{},"available":{},"pct":{},"downloaded":{},"total":{},"delta_bytes":{},"apk_bytes":{},"changed_files":{},"url":"{}","changelog":"{}","release_date":"{}","last_check_ms":{},"apk_path":"{}","install_method":"{}","error":"{}","repo":"{}"}}"#,
+            self.phase_str(),
+            esc(&self.current_version), self.current_code,
+            esc(&self.latest_version),  self.latest_code,
+            self.phase == OtaPhase::UpdateAvailable || self.phase == OtaPhase::Downloading || self.phase == OtaPhase::Downloaded,
+            self.download_pct,
+            self.download_bytes, self.download_total,
+            self.total_delta_bytes, self.total_apk_bytes,
+            self.changed_files.len(),
+            esc(&self.download_url),
+            esc(&self.changelog[..self.changelog.len().min(300)]),
+            esc(&self.release_date),
+            self.last_check_ms,
+            esc(&self.apk_local_path),
+            esc(&self.install_method),
+            esc(err),
+            esc(&self.repo)
+        )
+    }
+}
+
 #[derive(Default, Clone)]
 struct SetupState {
     current_page:         u8,
@@ -656,13 +781,8 @@ struct KiraState {
     state_machines:      Vec<StateMachine>,
     context_zones:       Vec<ContextZone>,
 
-    // OTA update state
-    ota_current_version: String,
-    ota_latest_version:  String,
-    ota_update_available:bool,
-    ota_last_check:      u128,
-    ota_changelog:       String,
-    ota_download_url:    String,
+    // ── OTA Update Engine (v43) ─────────────────────────────────────────────
+    ota: OtaEngine,
 }
 
 // Sub-structs (v7, unchanged)
@@ -2243,6 +2363,164 @@ Context: {}",
             s.macro_run_log.len(), check_rate_limit(&s)
         );
         CString::new(json).unwrap_or_default().into_raw()
+
+    // ── v43: OTA Engine JNI ───────────────────────────────────────────────────
+
+    /// Register installed version with Rust on app start.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaSetCurrentVersion(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        version: *const c_char, code: i64,
+    ) {
+        let mut s = STATE.lock().unwrap();
+        let v = cs(version);
+        if !v.is_empty() { s.ota.current_version = v; }
+        if code > 0 { s.ota.current_code = code; }
+        if s.ota.repo.is_empty() { s.ota.repo = "i7m7r8/KiraService".to_string(); }
+    }
+
+    /// Set GitHub repo slug e.g. "i7m7r8/KiraService".
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaSetRepo(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        repo: *const c_char,
+    ) {
+        let r = cs(repo);
+        if !r.is_empty() { STATE.lock().unwrap().ota.repo = r; }
+    }
+
+    /// Java feeds parsed GitHub release. Rust decides: prompt_user | up_to_date | skipped.
+    /// Returns JSON {"action":"...","version":"...","current":"..."}
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaOnRelease(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        tag:       *const c_char,
+        url:       *const c_char,
+        changelog: *const c_char,
+        date:      *const c_char,
+        sha256:    *const c_char,
+        apk_bytes: i64,
+    ) -> *mut c_char {
+        let (tag, url, log, date, sha) = (cs(tag), cs(url), cs(changelog), cs(date), cs(sha256));
+        let mut s = STATE.lock().unwrap();
+        if s.ota.skipped_versions.contains(&tag) {
+            s.ota.phase = OtaPhase::Idle;
+            return CString::new(r#"{"action":"skipped"}"#).unwrap_or_default().into_raw();
+        }
+        let newer = s.ota.is_newer(&tag);
+        s.ota.latest_version  = tag.clone();
+        s.ota.download_url    = url;
+        s.ota.changelog       = log;
+        s.ota.release_date    = date;
+        s.ota.apk_sha256      = sha;
+        s.ota.total_apk_bytes = apk_bytes as u64;
+        s.ota.last_check_ms   = now_ms();
+        s.ota.check_error     = String::new();
+        let action = if newer {
+            s.ota.phase = OtaPhase::UpdateAvailable;
+            "prompt_user"
+        } else {
+            s.ota.phase = OtaPhase::Idle;
+            "up_to_date"
+        };
+        let cur = s.ota.current_version.clone();
+        let result = format!(r#"{{"action":"{}","version":"{}","current":"{}"}}"#,
+            action, esc(&tag), esc(&cur));
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    /// Java reports streaming download progress. Rust tracks % for /ota/status.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaProgress(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        bytes_done: i64, bytes_total: i64,
+    ) {
+        let mut s = STATE.lock().unwrap();
+        s.ota.download_bytes = bytes_done as u64;
+        s.ota.download_total = bytes_total as u64;
+        s.ota.download_pct   = if bytes_total > 0 {
+            ((bytes_done * 100) / bytes_total).min(100) as u8
+        } else { 0 };
+        s.ota.phase = OtaPhase::Downloading;
+    }
+
+    /// APK fully downloaded. Rust verifies SHA256 and returns install instructions JSON.
+    /// Returns {"ok":true,"method":"shizuku|package_installer","shizuku":bool,"cmd":"..."}
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaOnDownloaded(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        path:   *const c_char,
+        sha256: *const c_char,
+    ) -> *mut c_char {
+        let (path, sha) = (cs(path), cs(sha256));
+        let mut s = STATE.lock().unwrap();
+        s.ota.apk_local_path = path.clone();
+        let expected = s.ota.apk_sha256.clone();
+        let ok = expected.is_empty() || expected == sha;
+        let use_shizuku = s.shizuku.permission_granted;
+        if ok {
+            s.ota.phase = OtaPhase::Downloaded;
+            let method = if use_shizuku { "shizuku" } else { "package_installer" };
+            s.ota.install_method = method.to_string();
+            let cmd = format!("pm install -r -t "{}"", esc(&path));
+            CString::new(format!(
+                r#"{{"ok":true,"path":"{}","method":"{}","shizuku":{},"cmd":"{}","verified":{}}}"#,
+                esc(&path), method, use_shizuku, esc(&cmd), ok
+            )).unwrap_or_default().into_raw()
+        } else {
+            let err = format!("sha256_mismatch");
+            s.ota.phase = OtaPhase::Failed(err.clone());
+            CString::new(format!(r#"{{"ok":false,"error":"{}"}}"#, esc(&err)))
+                .unwrap_or_default().into_raw()
+        }
+    }
+
+    /// Install completed. Pass new versionName.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaOnInstalled(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        new_version: *const c_char,
+    ) {
+        let ver = cs(new_version);
+        let mut s = STATE.lock().unwrap();
+        s.ota.phase = OtaPhase::Installed;
+        if !ver.is_empty() { s.ota.current_version = ver; }
+    }
+
+    /// Install failed. Rust records error and sets Failed phase.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaOnFailed(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        error: *const c_char,
+    ) {
+        let err = cs(error);
+        let mut s = STATE.lock().unwrap();
+        s.ota.install_error = err.clone();
+        s.ota.phase = OtaPhase::Failed(err);
+    }
+
+    /// Permanently skip this version (stored in Rust skip list).
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaSkip(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        version: *const c_char,
+    ) {
+        let ver = cs(version);
+        let mut s = STATE.lock().unwrap();
+        if !ver.is_empty() && !s.ota.skipped_versions.contains(&ver) {
+            s.ota.skipped_versions.push(ver);
+        }
+        s.ota.phase = OtaPhase::Idle;
+    }
+
+    /// Get full OTA status JSON from Rust.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_otaGetStatus(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
+        CString::new(STATE.lock().unwrap().ota.to_json()).unwrap_or_default().into_raw()
+    }
+
     }
 }
 
@@ -2419,10 +2697,135 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("POST", "/credentials/get")   => get_credential(body),
 
         // OpenClaw v3 / NanoBot / ZeroClaw routes
-        // OTA update
-        ("GET", "/ota/status") => { let s=STATE.lock().unwrap(); format!(r#"{{"current":"{}","latest":"{}","available":{},"checked":{},"url":"{}"}}"#,esc(&s.ota_current_version),esc(&s.ota_latest_version),s.ota_update_available,s.ota_last_check,esc(&s.ota_download_url)) }
-        ("POST", "/ota/check") => { let lat=extract_json_str(body,"latest").unwrap_or_default();let url=extract_json_str(body,"download_url").unwrap_or_default();let log=extract_json_str(body,"changelog").unwrap_or_default();let mut s=STATE.lock().unwrap();s.ota_latest_version=lat.clone();s.ota_download_url=url;s.ota_changelog=log;s.ota_update_available= !lat.is_empty()&&lat!=s.ota_current_version;s.ota_last_check=now_ms();format!(r#"{{"ok":true,"available":{}}}"#,s.ota_update_available) }
-        ("POST", "/ota/set_version") => { if let Some(v)=extract_json_str(body,"version"){STATE.lock().unwrap().ota_current_version=v;} r#"{"ok":true}"#.to_string() }
+        // ── OTA Engine v43 ────────────────────────────────────────────────────
+        // GET  /ota/status        — full OTA state JSON
+        // POST /ota/begin_check   — Java signals it's about to call GitHub API
+        // POST /ota/release       — Java posts parsed GitHub release data to Rust
+        // POST /ota/progress      — Java reports download progress
+        // POST /ota/downloaded    — Java signals APK is on disk (path + sha256)
+        // POST /ota/installing    — Java signals install session opened
+        // POST /ota/installed     — Java signals successful install
+        // POST /ota/failed        — Java signals any error
+        // POST /ota/skip          — skip this version
+        // POST /ota/set_version   — update current installed version
+        // GET  /ota/install_cmd   — get the install command for Shizuku
+        ("GET",  "/ota/status")     => { STATE.lock().unwrap().ota.to_json() }
+        ("POST", "/ota/begin_check") => {
+            let mut s = STATE.lock().unwrap();
+            s.ota.phase = OtaPhase::Checking;
+            s.ota.check_error = String::new();
+            s.ota.last_check_ms = now_ms();
+            r#"{"ok":true}"#.to_string()
+        }
+        ("POST", "/ota/release") => {
+            let latest  = extract_json_str(body, "tag").unwrap_or_default();
+            let url     = extract_json_str(body, "url").unwrap_or_default();
+            let log     = extract_json_str(body, "changelog").unwrap_or_default();
+            let date    = extract_json_str(body, "date").unwrap_or_default();
+            let sha     = extract_json_str(body, "sha256").unwrap_or_default();
+            let apk_sz  = extract_json_num(body, "apk_bytes").unwrap_or(0.0) as u64;
+            let mut s   = STATE.lock().unwrap();
+            // Check if this version is skipped
+            if s.ota.skipped_versions.contains(&latest) {
+                s.ota.phase = OtaPhase::Idle;
+                return format!(r#"{{"ok":true,"skipped":true}}"#);
+            }
+            let is_newer = s.ota.is_newer(&latest);
+            s.ota.latest_version  = latest.clone();
+            s.ota.download_url    = url;
+            s.ota.changelog       = log;
+            s.ota.release_date    = date;
+            s.ota.apk_sha256      = sha;
+            s.ota.total_apk_bytes = apk_sz;
+            s.ota.last_check_ms   = now_ms();
+            s.ota.check_error     = String::new();
+            if is_newer {
+                s.ota.phase = OtaPhase::UpdateAvailable;
+                format!(r#"{{"ok":true,"action":"prompt_user","version":"{}"}}"#, esc(&latest))
+            } else {
+                s.ota.phase = OtaPhase::Idle;
+                format!(r#"{{"ok":true,"action":"up_to_date"}}"#)
+            }
+        }
+        ("POST", "/ota/progress") => {
+            let done  = extract_json_num(body, "bytes").unwrap_or(0.0) as u64;
+            let total = extract_json_num(body, "total").unwrap_or(0.0) as u64;
+            let mut s = STATE.lock().unwrap();
+            s.ota.download_bytes = done;
+            s.ota.download_total = total;
+            s.ota.download_pct   = if total > 0 { ((done * 100) / total).min(100) as u8 } else { 0 };
+            s.ota.phase = OtaPhase::Downloading;
+            format!(r#"{{"ok":true,"pct":{}}}"#, s.ota.download_pct)
+        }
+        ("POST", "/ota/downloaded") => {
+            let path = extract_json_str(body, "path").unwrap_or_default();
+            let sha  = extract_json_str(body, "sha256").unwrap_or_default();
+            let mut s = STATE.lock().unwrap();
+            s.ota.apk_local_path = path;
+            // Verify SHA256 if we have an expected one
+            let expected = s.ota.apk_sha256.clone();
+            let verified = expected.is_empty() || expected == sha;
+            if verified {
+                s.ota.phase = OtaPhase::Downloaded;
+                r#"{"ok":true,"verified":true}"#.to_string()
+            } else {
+                s.ota.phase = OtaPhase::Failed(format!("SHA256 mismatch: got {}", &sha[..sha.len().min(16)]));
+                format!(r#"{{"ok":false,"error":"sha256_mismatch","expected":"{}","got":"{}"}}"#,
+                    esc(&expected[..expected.len().min(16)]), esc(&sha[..sha.len().min(16)]))
+            }
+        }
+        ("POST", "/ota/installing") => {
+            let method = extract_json_str(body, "method").unwrap_or_else(|| "intent".to_string());
+            let sid    = extract_json_num(body, "session_id").unwrap_or(-1.0) as i32;
+            let mut s  = STATE.lock().unwrap();
+            s.ota.install_method     = method;
+            s.ota.install_session_id = sid;
+            s.ota.install_error      = String::new();
+            s.ota.phase = OtaPhase::Installing;
+            r#"{"ok":true}"#.to_string()
+        }
+        ("POST", "/ota/installed") => {
+            let ver = extract_json_str(body, "version").unwrap_or_default();
+            let mut s = STATE.lock().unwrap();
+            s.ota.phase = OtaPhase::Installed;
+            if !ver.is_empty() { s.ota.current_version = ver; s.config.setup_done = true; }
+            r#"{"ok":true}"#.to_string()
+        }
+        ("POST", "/ota/failed") => {
+            let err = extract_json_str(body, "error").unwrap_or_else(|| "unknown error".to_string());
+            let mut s = STATE.lock().unwrap();
+            s.ota.install_error = err.clone();
+            s.ota.phase = OtaPhase::Failed(err.clone());
+            format!(r#"{{"ok":true,"recorded_error":"{}"}}"#, esc(&err))
+        }
+        ("POST", "/ota/skip") => {
+            let ver = extract_json_str(body, "version").unwrap_or_default();
+            let mut s = STATE.lock().unwrap();
+            if !ver.is_empty() && !s.ota.skipped_versions.contains(&ver) {
+                s.ota.skipped_versions.push(ver);
+            }
+            s.ota.phase = OtaPhase::Idle;
+            r#"{"ok":true}"#.to_string()
+        }
+        ("POST", "/ota/set_version") => {
+            let ver  = extract_json_str(body, "version").unwrap_or_default();
+            let code = extract_json_num(body, "code").unwrap_or(0.0) as i64;
+            let mut s = STATE.lock().unwrap();
+            if !ver.is_empty() { s.ota.current_version = ver.clone(); s.config.setup_done = true; }
+            if code > 0 { s.ota.current_code = code; }
+            r#"{"ok":true}"#.to_string()
+        }
+        ("GET", "/ota/install_cmd") => {
+            let s = STATE.lock().unwrap();
+            let path = &s.ota.apk_local_path;
+            if path.is_empty() {
+                r#"{"error":"no apk downloaded"}"#.to_string()
+            } else {
+                format!(r#"{{"cmd":"pm install -r -t \"{}\"","path":"{}","shizuku_ready":{}}}"#,
+                    esc(path), esc(path),
+                    s.shizuku.permission_granted)
+            }
+        }
         _ => {
             if let Some(r) = route_openclaw_v3(method, path_clean, body) { r }
             else if let Some(r) = route_vlm_agent(method, path_clean, body) { r }

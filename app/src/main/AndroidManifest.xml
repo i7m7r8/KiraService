@@ -143,6 +143,16 @@
                 android:resource="@xml/file_paths"/>
         </provider>
 
+        <!-- OTA: PackageInstaller session result + notification action receiver -->
+        <receiver
+            android:name=".KiraOtaUpdater$OtaInstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.kira.ota.DOWNLOAD"/>
+                <action android:name="com.kira.ota.SKIP"/>
+            </intent-filter>
+        </receiver>
+
     </application>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 </manifest>

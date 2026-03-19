@@ -325,4 +325,31 @@ public class RustBridge {
     /** Process a state machine event */
     public static native void fsmEvent(String machineId, String event);
 
+    // ── v43: OTA Engine JNI ──────────────────────────────────────────────────
+    /** Register installed versionName + versionCode with Rust on app start. */
+    public static native void   otaSetCurrentVersion(String version, long versionCode);
+    /** Set GitHub repo slug, e.g. "i7m7r8/KiraService". */
+    public static native void   otaSetRepo(String repo);
+    /**
+     * Feed parsed GitHub release to Rust. Rust decides: prompt_user / up_to_date / skipped.
+     * Returns JSON {"action":"prompt_user|up_to_date|skipped","version":"tag","current":"..."}
+     */
+    public static native String otaOnRelease(String tag, String url, String changelog,
+                                              String date, String sha256, long apkBytes);
+    /** Report streaming download progress. Rust tracks % for /ota/status. */
+    public static native void   otaProgress(long bytesDone, long bytesTotal);
+    /**
+     * Signal APK fully downloaded. Rust verifies SHA256 and returns install instructions.
+     * Returns JSON {"ok":true,"method":"shizuku|package_installer","cmd":"pm install ..."}
+     */
+    public static native String otaOnDownloaded(String localPath, String sha256);
+    /** Signal install completed successfully. Pass new versionName. */
+    public static native void   otaOnInstalled(String newVersion);
+    /** Signal install failed. Rust records error and resets to Failed phase. */
+    public static native void   otaOnFailed(String error);
+    /** Permanently skip this version (added to Rust skip list). */
+    public static native void   otaSkip(String version);
+    /** Get full OTA status JSON from Rust (phase, pct, version info, etc.). */
+    public static native String otaGetStatus();
+
 }

@@ -41,7 +41,44 @@ import java.util.List;
 public class MainActivity extends Activity
         implements SensorEventListener {
 
-    private static final int SHIZUKU_CODE    = 1001;
+    // ── Theme palette (class-level constants — accessible from all methods) ────
+    // Dark theme
+    private static final int D_BG          = 0xFF07070D;
+    private static final int D_SURFACE     = 0xFF0D0D1A;
+    private static final int D_SURFACE2    = 0xFF131325;
+    private static final int D_BORDER      = 0xFF1E1E35;
+    private static final int D_TEXT        = 0xFFE8E8F0;
+    private static final int D_TEXT2       = 0xFFAAAAAC;
+    private static final int D_TEXT3       = 0xFF66667A;
+    private static final int D_NAV         = 0xF0090913;
+    private static final int D_INPUT_BG    = 0xFF0E0E1C;
+    private static final int D_USER_BUBBLE = 0xFF141428;
+    private static final int D_KIRA_BUBBLE = 0xFF0F0F1E;
+    private static final int D_TOOL_BG     = 0xFF0A1A0A;
+    private static final int D_ERROR_BG    = 0xFF1A0808;
+    private static final int D_CODE_BG     = 0xFF0A0E17;
+    private static final int D_CODE_HDR    = 0xFF141828;
+    // Light theme
+    private static final int L_BG          = 0xFFF7F7FC;
+    private static final int L_SURFACE     = 0xFFFFFFFF;
+    private static final int L_SURFACE2    = 0xFFF0F0F8;
+    private static final int L_BORDER      = 0xFFDDDDE8;
+    private static final int L_TEXT        = 0xFF111120;
+    private static final int L_TEXT2       = 0xFF444458;
+    private static final int L_TEXT3       = 0xFF888899;
+    private static final int L_NAV         = 0xFFF0F0F8;
+    private static final int L_INPUT_BG    = 0xFFEEEEF8;
+    private static final int L_USER_BUBBLE = 0xFFEAEAF8;
+    private static final int L_KIRA_BUBBLE = 0xFFFFFFFF;
+    private static final int L_TOOL_BG     = 0xFFE8F5E8;
+    private static final int L_ERROR_BG    = 0xFFFFF0F0;
+    private static final int L_CODE_BG     = 0xFFF0F2F8;
+    private static final int L_CODE_HDR    = 0xFFE4E8F4;
+    // Shared accent (same in both themes)
+    private static final int ACCENT        = 0xFFDC143C;
+    private static final int ACCENT_DIM    = 0xFF3A0010;
+
+        private static final int SHIZUKU_CODE    = 1001;
     private static final int PERMISSION_CODE = 1002;
 
     private Handler uiHandler;
@@ -128,7 +165,10 @@ public class MainActivity extends Activity
         cfg = KiraConfig.load(this);
         // Auto theme: follow system setting
         int uiMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
-        isDarkTheme = (uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES);
+        // Respect saved preference, else follow system
+        boolean savedDark = getSharedPreferences("kira_theme", MODE_PRIVATE)
+            .getBoolean("dark", uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES);
+        isDarkTheme = savedDark;
         applyTheme();
 
 
@@ -151,8 +191,9 @@ public class MainActivity extends Activity
 
         // Start foreground service to keep Telegram alive
         KiraForegroundService.start(this);
+        // v43: init OTA engine (registers version with Rust, schedules checks)
+        initOta();
         // OTA check (non-blocking, 3s delay)
-        uiHandler.postDelayed(this::checkForOtaUpdate, 3000);
     }
 
     // -- Permissions -----------------------------------------------------------
@@ -379,8 +420,9 @@ public class MainActivity extends Activity
         // OTA check row
         View rowOta = settingsFragment.findViewById(R.id.rowOta);
         if (rowOta != null) rowOta.setOnClickListener(v -> {
-            checkForOtaUpdate();
-            android.widget.Toast.makeText(this, "Checking for updates...", android.widget.Toast.LENGTH_SHORT).show();
+            if (otaUpdater == null) initOta();
+            android.widget.Toast.makeText(this, "Checking for updates…", android.widget.Toast.LENGTH_SHORT).show();
+            otaUpdater.checkForUpdate();
         });
 
         // Tools rows
@@ -543,7 +585,10 @@ public class MainActivity extends Activity
 
     // -- Bubble builders -------------------------------------------------------
 
-    private void addUserBubble(ConvTurn turn) {
+    /** Theme helper: returns dark or light value based on isDarkTheme flag */
+    private int t(int dark, int light) { return isDarkTheme ? dark : light; }
+
+        private void addUserBubble(ConvTurn turn) {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.setTag("user_" + turn.timestamp);
@@ -558,13 +603,13 @@ public class MainActivity extends Activity
         labelRow.setPadding(0, 0, 0, dp(3));
 
         TextView label = makeLabel("YOU");
-        label.setTextColor(0xFF777777);
+        label.setTextColor(t(D_TEXT3, L_TEXT3));
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
         // Edit button -- lets user edit and resend (like Claude's edit feature)
         TextView editBtn = new TextView(this);
         editBtn.setText("? edit");
-        editBtn.setTextColor(0xFF555555);
+        editBtn.setTextColor(t(D_TEXT3, L_TEXT3));
         editBtn.setTextSize(10);
         editBtn.setOnClickListener(v -> {
             inputField.setText(turn.text);
@@ -615,7 +660,7 @@ public class MainActivity extends Activity
 
         TextView msg = new TextView(this);
         msg.setText("???");
-        msg.setTextColor(0xFF555555);
+        msg.setTextColor(t(D_TEXT3, L_TEXT3));
         msg.setTextSize(14);
         msg.setTag("thinking_msg");
 
@@ -710,7 +755,7 @@ public class MainActivity extends Activity
                 if (!part.trim().isEmpty()) {
                     TextView tv = new TextView(this);
                     tv.setText(part.trim());
-                    tv.setTextColor(0xFFeeeeee);
+                    tv.setTextColor(t(D_TEXT, L_TEXT));
                     tv.setTextSize(14);
                     tv.setPadding(dp(14), dp(8), dp(14), dp(8));
                     tv.setLineSpacing(dp(2), 1);
@@ -730,7 +775,7 @@ public class MainActivity extends Activity
 
                 LinearLayout codeBlock = new LinearLayout(this);
                 codeBlock.setOrientation(LinearLayout.VERTICAL);
-                codeBlock.setBackgroundColor(0xDD0d1117);
+                codeBlock.setBackgroundColor(t(D_CODE_BG, L_CODE_BG));
                 LinearLayout.LayoutParams cbp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cbp.setMargins(0, dp(4), 0, dp(4));
                 codeBlock.setLayoutParams(cbp);
@@ -739,12 +784,12 @@ public class MainActivity extends Activity
                 LinearLayout codeHeader = new LinearLayout(this);
                 codeHeader.setOrientation(LinearLayout.HORIZONTAL);
                 codeHeader.setGravity(Gravity.CENTER_VERTICAL);
-                codeHeader.setBackgroundColor(0xFF1a1a2e);
+                codeHeader.setBackgroundColor(t(D_CODE_HDR, L_CODE_HDR));
                 codeHeader.setPadding(dp(12), dp(6), dp(12), dp(6));
 
                 TextView langLabel = new TextView(this);
                 langLabel.setText(lang.isEmpty() ? "code" : lang);
-                langLabel.setTextColor(0xFF8888AA);
+                langLabel.setTextColor(t(0xFF8888AA, L_TEXT3));
                 langLabel.setTextSize(11);
                 langLabel.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
@@ -769,12 +814,12 @@ public class MainActivity extends Activity
 
                 TextView codeTv = new TextView(this);
                 codeTv.setText(finalCode);
-                codeTv.setTextColor(0xFF00ff88);
+                codeTv.setTextColor(t(0xFF00CC77, 0xFF004466));
                 codeTv.setTextSize(12);
                 codeTv.setTypeface(android.graphics.Typeface.MONOSPACE);
                 codeTv.setPadding(dp(12), dp(10), dp(12), dp(10));
                 codeTv.setTextIsSelectable(true);
-                codeTv.setBackgroundColor(0xDD0d1117);
+                codeTv.setBackgroundColor(t(D_CODE_BG, L_CODE_BG));
 
                 hScroll.addView(codeTv);
                 codeBlock.addView(codeHeader);
@@ -807,7 +852,7 @@ public class MainActivity extends Activity
         wrap.setLayoutParams(wp);
 
         TextView label = makeLabel("ERROR");
-        label.setTextColor(0xFFcc4444);
+        label.setTextColor(0xFFDD3333);
         label.setPadding(0, 0, 0, dp(3));
 
         TextView msg = new TextView(this);
@@ -911,7 +956,7 @@ public class MainActivity extends Activity
     private void addSystemNotice(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
-        tv.setTextColor(0xFF8888AA);
+        tv.setTextColor(t(0xFF8888AA, L_TEXT3));
         tv.setTextSize(12);
         tv.setPadding(dp(12), dp(6), dp(12), dp(6));
         tv.setBackgroundColor(0x88080810);
@@ -1030,14 +1075,14 @@ public class MainActivity extends Activity
         // Title
         android.widget.TextView ttv = new android.widget.TextView(this);
         ttv.setText("SELECT PROVIDER");
-        ttv.setTextColor(isDarkTheme ? 0xFFffffff : 0xFF111111);
+        ttv.setTextColor(t(D_TEXT, L_TEXT));
         ttv.setTextSize(13); ttv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         android.widget.LinearLayout.LayoutParams ttp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
         ttp.setMargins(dp(16), dp(12), dp(16), dp(10)); ttv.setLayoutParams(ttp);
         card.addView(ttv);
 
         android.view.View sep = new android.view.View(this);
-        sep.setBackgroundColor(isDarkTheme ? 0xFF111122 : 0xFFddddee);
+        sep.setBackgroundColor(t(D_BORDER, L_BORDER));
         sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(sep);
 
@@ -1092,7 +1137,7 @@ public class MainActivity extends Activity
 
             // Separator
             android.view.View rowSep = new android.view.View(this);
-            rowSep.setBackgroundColor(isDarkTheme ? 0xFF0a0a18 : 0xFFeeeeee);
+            rowSep.setBackgroundColor(t(D_BORDER, L_BORDER));
             rowSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
 
             list.addView(row);
@@ -1103,7 +1148,7 @@ public class MainActivity extends Activity
 
         // Close button
         android.view.View closeSep = new android.view.View(this);
-        closeSep.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+        closeSep.setBackgroundColor(t(D_BORDER, L_BORDER));
         closeSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(closeSep);
         android.widget.TextView closeBtn = new android.widget.TextView(this);
@@ -1213,36 +1258,182 @@ public class MainActivity extends Activity
     // \u2500\u2500 Theme \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     /** Apply dark or light theme to the whole UI */
-    private void applyTheme() {
-        // Background colors driven by isDarkTheme
-        int bg        = isDarkTheme ? 0xFF050508 : 0xFFf4f4f8;
-        int navBg     = isDarkTheme ? 0xE5040410 : 0xE5f0f0f8;
-        int chatBg    = 0x00000000; // always transparent \u2014 galaxy shows through in dark
-        // Nav bar
-        View nav = findViewById(R.id.bottomNav);
-        if (nav != null) nav.setBackgroundColor(navBg);
-        // Content frame background
-        if (homeFragment   != null) homeFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
-        if (settingsFragment != null) settingsFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
-        if (historyFragment != null) historyFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
-        if (toolsFragment  != null) toolsFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
-        // Chat input bar
-        View inputBar = homeFragment != null ? homeFragment.findViewWithTag("inputBar") : null;
-        if (inputBar != null) inputBar.setBackgroundColor(isDarkTheme ? 0xEE06060f : 0xEEf0f0f8);
-        // Status bar color
-        getWindow().setStatusBarColor(isDarkTheme ? 0xFF050508 : 0xFFf4f4f8);
-        getWindow().setNavigationBarColor(isDarkTheme ? 0xFF040410 : 0xFFf0f0f8);
-        // Adjust icon/text brightness for light mode
-        if (headerSubtitle != null)
-            headerSubtitle.setTextColor(isDarkTheme ? 0xFF333355 : 0xFF888899);
+    // ── OTA Update (v43: Rust-backed) ─────────────────────────────────────────
+
+    private KiraOtaUpdater otaUpdater;
+
+    private void initOta() {
+        otaUpdater = new KiraOtaUpdater(this);
+        otaUpdater.init();
+        otaUpdater.setCallback(new KiraOtaUpdater.OtaCallback() {
+            @Override public void onCheckStart() {
+                uiHandler.post(() -> {
+                    if (rustStatsHint != null) rustStatsHint.setText("checking…");
+                });
+            }
+            @Override public void onUpdateAvailable(String ver, String log, Runnable onInstall, Runnable onSkip) {
+                uiHandler.post(() -> showKiraDialogMulti(
+                    "Update Available",
+                    ver + " is ready\n\n" + (log.length() > 280 ? log.substring(0, 280) + "…" : log),
+                    new String[]{"INSTALL", "LATER", "SKIP"},
+                    new Runnable[]{ onInstall, null, onSkip }
+                ));
+            }
+            @Override public void onProgress(int pct, long done, long total) {
+                uiHandler.post(() -> {
+                    String mb = String.format("%.1f / %.1f MB", done/1048576.0, total/1048576.0);
+                    if (rustStatsHint != null) rustStatsHint.setText("⬇ " + pct + "% · " + mb);
+                });
+            }
+            @Override public void onInstalling(String method) {
+                uiHandler.post(() -> {
+                    String label = "shizuku".equals(method) ? "installing silently…"
+                        : "package_installer".equals(method) ? "installing…" : "opening installer…";
+                    if (rustStatsHint != null) rustStatsHint.setText(label);
+                });
+            }
+            @Override public void onSuccess(String ver) {
+                uiHandler.post(() -> showKiraDialogMulti(
+                    "Update Installed",
+                    "Kira " + ver + " installed.\nRestart to apply changes.",
+                    new String[]{"RESTART", "LATER"},
+                    new Runnable[]{
+                        () -> {
+                            Intent ri = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                            if (ri != null) {
+                                ri.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(ri);
+                            }
+                            android.os.Process.killProcess(android.os.Process.myPid());
+                        },
+                        null
+                    }
+                ));
+            }
+            @Override public void onError(String msg) {
+                uiHandler.post(() -> {
+                    if (rustStatsHint != null) rustStatsHint.setText("update error");
+                    Toast.makeText(MainActivity.this, "OTA: " + msg, Toast.LENGTH_LONG).show();
+                });
+            }
+            @Override public void onUpToDate() {
+                uiHandler.post(() -> {
+                    Toast.makeText(MainActivity.this, "Already up to date ✓", Toast.LENGTH_SHORT).show();
+                    if (rustStatsHint != null) rustStatsHint.setText("up to date ✓");
+                });
+            }
+        });
+        otaUpdater.scheduleChecks();
     }
 
-    /** Toggle theme and re-apply */
+    private void applyTheme() {
+        // ── System chrome ───────────────────────────────────────────────────
+        getWindow().setStatusBarColor(isDarkTheme ? D_BG : L_BG);
+        getWindow().setNavigationBarColor(isDarkTheme ? D_NAV : L_NAV);
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            int flags = getWindow().getDecorView().getSystemUiVisibility();
+            if (!isDarkTheme) {
+                flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                flags |= android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            } else {
+                flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            }
+            getWindow().getDecorView().setSystemUiVisibility(flags);
+        }
+
+        // ── Nav bar ─────────────────────────────────────────────────────────
+        View nav = findViewById(R.id.bottomNav);
+        if (nav != null) nav.setBackgroundColor(isDarkTheme ? D_NAV : L_NAV);
+        // Re-colour nav icons to correct active/inactive state
+        for (int i = 0; i < 4; i++) {
+            boolean on = i == currentTab;
+            if (navIcons != null && navIcons[i] != null)
+                navIcons[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
+            if (navTexts != null && navTexts[i] != null)
+                navTexts[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
+        }
+
+        // ── Fragment backgrounds ────────────────────────────────────────────
+        // Dark: transparent so GalaxyView shows through
+        // Light: solid warm white
+        int fragBg = isDarkTheme ? 0x00000000 : L_BG;
+        if (homeFragment    != null) homeFragment.setBackgroundColor(fragBg);
+        if (settingsFragment!= null) settingsFragment.setBackgroundColor(fragBg);
+        if (historyFragment != null) historyFragment.setBackgroundColor(fragBg);
+        if (toolsFragment   != null) toolsFragment.setBackgroundColor(fragBg);
+
+        // ── Chat input bar ──────────────────────────────────────────────────
+        View inputBar = homeFragment != null ? homeFragment.findViewWithTag("inputBar") : null;
+        if (inputBar != null) inputBar.setBackgroundColor(isDarkTheme ? 0xF0090913 : 0xF0F0F0FC);
+        if (inputField != null) {
+            inputField.setBackgroundColor(isDarkTheme ? D_INPUT_BG : L_INPUT_BG);
+            inputField.setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
+            inputField.setHintTextColor(isDarkTheme ? D_TEXT3 : L_TEXT3);
+        }
+
+        // ── Header subtitle ─────────────────────────────────────────────────
+        if (headerSubtitle != null)
+            headerSubtitle.setTextColor(isDarkTheme ? D_TEXT3 : L_TEXT3);
+
+        // ── Chat bubbles ────────────────────────────────────────────────────
+        if (chatContainer != null) {
+            for (int i = 0; i < chatContainer.getChildCount(); i++) {
+                View child = chatContainer.getChildAt(i);
+                if (!(child instanceof LinearLayout)) continue;
+                Object tag = child.getTag();
+                if (tag == null) continue;
+                String ts = tag.toString();
+                LinearLayout ll = (LinearLayout) child;
+                if (ts.startsWith("user_") && ll.getChildCount() > 1) {
+                    View msgV = ll.getChildAt(1);
+                    if (msgV instanceof android.widget.TextView) {
+                        msgV.setBackgroundColor(isDarkTheme ? D_USER_BUBBLE : L_USER_BUBBLE);
+                        ((android.widget.TextView)msgV).setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
+                    }
+                } else if (ts.startsWith("kira_") && ll.getChildCount() > 1) {
+                    View msgV = ll.getChildAt(1);
+                    if (msgV instanceof android.widget.TextView) {
+                        msgV.setBackgroundColor(isDarkTheme ? D_KIRA_BUBBLE : L_KIRA_BUBBLE);
+                        ((android.widget.TextView)msgV).setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
+                    }
+                }
+            }
+        }
+
+        // ── Settings hints ──────────────────────────────────────────────────
+        if (settingsFragment != null) {
+            int hintCol = isDarkTheme ? D_TEXT3 : L_TEXT3;
+            int[] hintIds = { R.id.apiKeyHint, R.id.modelHint, R.id.baseUrlHint,
+                R.id.tgTokenHint, R.id.tgIdHint, R.id.visionHint, R.id.maxStepsHint,
+                R.id.heartbeatHint, R.id.personaHint, R.id.providerHint, R.id.skillsHint,
+                R.id.checkpointsHint, R.id.auditHint, R.id.userNameHint,
+                R.id.rustStatsHint, R.id.memoryHint, R.id.historySettingHint };
+            for (int id : hintIds) {
+                android.widget.TextView tv = settingsFragment.findViewById(id);
+                if (tv != null) tv.setTextColor(hintCol);
+            }
+            if (rustStatsContent != null) {
+                rustStatsContent.setTextColor(isDarkTheme ? 0xFF44AA44 : 0xFF226622);
+                rustStatsContent.setBackgroundColor(isDarkTheme ? 0xFF030308 : 0xFFF4F8F4);
+            }
+            if (memoryContent != null) {
+                memoryContent.setTextColor(isDarkTheme ? 0xFF44AA44 : 0xFF226622);
+                memoryContent.setBackgroundColor(isDarkTheme ? 0xFF050508 : 0xFFF4F8F4);
+            }
+        }
+
+        // ── Save preference ─────────────────────────────────────────────────
+        getSharedPreferences("kira_theme", MODE_PRIVATE)
+            .edit().putBoolean("dark", isDarkTheme).apply();
+    }
+
+    /** Toggle theme and persist */
     private void toggleTheme() {
         isDarkTheme = !isDarkTheme;
         applyTheme();
-        android.widget.Toast.makeText(this,
-            isDarkTheme ? "Dark theme" : "Light theme", android.widget.Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, isDarkTheme ? "Dark theme" : "Light theme",
+            Toast.LENGTH_SHORT).show();
     }
 
     // \u2500\u2500 Multi-button dialog \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -1258,8 +1449,8 @@ public class MainActivity extends Activity
 
         android.widget.LinearLayout card = new android.widget.LinearLayout(this);
         card.setOrientation(android.widget.LinearLayout.VERTICAL);
-        int cardColor  = isDarkTheme ? 0xFF0c0c18 : 0xFFf8f8ff;
-        int borderColor= isDarkTheme ? 0xFF1a1a2e : 0xFFccccdd;
+        int cardColor  = t(D_SURFACE, L_SURFACE);
+        int borderColor= t(D_BORDER, L_BORDER);
         android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
         cardBg.setColor(cardColor); cardBg.setCornerRadius(dp(4)); cardBg.setStroke(dp(1), borderColor);
         card.setBackground(cardBg);
@@ -1281,7 +1472,7 @@ public class MainActivity extends Activity
         titleRow.setPadding(dp(18), dp(14), dp(18), dp(10));
         android.widget.TextView titleTv = new android.widget.TextView(this);
         titleTv.setText(title);
-        titleTv.setTextColor(isDarkTheme ? 0xFFFFFFFF : 0xFF111111);
+        titleTv.setTextColor(t(D_TEXT, L_TEXT));
         titleTv.setTextSize(14); titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
         android.widget.TextView kBadge = new android.widget.TextView(this);
@@ -1291,14 +1482,14 @@ public class MainActivity extends Activity
         card.addView(titleRow);
 
         android.view.View sep = new android.view.View(this);
-        sep.setBackgroundColor(isDarkTheme ? 0xFF111122 : 0xFFddddee);
+        sep.setBackgroundColor(t(D_BORDER, L_BORDER));
         sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(sep);
 
         // Message
         android.widget.TextView msgTv = new android.widget.TextView(this);
         msgTv.setText(msg);
-        msgTv.setTextColor(isDarkTheme ? 0xFF8888AA : 0xFF444466);
+        msgTv.setTextColor(t(D_TEXT2, L_TEXT2));
         msgTv.setTextSize(12); msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
         msgTv.setLineSpacing(dp(2), 1);
         android.widget.LinearLayout.LayoutParams msgLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
@@ -1307,7 +1498,7 @@ public class MainActivity extends Activity
 
         // Button row
         android.view.View btnSep = new android.view.View(this);
-        btnSep.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+        btnSep.setBackgroundColor(t(D_BORDER, L_BORDER));
         btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(btnSep);
 
@@ -1325,7 +1516,7 @@ public class MainActivity extends Activity
             final int idx = i;
             if (i > 0) {
                 android.view.View bd = new android.view.View(this);
-                bd.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+                bd.setBackgroundColor(t(D_BORDER, L_BORDER));
                 bd.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
                 btnRow.addView(bd);
             }
@@ -1333,7 +1524,7 @@ public class MainActivity extends Activity
             btn.setText(labels[i]);
             // Last button = primary (crimson), others = muted
             boolean isPrimary = (i == 0);
-            btn.setTextColor(isPrimary ? 0xFFDC143C : (isDarkTheme ? 0xFF444466 : 0xFF888899));
+            btn.setTextColor(isPrimary ? ACCENT : t(D_TEXT3, L_TEXT3));
             btn.setTextSize(11);
             btn.setTypeface(android.graphics.Typeface.MONOSPACE, isPrimary ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             btn.setGravity(android.view.Gravity.CENTER);
@@ -1350,114 +1541,6 @@ public class MainActivity extends Activity
     }
 
     // \u2500\u2500 OTA Update \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-
-    /** Check GitHub Releases for a newer APK and prompt to install */
-    private void checkForOtaUpdate() {
-        new Thread(() -> {
-            try {
-                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build();
-                // GitHub Releases API
-                String repoUrl = cfg.otaRepo.isEmpty()
-                    ? "https://api.github.com/repos/" + getPackageName().replace("com.kira.service","i7m7r8/KiraService") + "/releases/latest"
-                    : "https://api.github.com/repos/" + cfg.otaRepo + "/releases/latest";
-                okhttp3.Response resp = client.newCall(
-                    new okhttp3.Request.Builder().url(repoUrl)
-                        .header("Accept","application/vnd.github+json").build()).execute();
-                if (resp.body() == null) return;
-                String body = resp.body().string();
-                org.json.JSONObject rel = new org.json.JSONObject(body);
-                String tagName = rel.optString("tag_name","");
-                String currentVersion = getPackageManager()
-                    .getPackageInfo(getPackageName(), 0).versionName;
-                // Find debug APK asset
-                org.json.JSONArray assets = rel.optJSONArray("assets");
-                String apkUrl = null;
-                if (assets != null) {
-                    for (int i = 0; i < assets.length(); i++) {
-                        org.json.JSONObject asset = assets.getJSONObject(i);
-                        String name = asset.optString("name","");
-                        if (name.endsWith(".apk") && name.contains("debug")) {
-                            apkUrl = asset.optString("browser_download_url","");
-                            break;
-                        }
-                    }
-                    if (apkUrl == null && assets.length() > 0) {
-                        // fallback: first APK
-                        for (int i = 0; i < assets.length(); i++) {
-                            String name = assets.getJSONObject(i).optString("name","");
-                            if (name.endsWith(".apk")) {
-                                apkUrl = assets.getJSONObject(i).optString("browser_download_url","");
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (apkUrl == null || apkUrl.isEmpty()) return;
-                // Compare versions (simple string compare \u2014 tag like "v40-20260319-1234")
-                if (tagName.equals(getSharedPreferences("kira_ota",0).getString("last_seen_tag",""))) return;
-                final String finalApkUrl = apkUrl;
-                final String finalTag = tagName;
-                uiHandler.post(() -> showKiraDialogMulti(
-                    "Update Available",
-                    "New version available\n\n" + finalTag + "\n\nCurrent: " + currentVersion + "\n\nTap INSTALL to download.",
-                    new String[]{"INSTALL", "LATER", "SKIP"},
-                    new Runnable[]{
-                        () -> downloadAndInstallApk(finalApkUrl, finalTag),
-                        null,
-                        () -> getSharedPreferences("kira_ota",0).edit().putString("last_seen_tag", finalTag).apply()
-                    }
-                ));
-            } catch (Exception e) {
-                android.util.Log.d("KiraOTA", "update check: " + e.getMessage());
-            }
-        }).start();
-    }
-
-    private void downloadAndInstallApk(String apkUrl, String tag) {
-        android.widget.Toast.makeText(this, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show();
-        new Thread(() -> {
-            try {
-                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build();
-                okhttp3.Response resp = client.newCall(
-                    new okhttp3.Request.Builder().url(apkUrl).build()).execute();
-                if (resp.body() == null) return;
-                byte[] apkBytes = resp.body().bytes();
-                // Save to cache
-                java.io.File apkFile = new java.io.File(getCacheDir(), "kira_update.apk");
-                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(apkFile)) {
-                    fos.write(apkBytes);
-                }
-                uiHandler.post(() -> {
-                    try {
-                        // Use FileProvider for Android 7+
-                        android.net.Uri apkUri;
-                        if (android.os.Build.VERSION.SDK_INT >= 24) {
-                            apkUri = androidx.core.content.FileProvider.getUriForFile(
-                                this, getPackageName() + ".provider", apkFile);
-                        } else {
-                            apkUri = android.net.Uri.fromFile(apkFile);
-                        }
-                        android.content.Intent install = new android.content.Intent(
-                            android.content.Intent.ACTION_VIEW);
-                        install.setDataAndType(apkUri, "application/vnd.android.package-archive");
-                        install.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION |
-                                         android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                        startActivity(install);
-                        // Mark as seen so we don't prompt again
-                        getSharedPreferences("kira_ota",0).edit().putString("last_seen_tag", tag).apply();
-                    } catch (Exception e) {
-                        Toast.makeText(this, "Install error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                    }
-                });
-            } catch (Exception e) {
-                uiHandler.post(() -> Toast.makeText(this, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
-            }
-        }).start();
-    }
 
     /** Custom Kira info dialog \u2014 no stock Android chrome */
     private void showInfoDialog(String title, String msg) {
@@ -1769,7 +1852,7 @@ public class MainActivity extends Activity
                 // Kira reply preview
                 TextView kiraTv = new TextView(this);
                 kiraTv.setText(kira.length() > 150 ? kira.substring(0, 150) + "?" : kira);
-                kiraTv.setTextColor(0xFF8888AA);
+                kiraTv.setTextColor(t(D_TEXT2, L_TEXT2));
                 kiraTv.setTextSize(12);
                 kiraTv.setPadding(0, dp(4), 0, 0);
 

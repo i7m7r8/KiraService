@@ -300,4 +300,29 @@ public class RustBridge {
     /** Get all phone agent tasks as JSON array */
     public static native String getAgentTasks();
 
+
+    // ── OpenClaw v3 / NanoBot / ZeroClaw extended automation ─────────────────
+
+    /** Execute a NanoBot DSL script. Returns {"ok":true,"log":["..."]} */
+    public static native String runDslScript(String macroId, String script);
+
+    /** Subscribe to reactive event stream. Returns {"ok":true,"id":"..."} */
+    public static native String rxSubscribe(String id, String name, String eventKinds,
+        String targetMacro, long debounceMs, long throttleMs, boolean distinct);
+
+    /** Post an event to the reactive stream */
+    public static native void rxPostEvent(String kind, String data);
+
+    /** Post a message to a named channel (cross-macro communication) */
+    public static native void channelPost(String channel, String message);
+
+    /** Defer a macro until battery recovers to minPct */
+    public static native void batteryDefer(String macroId, int minPct);
+
+    /** Export macros/keywords as a bundle JSON */
+    public static native String exportBundle(String tagFilter);
+
+    /** Process a state machine event */
+    public static native void fsmEvent(String machineId, String event);
+
 }

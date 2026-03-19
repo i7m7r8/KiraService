@@ -5279,7 +5279,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("GET", "/auto/stats") => {
             let s = STATE.lock().unwrap();
             let enabled  = s.macros.iter().filter(|m| m.enabled).count();
-            let total_runs: u32 = s.macros.iter().map(|m| m.run_count).sum();
+            let total_runs: u64 = s.macros.iter().map(|m| m.run_count).sum();
             let success  = s.macro_run_log.iter().filter(|r| r.success).count();
             let failed   = s.macro_run_log.iter().filter(|r| !r.success).count();
             Some(format!(

@@ -571,13 +571,13 @@ public class MainActivity extends Activity
         labelRow.setPadding(0, 0, 0, dp(3));
 
         TextView label = makeLabel("YOU");
-        label.setTextColor(t(D_TEXT3, L_TEXT3));
+        label.setTextColor(T_TEXT2);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
         // Edit button -- lets user edit and resend (like Claude's edit feature)
         TextView editBtn = new TextView(this);
         editBtn.setText("? edit");
-        editBtn.setTextColor(t(D_TEXT3, L_TEXT3));
+        editBtn.setTextColor(T_TEXT2);
         editBtn.setTextSize(10);
         editBtn.setOnClickListener(v -> {
             inputField.setText(turn.text);
@@ -628,7 +628,7 @@ public class MainActivity extends Activity
 
         TextView msg = new TextView(this);
         msg.setText("???");
-        msg.setTextColor(t(D_TEXT3, L_TEXT3));
+        msg.setTextColor(T_TEXT2);
         msg.setTextSize(14);
         msg.setTag("thinking_msg");
 
@@ -723,7 +723,7 @@ public class MainActivity extends Activity
                 if (!part.trim().isEmpty()) {
                     TextView tv = new TextView(this);
                     tv.setText(part.trim());
-                    tv.setTextColor(t(D_TEXT, L_TEXT));
+                    tv.setTextColor(T_TEXT);
                     tv.setTextSize(14);
                     tv.setPadding(dp(14), dp(8), dp(14), dp(8));
                     tv.setLineSpacing(dp(2), 1);
@@ -743,7 +743,7 @@ public class MainActivity extends Activity
 
                 LinearLayout codeBlock = new LinearLayout(this);
                 codeBlock.setOrientation(LinearLayout.VERTICAL);
-                codeBlock.setBackgroundColor(t(D_CODE_BG, L_CODE_BG));
+                codeBlock.setBackgroundColor(T_SURFACE5);
                 LinearLayout.LayoutParams cbp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cbp.setMargins(0, dp(4), 0, dp(4));
                 codeBlock.setLayoutParams(cbp);
@@ -752,12 +752,12 @@ public class MainActivity extends Activity
                 LinearLayout codeHeader = new LinearLayout(this);
                 codeHeader.setOrientation(LinearLayout.HORIZONTAL);
                 codeHeader.setGravity(Gravity.CENTER_VERTICAL);
-                codeHeader.setBackgroundColor(t(D_CODE_HDR, L_CODE_HDR));
+                codeHeader.setBackgroundColor(T_SURFACE_VAR);
                 codeHeader.setPadding(dp(12), dp(6), dp(12), dp(6));
 
                 TextView langLabel = new TextView(this);
                 langLabel.setText(lang.isEmpty() ? "code" : lang);
-                langLabel.setTextColor(t(0xFF8888AA, L_TEXT3));
+                langLabel.setTextColor(T_TEXT2);
                 langLabel.setTextSize(11);
                 langLabel.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
@@ -787,7 +787,7 @@ public class MainActivity extends Activity
                 codeTv.setTypeface(android.graphics.Typeface.MONOSPACE);
                 codeTv.setPadding(dp(12), dp(10), dp(12), dp(10));
                 codeTv.setTextIsSelectable(true);
-                codeTv.setBackgroundColor(t(D_CODE_BG, L_CODE_BG));
+                codeTv.setBackgroundColor(T_SURFACE5);
 
                 hScroll.addView(codeTv);
                 codeBlock.addView(codeHeader);
@@ -924,7 +924,7 @@ public class MainActivity extends Activity
     private void addSystemNotice(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
-        tv.setTextColor(t(0xFF8888AA, L_TEXT3));
+        tv.setTextColor(T_TEXT2);
         tv.setTextSize(12);
         tv.setPadding(dp(12), dp(6), dp(12), dp(6));
         tv.setBackgroundColor(0x88080810);
@@ -1043,14 +1043,14 @@ public class MainActivity extends Activity
         // Title
         android.widget.TextView ttv = new android.widget.TextView(this);
         ttv.setText("SELECT PROVIDER");
-        ttv.setTextColor(t(D_TEXT, L_TEXT));
+        ttv.setTextColor(T_TEXT);
         ttv.setTextSize(13); ttv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         android.widget.LinearLayout.LayoutParams ttp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
         ttp.setMargins(dp(16), dp(12), dp(16), dp(10)); ttv.setLayoutParams(ttp);
         card.addView(ttv);
 
         android.view.View sep = new android.view.View(this);
-        sep.setBackgroundColor(t(D_BORDER, L_BORDER));
+        sep.setBackgroundColor(T_OUTLINE);
         sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(sep);
 
@@ -1105,7 +1105,7 @@ public class MainActivity extends Activity
 
             // Separator
             android.view.View rowSep = new android.view.View(this);
-            rowSep.setBackgroundColor(t(D_BORDER, L_BORDER));
+            rowSep.setBackgroundColor(T_OUTLINE);
             rowSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
 
             list.addView(row);
@@ -1116,7 +1116,7 @@ public class MainActivity extends Activity
 
         // Close button
         android.view.View closeSep = new android.view.View(this);
-        closeSep.setBackgroundColor(t(D_BORDER, L_BORDER));
+        closeSep.setBackgroundColor(T_OUTLINE);
         closeSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(closeSep);
         android.widget.TextView closeBtn = new android.widget.TextView(this);
@@ -1456,8 +1456,8 @@ public class MainActivity extends Activity
 
         android.widget.LinearLayout card = new android.widget.LinearLayout(this);
         card.setOrientation(android.widget.LinearLayout.VERTICAL);
-        int cardColor  = t(D_SURFACE, L_SURFACE);
-        int borderColor= t(D_BORDER, L_BORDER);
+        int cardColor  = T_SURFACE;
+        int borderColor= T_OUTLINE;
         android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
         cardBg.setColor(cardColor); cardBg.setCornerRadius(dp(4)); cardBg.setStroke(dp(1), borderColor);
         card.setBackground(cardBg);
@@ -1479,7 +1479,7 @@ public class MainActivity extends Activity
         titleRow.setPadding(dp(18), dp(14), dp(18), dp(10));
         android.widget.TextView titleTv = new android.widget.TextView(this);
         titleTv.setText(title);
-        titleTv.setTextColor(t(D_TEXT, L_TEXT));
+        titleTv.setTextColor(T_TEXT);
         titleTv.setTextSize(14); titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
         android.widget.TextView kBadge = new android.widget.TextView(this);
@@ -1489,14 +1489,14 @@ public class MainActivity extends Activity
         card.addView(titleRow);
 
         android.view.View sep = new android.view.View(this);
-        sep.setBackgroundColor(t(D_BORDER, L_BORDER));
+        sep.setBackgroundColor(T_OUTLINE);
         sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(sep);
 
         // Message
         android.widget.TextView msgTv = new android.widget.TextView(this);
         msgTv.setText(msg);
-        msgTv.setTextColor(t(D_TEXT2, L_TEXT2));
+        msgTv.setTextColor(T_TEXT2);
         msgTv.setTextSize(12); msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
         msgTv.setLineSpacing(dp(2), 1);
         android.widget.LinearLayout.LayoutParams msgLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
@@ -1505,7 +1505,7 @@ public class MainActivity extends Activity
 
         // Button row
         android.view.View btnSep = new android.view.View(this);
-        btnSep.setBackgroundColor(t(D_BORDER, L_BORDER));
+        btnSep.setBackgroundColor(T_OUTLINE);
         btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
         card.addView(btnSep);
 
@@ -1523,7 +1523,7 @@ public class MainActivity extends Activity
             final int idx = i;
             if (i > 0) {
                 android.view.View bd = new android.view.View(this);
-                bd.setBackgroundColor(t(D_BORDER, L_BORDER));
+                bd.setBackgroundColor(T_OUTLINE);
                 bd.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
                 btnRow.addView(bd);
             }
@@ -1531,7 +1531,7 @@ public class MainActivity extends Activity
             btn.setText(labels[i]);
             // Last button = primary (crimson), others = muted
             boolean isPrimary = (i == 0);
-            btn.setTextColor(isPrimary ? ACCENT : t(D_TEXT3, L_TEXT3));
+            btn.setTextColor(isPrimary ? T_ACCENT : T_TEXT2);
             btn.setTextSize(11);
             btn.setTypeface(android.graphics.Typeface.MONOSPACE, isPrimary ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             btn.setGravity(android.view.Gravity.CENTER);
@@ -1905,7 +1905,7 @@ public class MainActivity extends Activity
                 // Kira reply preview
                 TextView kiraTv = new TextView(this);
                 kiraTv.setText(kira.length() > 150 ? kira.substring(0, 150) + "?" : kira);
-                kiraTv.setTextColor(t(D_TEXT2, L_TEXT2));
+                kiraTv.setTextColor(T_TEXT2);
                 kiraTv.setTextSize(12);
                 kiraTv.setPadding(0, dp(4), 0, 0);
 

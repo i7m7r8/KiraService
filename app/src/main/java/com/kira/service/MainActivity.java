@@ -1116,20 +1116,6 @@ public class MainActivity extends Activity
         card.addView(closeBtn);
         overlay.addView(card);
 
-        // remove stale (dead code path)
-        if (false) {
-                if ("custom".equals(PROVIDERS[w][0])) {
-                    showCustomProviderDialog();
-                } else {
-                    cfg.baseUrl = PROVIDERS[w][2];
-                    cfg.model   = PROVIDERS[w][3];
-                    cfg.save(this);
-                    try { RustBridge.setActiveProvider(PROVIDERS[w][0]); } catch (Exception ignored) {}
-                    updateSettingsUI();
-                    android.widget.Toast.makeText(this,
-                        "Provider: " + PROVIDERS[w][1], android.widget.Toast.LENGTH_SHORT).show();
-                }
-        }
     }
 
     private boolean isKnownProvider(String url) {

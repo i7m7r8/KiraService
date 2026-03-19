@@ -23,6 +23,8 @@ public class KiraConfig {
     public int     heartbeatInterval = 30; // minutes, 0 = disabled
     // Setup
     public boolean setupDone   = false;
+    // OTA
+    public String  otaRepo    = "i7m7r8/KiraService";
 
     public static KiraConfig load(Context ctx) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -39,6 +41,7 @@ public class KiraConfig {
         c.agentAutoApprove = p.getBoolean("agentAutoApprove", true);
         c.heartbeatInterval= p.getInt("heartbeatInterval", 30);
         c.setupDone        = p.getBoolean("setupDone",  false);
+        c.otaRepo          = p.getString("otaRepo",     "i7m7r8/KiraService");
         return c;
     }
 
@@ -56,6 +59,7 @@ public class KiraConfig {
             .putBoolean("agentAutoApprove", agentAutoApprove)
             .putInt("heartbeatInterval",    heartbeatInterval)
             .putBoolean("setupDone",        setupDone)
+            .putString("otaRepo",           otaRepo)
             .apply();
         // v38: mirror to Rust state so /config + /appstats + /providers stay accurate
         try {

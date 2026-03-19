@@ -159,29 +159,62 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.TAG }}
-          name: "Kira Agent v${{ steps.ver.outputs.VER }} (alpha)"
-          prerelease: true
+          name: "Kira Agent v${{ steps.ver.outputs.VER }}"
+          prerelease: false
           body: |
-            ## Kira Agent v${{ steps.ver.outputs.VER }}
+            ## Kira Agent v${{ steps.ver.outputs.VER }} — Initial Release
             **Released:** ${{ steps.ver.outputs.TS }}
 
-            ${{ steps.cl.outputs.NOTES }}
+            This is the first stable public release of **Kira Agent** — an autonomous AI assistant for Android built on a Rust core engine with Java UI.
 
             ---
+
+            ### What's in this release
+
+            **AI & Agent Engine**
+            - Conversational AI via any OpenAI-compatible API (Groq, OpenAI, custom endpoints)
+            - Autonomous agent mode (`/agent`) — multi-step task execution with tool use
+            - 176+ built-in tools: app control, file ops, system settings, web, shell, and more
+            - Rust v9 core engine handles all state, memory, automation logic, and OTA
+
+            **Automation (OpenClaw)**
+            - Full macro/trigger system — screen on/off, SMS, notifications, location, battery, time
+            - Variable engine with `%VAR%` expansion, profiles, task scheduler
+            - NanoBot DSL scripting, reactive event streams, pipeline automation
+            - Visual flowchart flows (Roboru), keyword-based automation (Robot Framework style)
+
+            **OTA Updates**
+            - Automatic background update checks via GitHub Releases API
+            - Three install paths: Shizuku (silent), PackageInstaller (1 tap), Intent fallback
+            - SHA256 verification before install
+
+            **UI — Catppuccin Mocha Theme**
+            - Full Catppuccin Mocha color system driven by Rust theme engine
+            - Galaxy star field background with gyroscope parallax
+            - Dark theme default, light theme toggle available
+
+            **Integrations**
+            - Telegram bot integration — control Kira remotely
+            - Shizuku/ADB bridge for privileged commands
+            - Accessibility service for screen reading and UI automation
+            - Vision AI (on-device OCR + optional vision model)
+
+            ---
+
             ### Which APK to download?
-            | File | Device type |
-            |------|-------------|
-            | `KiraAgent-v*-arm64-v8a.apk` | **Most phones** (2016+) — recommended |
+            | File | Device |
+            |------|--------|
+            | `KiraAgent-v*-arm64-v8a.apk` | **Most phones (2016+) — recommended** |
             | `KiraAgent-v*-armeabi-v7a.apk` | Older 32-bit phones |
             | `KiraAgent-v*-x86_64.apk` | Emulators, Chromebooks |
             | `KiraAgent-v*-universal.apk` | Any device (larger file) |
 
             ### Install
             1. Download the APK for your device
-            2. Enable "Install from unknown sources"
-            3. Install — **no uninstall needed** (same signing key every build)
+            2. Enable **Install from unknown sources** in settings
+            3. Install — no uninstall needed (stable signing key across all builds)
 
-            > Kira will auto-detect this release via OTA check on startup.
+            > Kira auto-checks for updates on startup and every 6 hours via OTA.
           files: dist/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

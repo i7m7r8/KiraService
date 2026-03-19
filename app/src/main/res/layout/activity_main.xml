@@ -1,45 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Kira v9.1 — Main shell
+  Galaxy always behind everything. Bottom nav is a floating pill.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:background="#050508">
 
-    <!-- Galaxy background - always visible under all tabs -->
+    <!-- Galaxy star field — always visible -->
     <com.kira.service.ui.GalaxyView
         android:id="@+id/galaxyView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"/>
 
-    <!-- Content frame - tabs rendered here -->
+    <!-- Content tabs -->
     <FrameLayout
         android:id="@+id/contentFrame"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingBottom="68dp"/>
+        android:paddingBottom="72dp"/>
 
-    <!-- Bottom nav - floating pill style -->
+    <!-- Bottom nav — floating pill, glass morphism -->
     <LinearLayout
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
-        android:layout_height="68dp"
+        android:layout_height="72dp"
         android:layout_gravity="bottom"
         android:orientation="horizontal"
-        android:background="#CC0a0a14"
-        android:paddingBottom="6dp"
-        android:paddingTop="4dp">
+        android:background="#E5040410"
+        android:paddingTop="6dp"
+        android:paddingBottom="8dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:elevation="8dp">
 
         <LinearLayout android:id="@+id/navHome"
             android:layout_width="0dp" android:layout_height="match_parent"
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navHomeIcon"
-                android:layout_width="28dp" android:layout_height="28dp"
-                android:text="&#x2302;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#DC143C"
-                android:shadowColor="#DC143C" android:shadowRadius="8"
-                android:shadowDx="0" android:shadowDy="0"/>
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="⬡" android:textSize="22sp" android:gravity="center"
+                android:textColor="#DC143C"/>
             <TextView android:id="@+id/navHomeText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Kira" android:textSize="9sp" android:textColor="#DC143C"/>
+                android:text="KIRA" android:textSize="8sp" android:textColor="#DC143C"
+                android:fontFamily="monospace" android:letterSpacing="0.15"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navAbilities"
@@ -47,12 +54,13 @@
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navAbilitiesIcon"
-                android:layout_width="28dp" android:layout_height="28dp"
-                android:text="&#x2605;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#334"/>
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="⚡" android:textSize="22sp" android:gravity="center"
+                android:textColor="#222233"/>
             <TextView android:id="@+id/navAbilitiesText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Tools" android:textSize="9sp" android:textColor="#334"/>
+                android:text="TOOLS" android:textSize="8sp" android:textColor="#222233"
+                android:fontFamily="monospace" android:letterSpacing="0.15"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navHistory"
@@ -60,12 +68,13 @@
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navHistoryIcon"
-                android:layout_width="28dp" android:layout_height="28dp"
-                android:text="&#x2630;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#334"/>
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="◫" android:textSize="22sp" android:gravity="center"
+                android:textColor="#222233"/>
             <TextView android:id="@+id/navHistoryText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="History" android:textSize="9sp" android:textColor="#334"/>
+                android:text="LOG" android:textSize="8sp" android:textColor="#222233"
+                android:fontFamily="monospace" android:letterSpacing="0.15"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navSettings"
@@ -73,12 +82,13 @@
             android:layout_weight="1" android:orientation="vertical"
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navSettingsIcon"
-                android:layout_width="28dp" android:layout_height="28dp"
-                android:text="&#x2699;" android:textSize="20sp" android:gravity="center"
-                android:textColor="#334"/>
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="⊞" android:textSize="22sp" android:gravity="center"
+                android:textColor="#222233"/>
             <TextView android:id="@+id/navSettingsText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Settings" android:textSize="9sp" android:textColor="#334"/>
+                android:text="SYS" android:textSize="8sp" android:textColor="#222233"
+                android:fontFamily="monospace" android:letterSpacing="0.15"/>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

@@ -10,7 +10,7 @@ android {
         minSdk 26
         targetSdk 34
         versionCode buildVersionCode
-        versionName "7.0.0"
+        versionName "0.0.1"
         ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         externalNativeBuild { cmake { cppFlags "" } }
     }
@@ -19,31 +19,31 @@ android {
     }
     buildTypes {
         debug   { debuggable true }
-        release { minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'); signingConfig signingConfigs.debug }
+        release { minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt') }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
-    packagingOptions {
+    packaging {
         jniLibs { useLegacyPackaging true }
         resources {
-            excludes += ['META-INF/INDEX.LIST','META-INF/io.netty.versions.properties',
-                         'META-INF/DEPENDENCIES','META-INF/LICENSE.md','META-INF/NOTICE.md',
-                         'META-INF/LICENSE','META-INF/NOTICE']
+            excludes += ['META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
+                         'META-INF/DEPENDENCIES', 'META-INF/LICENSE.md', 'META-INF/NOTICE.md',
+                         'META-INF/LICENSE', 'META-INF/NOTICE']
         }
-    }
-    configurations.all {
-        exclude group: 'org.jetbrains', module: 'annotations-java5'
-        resolutionStrategy { force 'org.jetbrains:annotations:23.0.0' }
     }
 }
 
-dependencies {
-    // Core (FileProvider for OTA installs)
-    implementation 'androidx.core:core:1.12.0'
+// Remove resolutionStrategy.force entirely ? it conflicts with AGP's own
+// ConstraintHandler alignment pass in Gradle 8.5+.
+// Use a simple exclude for the old annotations artifact instead.
+configurations.all {
+    exclude group: 'org.jetbrains', module: 'annotations-java5'
+}
 
-    // Core Android Agent
+dependencies {
+    // Core Android Agent (Shizuku ? shell god mode)
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
 
@@ -76,7 +76,7 @@ dependencies {
     implementation 'commons-io:commons-io:2.15.1'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
 
-    // OpenClaw EventBus (component messaging)
+    // OpenClaw / ZeroClaw EventBus (component messaging)
     implementation 'org.greenrobot:eventbus:3.3.1'
 
     // Security: AES256-GCM credential storage
@@ -91,5 +91,6 @@ dependencies {
     // On-device OCR (ZeroClaw vision without internet)
     implementation 'com.google.mlkit:text-recognition:16.0.1'
 
-    // Memory leak detection (debug only)
+    // FileProvider for OTA APK install
+    implementation 'androidx.core:core:1.12.0'
 }

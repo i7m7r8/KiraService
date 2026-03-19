@@ -1,424 +1,694 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Kira Settings v40 — Modern Rust/Terminal-inspired design
+  Design language: Dark glass cards, crimson accents, monospace hints,
+  left-border highlights, no fake Android chrome
+-->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="#CC050508" android:scrollbars="none">
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="vertical" android:paddingBottom="48dp">
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#00000000"
+    android:scrollbars="none"
+    android:fillViewport="false">
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:paddingStart="20dp" android:paddingEnd="20dp"
-            android:paddingTop="20dp" android:paddingBottom="16dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Settings" android:textSize="32sp" android:textStyle="bold" android:textColor="#DC143C"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="Full control over Kira" android:textSize="13sp" android:textColor="#555555"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="80dp">
+
+        <!-- ── HEADER ─────────────────────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="20dp" android:paddingEnd="20dp"
+            android:paddingTop="24dp" android:paddingBottom="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Settings"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="#DC143C"
+                android:letterSpacing="0.02"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="configure kira agent"
+                android:textSize="12sp"
+                android:textColor="#444466"
+                android:fontFamily="monospace"
+                android:layout_marginTop="2dp"/>
         </LinearLayout>
 
-        <!-- STATUS CARDS -->
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="20dp">
-            <LinearLayout android:id="@+id/cardShizuku" android:layout_width="0dp" android:layout_height="72dp"
-                android:layout_weight="1" android:orientation="vertical" android:gravity="center"
-                android:background="#0d1a0d" android:layout_marginEnd="6dp"
-                android:clickable="true" android:focusable="true">
-                <TextView android:id="@+id/shizukuIcon" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="&#x2714;" android:textSize="18sp" android:textColor="#00cc66"/>
-                <TextView android:id="@+id/shizukuTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Shizuku" android:textColor="#00cc66" android:textSize="11sp" android:textStyle="bold"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="ADB Shell" android:textColor="#336633" android:textSize="9sp"/>
+        <!-- ── STATUS ROW (3 cards) ──────────────────────────────────────── -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="12dp" android:paddingEnd="12dp"
+            android:paddingBottom="16dp">
+
+            <!-- Shizuku -->
+            <LinearLayout
+                android:id="@+id/cardShizuku"
+                android:layout_width="0dp" android:layout_height="86dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="#0d0d1a"
+                android:layout_marginEnd="6dp"
+                android:clickable="true" android:focusable="true"
+                android:paddingTop="8dp" android:paddingBottom="8dp">
+                <TextView
+                    android:id="@+id/shizukuIcon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡"
+                    android:textSize="20sp"/>
+                <TextView
+                    android:id="@+id/shizukuTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Shizuku"
+                    android:textColor="#555566"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:layout_marginTop="3dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ADB shell"
+                    android:textColor="#1a1a2e"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"/>
             </LinearLayout>
-            <LinearLayout android:id="@+id/cardAccessibility" android:layout_width="0dp" android:layout_height="72dp"
-                android:layout_weight="1" android:orientation="vertical" android:gravity="center"
-                android:background="#1a1a0a" android:layout_marginEnd="6dp"
-                android:clickable="true" android:focusable="true">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="&#x264F;" android:textSize="18sp" android:textColor="#ffcc00"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Accessibility" android:textColor="#ffcc00" android:textSize="11sp" android:textStyle="bold"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Screen" android:textColor="#666633" android:textSize="9sp"/>
+
+            <!-- Accessibility -->
+            <LinearLayout
+                android:id="@+id/cardAccessibility"
+                android:layout_width="0dp" android:layout_height="80dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="#0d0d1a"
+                android:layout_marginEnd="6dp"
+                android:clickable="true" android:focusable="true"
+                android:paddingTop="10dp" android:paddingBottom="10dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="👁"
+                    android:textSize="22sp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Screen"
+                    android:textColor="#ffaa00"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="3dp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="accessibility"
+                    android:textColor="#333355"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"/>
             </LinearLayout>
-            <LinearLayout android:id="@+id/cardNotifListener" android:layout_width="0dp" android:layout_height="72dp"
-                android:layout_weight="1" android:orientation="vertical" android:gravity="center"
-                android:background="#0a101a" android:clickable="true" android:focusable="true">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="&#x1F514;" android:textSize="18sp"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Notifications" android:textColor="#4488cc" android:textSize="11sp" android:textStyle="bold"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Listener" android:textColor="#334466" android:textSize="9sp"/>
+
+            <!-- Notifications -->
+            <LinearLayout
+                android:id="@+id/cardNotifListener"
+                android:layout_width="0dp" android:layout_height="80dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="#0d0d1a"
+                android:clickable="true" android:focusable="true"
+                android:paddingTop="10dp" android:paddingBottom="10dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔔"
+                    android:textSize="22sp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Notifs"
+                    android:textColor="#4488ff"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="3dp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="listener"
+                    android:textColor="#333355"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"/>
             </LinearLayout>
         </LinearLayout>
 
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x1F916;  AI MODEL" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
+        <!-- ── SECTION: AI MODEL ─────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="AI MODEL"
+            android:textSize="10sp"
+            android:textColor="#DC143C"
+            android:textStyle="bold"
+            android:letterSpacing="0.2"
+            android:paddingStart="20dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:fontFamily="monospace"/>
 
-        <LinearLayout android:id="@+id/rowApiKey" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F511;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="API Key" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/apiKeyHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Tap to set" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <!-- API Key -->
+        <LinearLayout android:id="@+id/rowApiKey"
+            style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="🔑"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="API Key"/>
+                <TextView android:id="@+id/apiKeyHint" style="@style/SettingsHint" android:text="tap to set"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowBaseUrl" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F310;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Base URL" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/baseUrlHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="api.groq.com/openai/v1" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <!-- Base URL -->
+        <LinearLayout android:id="@+id/rowBaseUrl"
+            style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="🌐"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Base URL"/>
+                <TextView android:id="@+id/baseUrlHint" style="@style/SettingsHint" android:text="api.groq.com/openai/v1"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowModel" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F9E0;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Chat Model" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/modelHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="llama-3.1-8b-instant" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <!-- Model -->
+        <LinearLayout android:id="@+id/rowModel"
+            style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="🧠"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Chat Model"/>
+                <TextView android:id="@+id/modelHint" style="@style/SettingsHint" android:text="llama-3.1-8b-instant"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowVision" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F441;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Vision Model" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/visionHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="For screen analysis" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <!-- Vision Model -->
+        <LinearLayout android:id="@+id/rowVision"
+            style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="👁"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Vision Model"/>
+                <TextView android:id="@+id/visionHint" style="@style/SettingsHint" android:text="for screen analysis"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowProvider" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x26A1;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="AI Provider" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/providerHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Groq (active)" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <!-- Provider — special: shows active provider chip -->
+        <LinearLayout android:id="@+id/rowProvider"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:orientation="horizontal"
+            android:background="#BB0a0a18"
+            android:paddingStart="16dp" android:paddingEnd="12dp"
+            android:layout_marginBottom="1dp"
+            android:gravity="center_vertical"
+            android:clickable="true" android:focusable="true">
+
+            <TextView style="@style/SettingsIcon" android:text="⚡"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="AI Provider"/>
+                <TextView android:id="@+id/providerHint" style="@style/SettingsHint" android:text="Groq (active)"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <!-- Active provider chip -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:text="switch"
+                android:textSize="10sp"
+                android:textColor="#DC143C"
+                android:background="#220a0a"
+                android:paddingStart="10dp" android:paddingEnd="10dp"
+                android:gravity="center"
+                android:fontFamily="monospace"/>
         </LinearLayout>
 
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x26A1;  AGENT BEHAVIOR" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
+        <!-- ── SECTION: AGENT ────────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="AGENT BEHAVIOR"
+            android:layout_marginTop="12dp"/>
 
-        <LinearLayout android:id="@+id/rowMaxSteps" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F3AF;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Max Agent Steps" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/maxStepsHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="25 steps" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <LinearLayout android:id="@+id/rowMaxSteps" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="🎯"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Max Steps"/>
+                <TextView android:id="@+id/maxStepsHint" style="@style/SettingsHint" android:text="25 steps"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowAutoApprove" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x2705;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Auto-Approve Tools" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/autoApproveHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Agent runs without confirmation" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <LinearLayout android:id="@+id/rowAutoApprove" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="✅"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Auto-Approve Tools"/>
+                <TextView style="@style/SettingsHint" android:text="run tools without confirm"/>
             </LinearLayout>
-            <TextView android:id="@+id/autoApproveToggle" android:layout_width="52dp" android:layout_height="28dp" android:text="ON" android:textSize="11sp" android:gravity="center" android:textColor="#00cc66" android:background="#003311" android:textStyle="bold"/>
+            <TextView android:id="@+id/autoApproveToggle"
+                android:layout_width="48dp" android:layout_height="26dp"
+                android:text="ON" android:textSize="10sp"
+                android:gravity="center"
+                android:textColor="#DC143C"
+                android:background="#1a0508"
+                android:textStyle="bold"
+                android:fontFamily="monospace"/>
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowHeartbeat" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x23F2;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Heartbeat Interval" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/heartbeatHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="30 minutes" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <LinearLayout android:id="@+id/rowHeartbeat" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="⏲"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Heartbeat"/>
+                <TextView android:id="@+id/heartbeatHint" style="@style/SettingsHint" android:text="30 min"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowPersona" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F980;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Agent Persona" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/personaHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="You are Kira, a powerful AI agent" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <LinearLayout android:id="@+id/rowPersona" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="🎭"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Agent Persona"/>
+                <TextView android:id="@+id/personaHint" style="@style/SettingsHint" android:text="You are Kira…"/>
             </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
+            <TextView style="@style/SettingsChevron"/>
         </LinearLayout>
 
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x1F4BB;  INTERFACE" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
+        <!-- ── SECTION: TELEGRAM ─────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="TELEGRAM BOT"
+            android:layout_marginTop="12dp"/>
 
-        <LinearLayout android:id="@+id/rowFloating" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F4AC;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Floating Window" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/floatingHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Overlay bubble" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:id="@+id/floatingToggle" android:layout_width="52dp" android:layout_height="28dp" android:text="OFF" android:textSize="11sp" android:gravity="center" android:textColor="#666666" android:background="#222222" android:textStyle="bold"/>
-        </LinearLayout>
-
-        <LinearLayout android:id="@+id/rowUserName" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F464;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Your Name" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/userNameHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="User" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
-        </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x2708;  TELEGRAM BOT" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
-
-        <LinearLayout android:id="@+id/rowTgToken" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F916;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Bot Token" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/tgTokenHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Not set" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
-        </LinearLayout>
-
-        <LinearLayout android:id="@+id/rowTgId" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F464;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Allowed User ID" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/tgIdHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="0 = anyone" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
-        </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x1F9E0;  MEMORY AND STORAGE" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
-
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:background="#CC0e0e18"
-            android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="12dp" android:paddingBottom="12dp"
+        <!-- Telegram card — distinctive blue tint -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#AA080e18"
+            android:paddingStart="16dp" android:paddingEnd="16dp"
+            android:paddingTop="14dp" android:paddingBottom="14dp"
             android:layout_marginBottom="1dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="8dp">
-                <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                    android:text="&#x1F4C2;" android:textSize="16sp" android:background="#1a1a1a"/>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                    android:orientation="vertical" android:paddingStart="12dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="Stored Facts" android:textColor="#eeeeee" android:textSize="14sp"/>
-                    <TextView android:id="@+id/memoryHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="Loading..." android:textColor="#555555" android:textSize="11sp"/>
+
+            <!-- Telegram header with icon -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingBottom="12dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="✈"
+                    android:textSize="24sp"
+                    android:textColor="#2196F3"/>
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Telegram Integration"
+                    android:textColor="#ddddee"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:paddingStart="10dp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@BotFather"
+                    android:textColor="#1a4a7a"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace"/>
+            </LinearLayout>
+
+            <!-- Bot Token row -->
+            <LinearLayout android:id="@+id/rowTgToken"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:orientation="horizontal"
+                android:background="#110e1a"
+                android:paddingStart="12dp" android:paddingEnd="12dp"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="2dp"
+                android:clickable="true" android:focusable="true">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TOKEN"
+                    android:textColor="#1a5a8a"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="10dp"/>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Bot Token"
+                        android:textColor="#ccccdd"
+                        android:textSize="13sp"/>
+                    <TextView android:id="@+id/tgTokenHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="not configured"
+                        android:textColor="#2a4a6a"
+                        android:textSize="10sp"
+                        android:fontFamily="monospace"/>
                 </LinearLayout>
-                <TextView android:id="@+id/memoryClearBtn" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="clear" android:textColor="#883333" android:textSize="12sp"
-                    android:paddingStart="12dp" android:clickable="true" android:focusable="true"/>
+                <TextView style="@style/SettingsChevron"/>
             </LinearLayout>
-            <TextView android:id="@+id/memoryContent" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="" android:textColor="#446644" android:textSize="11sp" android:fontFamily="monospace"
-                android:background="#CC050508" android:padding="8dp" android:visibility="gone"/>
-        </LinearLayout>
 
-        <LinearLayout android:id="@+id/rowHistory" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F4AC;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Conversation History" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/historySettingHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Unlimited storage" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
-        </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x2699;  TOOLS AND AUTOMATION" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
-
-        <LinearLayout android:id="@+id/rowSkills" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x2B50;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Skills" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/skillsHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="8 built-in + custom" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
-        </LinearLayout>
-
-        <LinearLayout android:id="@+id/rowCheckpoints" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F4CC;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Task Checkpoints" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/checkpointsHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Paused tasks can resume" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
-        </LinearLayout>
-
-        <LinearLayout android:id="@+id/rowAuditLog" android:layout_width="match_parent" android:layout_height="56dp"
-            android:orientation="horizontal" android:background="#CC0e0e18" android:paddingStart="16dp" android:paddingEnd="16dp"
-            android:layout_marginBottom="1dp" android:gravity="center_vertical" android:clickable="true" android:focusable="true">
-            <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                android:text="&#x1F4CB;" android:textSize="16sp" android:background="#1a1a1a"/>
-            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                android:orientation="vertical" android:paddingStart="12dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Audit Log" android:textColor="#eeeeee" android:textSize="14sp"/>
-                <TextView android:id="@+id/auditHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="All tool calls logged" android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
-            </LinearLayout>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="&#x203A;" android:textColor="#444444" android:textSize="22sp"/>
-        </LinearLayout>
-
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x1F980;  RUST ENGINE v7" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
-
-        <LinearLayout android:id="@+id/rowRustStats" android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:background="#CC0e0e18"
-            android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="12dp" android:paddingBottom="12dp"
-            android:layout_marginBottom="1dp" android:clickable="true" android:focusable="true">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="center_vertical">
-                <TextView android:layout_width="36dp" android:layout_height="36dp" android:gravity="center"
-                    android:text="&#x1F4CA;" android:textSize="16sp" android:background="#1a1a1a"/>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                    android:orientation="vertical" android:paddingStart="12dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="Engine Stats" android:textColor="#eeeeee" android:textSize="14sp"/>
-                    <TextView android:id="@+id/rustStatsHint" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="HTTP:7070 | Tap to load" android:textColor="#555555" android:textSize="11sp"/>
+            <!-- User ID row -->
+            <LinearLayout android:id="@+id/rowTgId"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:orientation="horizontal"
+                android:background="#110e1a"
+                android:paddingStart="12dp" android:paddingEnd="12dp"
+                android:gravity="center_vertical"
+                android:clickable="true" android:focusable="true">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="USER"
+                    android:textColor="#1a5a8a"
+                    android:textSize="9sp"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:layout_marginEnd="10dp"/>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Allowed User ID"
+                        android:textColor="#ccccdd"
+                        android:textSize="13sp"/>
+                    <TextView android:id="@+id/tgIdHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 = anyone"
+                        android:textColor="#2a4a6a"
+                        android:textSize="10sp"
+                        android:fontFamily="monospace"/>
                 </LinearLayout>
-                <TextView android:id="@+id/rustRefreshBtn" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="refresh" android:textColor="#336633" android:textSize="12sp"
-                    android:paddingStart="12dp" android:clickable="true" android:focusable="true"/>
+                <TextView style="@style/SettingsChevron"/>
             </LinearLayout>
-            <TextView android:id="@+id/rustStatsContent" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="" android:textColor="#446644" android:textSize="10sp" android:fontFamily="monospace"
-                android:background="#CC050508" android:padding="8dp" android:visibility="gone" android:layout_marginTop="8dp"/>
         </LinearLayout>
 
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="  &#x2139;  ABOUT" android:textSize="11sp" android:textColor="#DC143C"
-            android:textStyle="bold" android:background="#BB080810" android:paddingTop="8dp" android:paddingBottom="8dp"
-            android:letterSpacing="0.15"/>
+        <!-- ── SECTION: INTERFACE ────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="INTERFACE"
+            android:layout_marginTop="12dp"/>
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:background="#CC0e0e18"
-            android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp" android:paddingBottom="16dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="12dp">
-                <TextView android:layout_width="44dp" android:layout_height="44dp" android:gravity="center"
-                    android:text="&#x1F980;" android:textSize="22sp" android:background="#1a0a00"/>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                    android:orientation="vertical" android:paddingStart="12dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="Kira Agent v7.0" android:textColor="#DC143C" android:textSize="15sp" android:textStyle="bold"/>
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="Rust + Java - OpenClaw architecture"
-                        android:textColor="#555555" android:textSize="11sp" android:fontFamily="monospace"/>
+        <!-- Theme toggle -->
+        <LinearLayout android:id="@+id/rowThemeToggle"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:orientation="horizontal"
+            android:background="#AA0a0a16"
+            android:paddingStart="16dp" android:paddingEnd="12dp"
+            android:layout_marginBottom="1dp"
+            android:gravity="center_vertical"
+            android:clickable="true" android:focusable="true">
+            <TextView style="@style/SettingsIcon" android:text="◑"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Theme"/>
+                <TextView style="@style/SettingsHint" android:text="auto · follows system"/>
+            </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:text="toggle"
+                android:textSize="10sp"
+                android:textColor="#555566"
+                android:background="#0d0d1e"
+                android:paddingStart="10dp" android:paddingEnd="10dp"
+                android:gravity="center"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowUserName" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="👤"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Your Name"/>
+                <TextView android:id="@+id/userNameHint" style="@style/SettingsHint" android:text="User"/>
+            </LinearLayout>
+            <TextView style="@style/SettingsChevron"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowFloating" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="💬"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Floating Window"/>
+                <TextView style="@style/SettingsHint" android:text="overlay bubble"/>
+            </LinearLayout>
+            <TextView android:id="@+id/floatingToggle"
+                android:layout_width="48dp" android:layout_height="26dp"
+                android:text="OFF" android:textSize="10sp"
+                android:gravity="center"
+                android:textColor="#444444"
+                android:background="#1a1a1a"
+                android:textStyle="bold"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
+
+        <!-- ── SECTION: MEMORY ───────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="MEMORY"
+            android:layout_marginTop="12dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#AA0a0a16"
+            android:paddingStart="16dp" android:paddingEnd="16dp"
+            android:paddingTop="12dp" android:paddingBottom="12dp"
+            android:layout_marginBottom="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView style="@style/SettingsIcon" android:text="🧠"/>
+                <LinearLayout style="@style/SettingsTextBlock">
+                    <TextView style="@style/SettingsLabel" android:text="Stored Facts"/>
+                    <TextView android:id="@+id/memoryHint" style="@style/SettingsHint" android:text="loading…"/>
                 </LinearLayout>
+                <TextView android:id="@+id/memoryClearBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="clear"
+                    android:textColor="#441111"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:paddingStart="12dp"
+                    android:clickable="true" android:focusable="true"/>
             </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Made with " android:textColor="#555555" android:textSize="13sp"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="&#x2764;" android:textColor="#cc3333" android:textSize="13sp"/>
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text=" by Imran" android:textColor="#DC143C" android:textSize="13sp" android:textStyle="bold"/>
+
+            <TextView android:id="@+id/memoryContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="#446644"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:background="#AA050508"
+                android:padding="8dp"
+                android:visibility="gone"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowHistory" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="📂"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Conversation History"/>
+                <TextView android:id="@+id/historySettingHint" style="@style/SettingsHint" android:text="tap to clear"/>
+            </LinearLayout>
+            <TextView style="@style/SettingsChevron"/>
+        </LinearLayout>
+
+        <!-- ── SECTION: TOOLS ────────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="TOOLS &amp; AUTOMATION"
+            android:layout_marginTop="12dp"/>
+
+        <LinearLayout android:id="@+id/rowSkills" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="⚡"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Skills"/>
+                <TextView android:id="@+id/skillsHint" style="@style/SettingsHint" android:text="176+ built-in tools"/>
+            </LinearLayout>
+            <TextView style="@style/SettingsChevron"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowCheckpoints" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="📌"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Task Checkpoints"/>
+                <TextView android:id="@+id/checkpointsHint" style="@style/SettingsHint" android:text="resume paused tasks"/>
+            </LinearLayout>
+            <TextView style="@style/SettingsChevron"/>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/rowAuditLog" style="@style/SettingsRow">
+            <TextView style="@style/SettingsIcon" android:text="📋"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Audit Log"/>
+                <TextView android:id="@+id/auditHint" style="@style/SettingsHint" android:text="all tool calls logged"/>
+            </LinearLayout>
+            <TextView style="@style/SettingsChevron"/>
+        </LinearLayout>
+
+        <!-- ── SECTION: RUST ENGINE ──────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="RUST ENGINE v9"
+            android:layout_marginTop="12dp"/>
+
+        <LinearLayout android:id="@+id/rowRustStats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#AA060610"
+            android:paddingStart="16dp" android:paddingEnd="16dp"
+            android:paddingTop="12dp" android:paddingBottom="12dp"
+            android:layout_marginBottom="1dp"
+            android:clickable="true" android:focusable="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView style="@style/SettingsIcon" android:text="📊"/>
+                <LinearLayout style="@style/SettingsTextBlock">
+                    <TextView style="@style/SettingsLabel" android:text="Engine Stats"/>
+                    <TextView android:id="@+id/rustStatsHint" style="@style/SettingsHint" android:text="localhost:7070 · tap to load"/>
+                </LinearLayout>
+                <TextView android:id="@+id/rustRefreshBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⟳"
+                    android:textColor="#DC143C"
+                    android:textSize="18sp"
+                    android:paddingStart="12dp"
+                    android:clickable="true" android:focusable="true"/>
+            </LinearLayout>
+
+            <TextView android:id="@+id/rustStatsContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="#336633"
+                android:textSize="10sp"
+                android:fontFamily="monospace"
+                android:background="#AA030308"
+                android:padding="10dp"
+                android:visibility="gone"
+                android:layout_marginTop="8dp"/>
+        </LinearLayout>
+
+        <!-- ── SECTION: SYSTEM ──────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="SYSTEM"
+            android:layout_marginTop="12dp"/>
+
+        <LinearLayout android:id="@+id/rowOta"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:orientation="horizontal"
+            android:background="#AA060610"
+            android:paddingStart="16dp" android:paddingEnd="12dp"
+            android:layout_marginBottom="1dp"
+            android:gravity="center_vertical"
+            android:clickable="true" android:focusable="true">
+            <TextView style="@style/SettingsIcon" android:text="↑"/>
+            <LinearLayout style="@style/SettingsTextBlock">
+                <TextView style="@style/SettingsLabel" android:text="Check for Updates"/>
+                <TextView style="@style/SettingsHint" android:text="OTA via GitHub Releases"/>
+            </LinearLayout>
+            <TextView style="@style/SettingsChevron"/>
+        </LinearLayout>
+
+        <!-- ── SECTION: ABOUT ────────────────────────────────────────────── -->
+        <TextView style="@style/SectionHeader" android:text="ABOUT"
+            android:layout_marginTop="12dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#AA060610"
+            android:paddingStart="16dp" android:paddingEnd="16dp"
+            android:paddingTop="16dp" android:paddingBottom="16dp"
+            android:gravity="center_vertical">
+
+            <LinearLayout
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="#1a0a00"
+                android:gravity="center">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="K"
+                    android:textSize="24sp"
+                    android:textColor="#DC143C"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:paddingStart="12dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Kira Agent v9.0"
+                    android:textColor="#DC143C"
+                    android:textSize="14sp"
+                    android:textStyle="bold"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Rust core + Java · OpenClaw architecture"
+                    android:textColor="#333355"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginTop="2dp"/>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="made with ♥ by Imran"
+                    android:textColor="#DC143C"
+                    android:textSize="11sp"
+                    android:layout_marginTop="4dp"/>
             </LinearLayout>
         </LinearLayout>
+
+        <!-- spacer -->
+        <View android:layout_width="match_parent" android:layout_height="20dp"/>
 
     </LinearLayout>
 </ScrollView>

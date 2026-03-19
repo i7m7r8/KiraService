@@ -4,18 +4,90 @@
     <string name="accessibility_description">Gives Kira AI full phone control including screen reading, tapping, typing, and notifications.</string>
 
     <style name="AppTheme" parent="android:Theme.Holo.NoActionBar">
-        <item name="android:windowBackground">#0f0f0f</item>
-        <item name="android:statusBarColor">#0f0f0f</item>
-        <item name="android:navigationBarColor">#1a1a1a</item>
+        <item name="android:windowBackground">#050508</item>
+        <item name="android:statusBarColor">#050508</item>
+        <item name="android:navigationBarColor">#050508</item>
         <item name="android:textColorPrimary">#ffffff</item>
         <item name="android:editTextColor">#ffffff</item>
-        <item name="android:colorControlActivated">#ff8c00</item>
+        <item name="android:colorControlActivated">#DC143C</item>
     </style>
 
     <style name="SetupTheme" parent="android:Theme.Holo.NoActionBar">
-        <item name="android:windowBackground">#0f0f0f</item>
-        <item name="android:statusBarColor">#0f0f0f</item>
+        <item name="android:windowBackground">#050508</item>
+        <item name="android:statusBarColor">#050508</item>
         <item name="android:textColorPrimary">#ffffff</item>
         <item name="android:editTextColor">#ffffff</item>
+    </style>
+
+    <!-- Settings row base style -->
+    <style name="SettingsRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">58dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:background">#AA0a0a16</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:layout_marginBottom">1dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- Settings icon box -->
+    <style name="SettingsIcon">
+        <item name="android:layout_width">32dp</item>
+        <item name="android:layout_height">32dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:layout_marginEnd">12dp</item>
+    </style>
+
+    <!-- Settings text block (takes remaining space) -->
+    <style name="SettingsTextBlock">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <!-- Settings label -->
+    <style name="SettingsLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">#ccccdd</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Settings hint (monospace subtitle) -->
+    <style name="SettingsHint">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">#333355</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+
+    <!-- Chevron › -->
+    <style name="SettingsChevron">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:text">›</item>
+        <item name="android:textColor">#222233</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:paddingStart">8dp</item>
+    </style>
+
+    <!-- Section header label -->
+    <style name="SectionHeader">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">#DC143C</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.2</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:fontFamily">monospace</item>
     </style>
 </resources>

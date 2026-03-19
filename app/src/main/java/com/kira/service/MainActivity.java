@@ -95,6 +95,9 @@ public class MainActivity extends Activity
         };
     private TextView    memoryHint, memoryContent, clearHistoryBtn, historySettingHint;
 
+    // Theme
+    boolean isDarkTheme = true;  // auto-set in onCreate
+
     // Nav
     private TextView[]     navIcons, navTexts;
     private LinearLayout[] navItems;
@@ -123,23 +126,16 @@ public class MainActivity extends Activity
         setContentView(R.layout.activity_main);
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
+        // Auto theme: follow system setting
+        int uiMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        isDarkTheme = (uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES);
+        applyTheme();
 
 
         // Init accelerometer for star parallax
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager != null)
             accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        // Start OTA update checker
-        new KiraOtaUpdater(this).scheduleChecks();
-        // Post current version to Rust
-        new Thread(() -> {
-            try { String ver = getPackageManager().getPackageInfo(getPackageName(),0).versionName;
-                new okhttp3.OkHttpClient().newCall(new okhttp3.Request.Builder()
-                    .url("http://localhost:7070/ota/set_version")
-                    .post(okhttp3.RequestBody.create("{\"version\":\""+ver+"\"}",okhttp3.MediaType.parse("application/json")))
-                    .build()).execute();
-            } catch(Exception ignored) {}
-        }).start();
         ai = new KiraAI(this);
         agent = new com.kira.service.ai.KiraAgent(this);
         chain = new com.kira.service.ai.KiraChain(this);
@@ -155,6 +151,8 @@ public class MainActivity extends Activity
 
         // Start foreground service to keep Telegram alive
         KiraForegroundService.start(this);
+        // OTA check (non-blocking, 3s delay)
+        uiHandler.postDelayed(this::checkForOtaUpdate, 3000);
     }
 
     // -- Permissions -----------------------------------------------------------
@@ -194,24 +192,30 @@ public class MainActivity extends Activity
     }
 
     private void showShizukuDialog() {
-        new AlertDialog.Builder(this)
-            .setTitle("Enable Full Phone Control")
-            .setMessage("Kira uses Shizuku for ADB-level control (install apps, run shell commands, grant permissions).\n\n1. Install Shizuku from Play Store\n2. Open Shizuku ? Start via Wireless Debugging\n3. Return to Kira\n\nBasic screen control still works without Shizuku.")
-            .setPositiveButton("Get Shizuku", (d, w) -> {
-                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api"))); }
-                catch (Exception e) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app"))); }
-            })
-            .setNeutralButton("Already Running", (d, w) -> checkShizuku())
-            .setNegativeButton("Skip", null).show();
+        showKiraDialogMulti("Enable Phone Control",
+            "Kira uses Shizuku for ADB-level shell access.\n\n" +
+            "1. Install Shizuku from Play Store\n" +
+            "2. Open Shizuku \u2192 Start via Wireless Debugging\n" +
+            "3. Return to Kira\n\n" +
+            "Basic screen control works without Shizuku.",
+            new String[]{"GET SHIZUKU", "ALREADY RUNNING", "SKIP"},
+            new Runnable[]{
+                () -> { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api"))); } catch (Exception e) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app"))); } },
+                () -> checkShizuku(),
+                null
+            });
     }
 
     private void checkAccessibility() {
         if (KiraAccessibilityService.instance == null) {
-            new AlertDialog.Builder(this)
-                .setTitle("Enable Accessibility Service")
-                .setMessage("Kira needs Accessibility Service to read and control your screen.\n\nSettings ? Accessibility ? Kira ? Enable")
-                .setPositiveButton("Open Settings", (d, w) -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
-                .setNegativeButton("Later", null).show();
+            showKiraDialogMulti("Accessibility Required",
+                "Kira needs Accessibility Service to read and control your screen.\n\n" +
+                "Settings \u2192 Accessibility \u2192 Kira \u2192 Enable",
+                new String[]{"OPEN SETTINGS", "LATER"},
+                new Runnable[]{
+                    () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                    null
+                });
         }
     }
 
@@ -298,8 +302,31 @@ public class MainActivity extends Activity
         View cardAcc2    = settingsFragment.findViewById(R.id.cardAccessibility);
         View cardNotif   = settingsFragment.findViewById(R.id.cardNotifListener);
         if (cardShizuku != null) cardShizuku.setOnClickListener(v -> {
-            try { startActivity(new android.content.Intent("rikka.shizuku.action.REQUEST_PERMISSION")); }
-            catch (Exception e) { android.widget.Toast.makeText(this,"Install Shizuku from Play Store",android.widget.Toast.LENGTH_SHORT).show(); }
+            boolean permOk   = ShizukuShell.isAvailable();
+            boolean binderUp = ShizukuShell.isInstalled();
+            boolean apkEx    = ShizukuShell.isApkInstalled(this);
+            if (permOk) {
+                // Already active \u2014 show status
+                android.widget.Toast.makeText(this, "Shizuku god mode active \u2713", android.widget.Toast.LENGTH_SHORT).show();
+            } else if (binderUp) {
+                // Running but no permission \u2014 request it
+                ShizukuShell.requestPermission(SHIZUKU_CODE);
+            } else if (apkEx) {
+                // Installed but not running \u2014 open Shizuku to start it
+                try {
+                    android.content.Intent i = getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api");
+                    if (i != null) { i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(i); }
+                    else android.widget.Toast.makeText(this, "Open Shizuku app and tap Start", android.widget.Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    android.widget.Toast.makeText(this, "Open Shizuku app and tap Start", android.widget.Toast.LENGTH_LONG).show();
+                }
+            } else {
+                // Not installed \u2014 go to Play Store
+                try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("market://details?id=moe.shizuku.privileged.api"))); }
+                catch (Exception e) { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://shizuku.rikka.app"))); }
+            }
         });
         if (cardAcc2  != null) cardAcc2.setOnClickListener(v -> startActivity(new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         if (cardNotif != null) cardNotif.setOnClickListener(v -> startActivity(new android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")));
@@ -344,6 +371,17 @@ public class MainActivity extends Activity
         View rowUserName = settingsFragment.findViewById(R.id.rowUserName);
         if (rowUserName != null) rowUserName.setOnClickListener(v ->
             editSetting("Your Name", cfg.userName, false, val -> { cfg.userName=val; cfg.save(MainActivity.this); if (userNameHint!=null) userNameHint.setText(val); }));
+
+        // Theme toggle row (reuses rowFloating area \u2014 add after floating)
+        View rowThemeToggle = settingsFragment.findViewById(R.id.rowThemeToggle);
+        if (rowThemeToggle != null) rowThemeToggle.setOnClickListener(v -> toggleTheme());
+
+        // OTA check row
+        View rowOta = settingsFragment.findViewById(R.id.rowOta);
+        if (rowOta != null) rowOta.setOnClickListener(v -> {
+            checkForOtaUpdate();
+            android.widget.Toast.makeText(this, "Checking for updates...", android.widget.Toast.LENGTH_SHORT).show();
+        });
 
         // Tools rows
         View rowSkills = settingsFragment.findViewById(R.id.rowSkills);
@@ -395,9 +433,12 @@ public class MainActivity extends Activity
         settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            navIcons[i].setTextColor(on ? 0xFFDC143C : 0xFF333355);
-            navTexts[i].setTextColor(on ? 0xFFDC143C : 0xFF333355);
-            navItems[i].setBackgroundColor(on ? 0xFF1a0008 : 0x00000000);
+            int activeColor = 0xFFDC143C;
+            int idleColor   = 0xFF222233;
+            navIcons[i].setTextColor(on ? activeColor : idleColor);
+            navTexts[i].setTextColor(on ? activeColor : idleColor);
+            // Active tab: subtle crimson underline via background
+            navItems[i].setBackgroundColor(on ? 0x15DC143C : 0x00000000);
         }
         if (tab == 2) refreshHistory();
         if (tab == 3) updateSettingsUI();
@@ -545,7 +586,7 @@ public class MainActivity extends Activity
         msg.setText(turn.text);
         msg.setTextColor(0xFFdddddd);
         msg.setTextSize(14);
-        msg.setBackgroundColor(0xFF2a2a2a);
+        msg.setBackgroundColor(0xAA0a0a1a);
         msg.setPadding(dp(14), dp(10), dp(14), dp(10));
         msg.setLineSpacing(dp(2), 1);
         msg.setTextIsSelectable(true);
@@ -645,7 +686,7 @@ public class MainActivity extends Activity
             msg.setText(turn.text);
             msg.setTextColor(0xFFeeeeee);
             msg.setTextSize(14);
-            msg.setBackgroundColor(0xFF1e1e1e);
+            msg.setBackgroundColor(0x880e0e18);
             msg.setPadding(dp(14), dp(10), dp(14), dp(10));
             msg.setLineSpacing(dp(2), 1);
             msg.setTextIsSelectable(true);
@@ -689,7 +730,7 @@ public class MainActivity extends Activity
 
                 LinearLayout codeBlock = new LinearLayout(this);
                 codeBlock.setOrientation(LinearLayout.VERTICAL);
-                codeBlock.setBackgroundColor(0xFF0d1117);
+                codeBlock.setBackgroundColor(0xDD0d1117);
                 LinearLayout.LayoutParams cbp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cbp.setMargins(0, dp(4), 0, dp(4));
                 codeBlock.setLayoutParams(cbp);
@@ -733,7 +774,7 @@ public class MainActivity extends Activity
                 codeTv.setTypeface(android.graphics.Typeface.MONOSPACE);
                 codeTv.setPadding(dp(12), dp(10), dp(12), dp(10));
                 codeTv.setTextIsSelectable(true);
-                codeTv.setBackgroundColor(0xFF0d1117);
+                codeTv.setBackgroundColor(0xDD0d1117);
 
                 hScroll.addView(codeTv);
                 codeBlock.addView(codeHeader);
@@ -749,7 +790,7 @@ public class MainActivity extends Activity
         tv.setText(turn.text);
         tv.setTextColor(0xFF4a7a4a);
         tv.setTextSize(11);
-        tv.setBackgroundColor(0xFF0d1a0d);
+        tv.setBackgroundColor(0x880d1a0d);
         tv.setPadding(dp(12), dp(5), dp(12), dp(5));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(1), 0, dp(1));
@@ -773,7 +814,7 @@ public class MainActivity extends Activity
         msg.setText(turn.text);
         msg.setTextColor(0xFFff8888);
         msg.setTextSize(13);
-        msg.setBackgroundColor(0xFF2a1010);
+        msg.setBackgroundColor(0xBB1a0808);
         msg.setPadding(dp(14), dp(10), dp(14), dp(10));
         msg.setTextIsSelectable(true);
 
@@ -873,7 +914,7 @@ public class MainActivity extends Activity
         tv.setTextColor(0xFF8888AA);
         tv.setTextSize(12);
         tv.setPadding(dp(12), dp(6), dp(12), dp(6));
-        tv.setBackgroundColor(0xFF111111);
+        tv.setBackgroundColor(0x88080810);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(2), 0, dp(2));
         tv.setLayoutParams(p);
@@ -921,55 +962,256 @@ public class MainActivity extends Activity
     }
 
     private void showProviderPicker() {
-        // v38: provider list comes from Rust (17+ entries, includes custom)
-        String providersJson;
-        try {
-            providersJson = RustBridge.getProviders();
-        } catch (UnsatisfiedLinkError e) {
-            providersJson = "[]";
-        }
-        // Parse the JSON array from Rust \u2014 extract id and name fields
-        java.util.List<String> ids   = new java.util.ArrayList<>();
-        java.util.List<String> names = new java.util.ArrayList<>();
-        try {
-            org.json.JSONArray arr = new org.json.JSONArray(providersJson);
-            for (int i = 0; i < arr.length(); i++) {
-                org.json.JSONObject p = arr.getJSONObject(i);
-                ids.add(p.getString("id"));
-                names.add(p.getString("name") + (p.optBoolean("active") ? " \u2714" : ""));
+        final String[][] PROVIDERS = {
+            {"groq",       "Groq  llama-3.1-8b",              "https://api.groq.com/openai/v1",                          "llama-3.1-8b-instant"},
+            {"openai",     "OpenAI  gpt-4o-mini",              "https://api.openai.com/v1",                               "gpt-4o-mini"},
+            {"anthropic",  "Anthropic  claude-haiku",          "https://api.anthropic.com/v1",                            "claude-3-haiku-20240307"},
+            {"gemini",     "Gemini  2.0 flash",                "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash"},
+            {"deepseek",   "DeepSeek  chat",                   "https://api.deepseek.com/v1",                             "deepseek-chat"},
+            {"openrouter", "OpenRouter  auto",                 "https://openrouter.ai/api/v1",                            "openrouter/auto"},
+            {"ollama",     "Ollama  local",                    "http://localhost:11434/v1",                                "llama3"},
+            {"together",   "Together AI",                      "https://api.together.xyz/v1",                             "meta-llama/Llama-3-8b-chat-hf"},
+            {"mistral",    "Mistral  small",                   "https://api.mistral.ai/v1",                               "mistral-small-latest"},
+            {"cohere",     "Cohere  command-r",                "https://api.cohere.ai/v1",                                "command-r"},
+            {"perplexity", "Perplexity  sonar",                "https://api.perplexity.ai",                               "llama-3.1-sonar-small-128k-online"},
+            {"xai",        "xAI  Grok-2",                     "https://api.x.ai/v1",                                     "grok-2-latest"},
+            {"cerebras",   "Cerebras  llama3.1",               "https://api.cerebras.ai/v1",                              "llama3.1-8b"},
+            {"fireworks",  "Fireworks AI",                     "https://api.fireworks.ai/inference/v1",                   "accounts/fireworks/models/llama-v3p1-8b-instruct"},
+            {"sambanova",  "SambaNova  llama3.1",              "https://api.sambanova.ai/v1",                             "Meta-Llama-3.1-8B-Instruct"},
+            {"novita",     "Novita AI",                        "https://api.novita.ai/v3/openai",                         "llama-3.1-8b-instruct"},
+            {"custom",     "Custom URL...",                    "",                                                         ""},
+        };
+
+        String[] displayNames = new String[PROVIDERS.length];
+        for (int i = 0; i < PROVIDERS.length; i++) {
+            String purl = PROVIDERS[i][2];
+            boolean isActive = purl.equals(cfg.baseUrl) ||
+                ("custom".equals(PROVIDERS[i][0]) && !isKnownProvider(cfg.baseUrl));
+            // Show custom URL if currently set
+            if ("custom".equals(PROVIDERS[i][0]) && !cfg.baseUrl.isEmpty() && !isKnownProvider(cfg.baseUrl)) {
+                displayNames[i] = "Custom: " + cfg.baseUrl + (isActive ? " \u2713" : "");
+            } else {
+                displayNames[i] = PROVIDERS[i][1] + (isActive ? "  \u2713" : "");
             }
-        } catch (Exception e) {
-            android.widget.Toast.makeText(this, "Provider list error: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
-            return;
         }
-        String[] nameArr = names.toArray(new String[0]);
-        new android.app.AlertDialog.Builder(this)
-            .setTitle("Select AI Provider")
-            .setItems(nameArr, (d, w) -> {
-                String pid = ids.get(w);
-                if ("custom".equals(pid)) {
-                    editSetting("Custom Base URL", cfg.baseUrl, false, val -> {
-                        try { RustBridge.setCustomProvider(val, cfg.model); } catch (UnsatisfiedLinkError ignored) {}
-                        cfg.baseUrl = val; cfg.save(this); updateSettingsUI();
-                    });
-                } else {
-                    // Rust switches provider and returns new base_url + model
-                    try {
-                        String result = RustBridge.setActiveProvider(pid);
-                        org.json.JSONObject res = new org.json.JSONObject(result);
-                        if (res.optBoolean("ok")) {
-                            cfg.baseUrl = res.optString("base_url", cfg.baseUrl);
-                            cfg.model   = res.optString("model",    cfg.model);
-                            cfg.save(this); updateSettingsUI();
-                            if (providerHint != null) providerHint.setText(nameArr[w].replace(" \u2714",""));
-                            android.widget.Toast.makeText(this, "Provider: " + nameArr[w], android.widget.Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (Exception e) {
-                        android.widget.Toast.makeText(this, "Switch failed: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
-                    }
-                }
-            }).show();
+
+        showProviderListDialog(displayNames, PROVIDERS);
     }
+
+    @SuppressWarnings("unused")
+    private void _providerDialogLambda(String[][] PROVIDERS, String[] displayNames) {
+        // kept for reference \u2014 actual impl is showProviderListDialog
+    }
+
+    private void showProviderListDialog(String[] displayNames, String[][] PROVIDERS) {
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xCC000000);
+        overlay.setLayoutParams(new android.widget.FrameLayout.LayoutParams(MATCH, MATCH));
+
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(isDarkTheme ? 0xFF0c0c18 : 0xFFf0f0f8);
+        cardBg.setCornerRadius(dp(4));
+        cardBg.setStroke(dp(1), isDarkTheme ? 0xFF1a1a2e : 0xFFddddee);
+        card.setBackground(cardBg);
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.9f),
+            (int)(getResources().getDisplayMetrics().heightPixels * 0.75f));
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Accent bar
+        android.view.View bar = new android.view.View(this);
+        bar.setBackgroundColor(0xFFDC143C);
+        bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(bar);
+
+        // Title
+        android.widget.TextView ttv = new android.widget.TextView(this);
+        ttv.setText("SELECT PROVIDER");
+        ttv.setTextColor(isDarkTheme ? 0xFFffffff : 0xFF111111);
+        ttv.setTextSize(13); ttv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        android.widget.LinearLayout.LayoutParams ttp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        ttp.setMargins(dp(16), dp(12), dp(16), dp(10)); ttv.setLayoutParams(ttp);
+        card.addView(ttv);
+
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(isDarkTheme ? 0xFF111122 : 0xFFddddee);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Scrollable provider list
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, 0, 1));
+        android.widget.LinearLayout list = new android.widget.LinearLayout(this);
+        list.setOrientation(android.widget.LinearLayout.VERTICAL);
+        list.setPadding(0, dp(4), 0, dp(4));
+
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+
+        Runnable dismiss = () -> root.removeView(overlay);
+        overlay.setOnClickListener(v -> dismiss.run());
+        card.setOnClickListener(v -> {});
+
+        for (int i = 0; i < displayNames.length; i++) {
+            final int idx = i;
+            final String[] prov = PROVIDERS[i];
+            android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(16), dp(12), dp(16), dp(12));
+            boolean isActive = displayNames[i].endsWith("  \u2713");
+            row.setBackgroundColor(isActive ? (isDarkTheme ? 0x22DC143C : 0x11DC143C) : 0x00000000);
+            row.setClickable(true); row.setFocusable(true);
+
+            android.widget.TextView nameTV = new android.widget.TextView(this);
+            nameTV.setText(displayNames[i]);
+            nameTV.setTextColor(isActive ? 0xFFDC143C : (isDarkTheme ? 0xFFccccdd : 0xFF222233));
+            nameTV.setTextSize(13);
+            nameTV.setTypeface(android.graphics.Typeface.MONOSPACE);
+            nameTV.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
+
+            row.addView(nameTV);
+            if (isActive) {
+                android.widget.TextView chk = new android.widget.TextView(this);
+                chk.setText("\u2713"); chk.setTextColor(0xFFDC143C); chk.setTextSize(14);
+                row.addView(chk);
+            }
+            row.setOnClickListener(v -> {
+                dismiss.run();
+                if ("custom".equals(prov[0])) { showCustomProviderDialog(); }
+                else {
+                    cfg.baseUrl = prov[2]; cfg.model = prov[3]; cfg.save(this);
+                    try { RustBridge.setActiveProvider(prov[0]); } catch (Exception ignored) {}
+                    updateSettingsUI();
+                    android.widget.Toast.makeText(this, prov[1], android.widget.Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            // Separator
+            android.view.View rowSep = new android.view.View(this);
+            rowSep.setBackgroundColor(isDarkTheme ? 0xFF0a0a18 : 0xFFeeeeee);
+            rowSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+
+            list.addView(row);
+            list.addView(rowSep);
+        }
+        sv.addView(list);
+        card.addView(sv);
+
+        // Close button
+        android.view.View closeSep = new android.view.View(this);
+        closeSep.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+        closeSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(closeSep);
+        android.widget.TextView closeBtn = new android.widget.TextView(this);
+        closeBtn.setText("CANCEL"); closeBtn.setTextColor(0xFF444466);
+        closeBtn.setTextSize(11); closeBtn.setGravity(android.view.Gravity.CENTER);
+        closeBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        closeBtn.setClickable(true); closeBtn.setFocusable(true);
+        closeBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(48)));
+        closeBtn.setOnClickListener(v -> dismiss.run());
+        card.addView(closeBtn);
+        overlay.addView(card);
+
+        // remove stale (dead code path)
+        if (false) {
+                if ("custom".equals(PROVIDERS[w][0])) {
+                    showCustomProviderDialog();
+                } else {
+                    cfg.baseUrl = PROVIDERS[w][2];
+                    cfg.model   = PROVIDERS[w][3];
+                    cfg.save(this);
+                    try { RustBridge.setActiveProvider(PROVIDERS[w][0]); } catch (Exception ignored) {}
+                    updateSettingsUI();
+                    android.widget.Toast.makeText(this,
+                        "Provider: " + PROVIDERS[w][1], android.widget.Toast.LENGTH_SHORT).show();
+                }
+        }
+    }
+
+    private boolean isKnownProvider(String url) {
+        if (url == null || url.isEmpty()) return false;
+        String[] known = {
+            "api.groq.com","api.openai.com","api.anthropic.com",
+            "generativelanguage.googleapis.com","api.deepseek.com",
+            "openrouter.ai","localhost:11434","api.together.xyz",
+            "api.mistral.ai","api.cohere.ai","api.perplexity.ai",
+            "api.x.ai","api.cerebras.ai","api.fireworks.ai",
+            "api.sambanova.ai","api.novita.ai"
+        };
+        for (String k : known) if (url.contains(k)) return true;
+        return false;
+    }
+
+    private void showCustomProviderDialog() {
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(this);
+        b.setTitle("Custom AI Provider");
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(16), dp(24), dp(8));
+        layout.setBackgroundColor(0xFF0e0e18);
+
+        android.widget.TextView urlLabel = new android.widget.TextView(this);
+        urlLabel.setText("Base URL  (e.g. https://your-server/v1)");
+        urlLabel.setTextColor(0xFF8888AA); urlLabel.setTextSize(11);
+        layout.addView(urlLabel);
+
+        android.widget.EditText urlInput = styledEditText(cfg.baseUrl, false);
+        layout.addView(urlInput);
+
+        android.widget.TextView modelLabel = new android.widget.TextView(this);
+        modelLabel.setText("Model name");
+        modelLabel.setTextColor(0xFF8888AA); modelLabel.setTextSize(11);
+        android.widget.LinearLayout.LayoutParams mlp =
+            new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        mlp.topMargin = dp(12);
+        modelLabel.setLayoutParams(mlp);
+        layout.addView(modelLabel);
+
+        android.widget.EditText modelInput = styledEditText(cfg.model, false);
+        layout.addView(modelInput);
+
+        b.setView(layout);
+        b.setPositiveButton("Save", (d, x) -> {
+            String url   = urlInput.getText().toString().trim();
+            String model = modelInput.getText().toString().trim();
+            if (url.isEmpty()) { android.widget.Toast.makeText(this, "URL required", android.widget.Toast.LENGTH_SHORT).show(); return; }
+            cfg.baseUrl = url;
+            if (!model.isEmpty()) cfg.model = model;
+            cfg.save(this);
+            try { RustBridge.setCustomProvider(url, model); } catch (Exception ignored) {}
+            updateSettingsUI();
+            android.widget.Toast.makeText(this, "Custom provider saved", android.widget.Toast.LENGTH_SHORT).show();
+        });
+        b.setNegativeButton("Cancel", null);
+        b.show();
+    }
+
+    private android.widget.EditText styledEditText(String current, boolean numeric) {
+        android.widget.EditText et = new android.widget.EditText(this);
+        et.setText(current);
+        et.setTextColor(0xFFFFFFFF);
+        et.setHintTextColor(0xFF555566);
+        et.setTextSize(14);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xFF1A1A2E);
+        bg.setCornerRadius(dp(6));
+        bg.setStroke(dp(1), 0xFF2a2a44);
+        et.setBackground(bg);
+        et.setPadding(dp(12), dp(10), dp(12), dp(10));
+        et.setInputType(numeric
+            ? android.text.InputType.TYPE_CLASS_NUMBER
+            : (android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));
+        android.widget.LinearLayout.LayoutParams lp =
+            new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        lp.topMargin = dp(4);
+        et.setLayoutParams(lp);
+        return et;
+    }
+
 
     // fetchRust kept for any residual calls but Rust backend not required in v38
     private String fetchRust(String url) {
@@ -982,12 +1224,376 @@ public class MainActivity extends Activity
         } catch(Exception e) { return "(unavailable)"; }
     }
 
+    // \u2500\u2500 Theme \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /** Apply dark or light theme to the whole UI */
+    private void applyTheme() {
+        // Background colors driven by isDarkTheme
+        int bg        = isDarkTheme ? 0xFF050508 : 0xFFf4f4f8;
+        int navBg     = isDarkTheme ? 0xE5040410 : 0xE5f0f0f8;
+        int chatBg    = 0x00000000; // always transparent \u2014 galaxy shows through in dark
+        // Nav bar
+        View nav = findViewById(R.id.bottomNav);
+        if (nav != null) nav.setBackgroundColor(navBg);
+        // Content frame background
+        if (homeFragment   != null) homeFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        if (settingsFragment != null) settingsFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        if (historyFragment != null) historyFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        if (toolsFragment  != null) toolsFragment.setBackgroundColor(isDarkTheme ? 0x00000000 : 0xDDf4f4f8);
+        // Chat input bar
+        View inputBar = homeFragment != null ? homeFragment.findViewWithTag("inputBar") : null;
+        if (inputBar != null) inputBar.setBackgroundColor(isDarkTheme ? 0xEE06060f : 0xEEf0f0f8);
+        // Status bar color
+        getWindow().setStatusBarColor(isDarkTheme ? 0xFF050508 : 0xFFf4f4f8);
+        getWindow().setNavigationBarColor(isDarkTheme ? 0xFF040410 : 0xFFf0f0f8);
+        // Adjust icon/text brightness for light mode
+        if (headerSubtitle != null)
+            headerSubtitle.setTextColor(isDarkTheme ? 0xFF333355 : 0xFF888899);
+    }
+
+    /** Toggle theme and re-apply */
+    private void toggleTheme() {
+        isDarkTheme = !isDarkTheme;
+        applyTheme();
+        android.widget.Toast.makeText(this,
+            isDarkTheme ? "Dark theme" : "Light theme", android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    // \u2500\u2500 Multi-button dialog \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /**
+     * Kira dialog with N buttons (1-3). Labels array maps to actions array.
+     * null action = dismiss only.
+     */
+    private void showKiraDialogMulti(String title, String msg, String[] labels, Runnable[] actions) {
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xCC000000);
+        overlay.setLayoutParams(new android.widget.FrameLayout.LayoutParams(MATCH, MATCH));
+
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int cardColor  = isDarkTheme ? 0xFF0c0c18 : 0xFFf8f8ff;
+        int borderColor= isDarkTheme ? 0xFF1a1a2e : 0xFFccccdd;
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(cardColor); cardBg.setCornerRadius(dp(4)); cardBg.setStroke(dp(1), borderColor);
+        card.setBackground(cardBg);
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.88f), WRAP);
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Top accent
+        android.view.View bar = new android.view.View(this);
+        bar.setBackgroundColor(0xFFDC143C);
+        bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(bar);
+
+        // Title row
+        android.widget.LinearLayout titleRow = new android.widget.LinearLayout(this);
+        titleRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        titleRow.setPadding(dp(18), dp(14), dp(18), dp(10));
+        android.widget.TextView titleTv = new android.widget.TextView(this);
+        titleTv.setText(title);
+        titleTv.setTextColor(isDarkTheme ? 0xFFFFFFFF : 0xFF111111);
+        titleTv.setTextSize(14); titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
+        android.widget.TextView kBadge = new android.widget.TextView(this);
+        kBadge.setText("K"); kBadge.setTextColor(0x33DC143C); kBadge.setTextSize(20);
+        kBadge.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        titleRow.addView(titleTv); titleRow.addView(kBadge);
+        card.addView(titleRow);
+
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(isDarkTheme ? 0xFF111122 : 0xFFddddee);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Message
+        android.widget.TextView msgTv = new android.widget.TextView(this);
+        msgTv.setText(msg);
+        msgTv.setTextColor(isDarkTheme ? 0xFF8888AA : 0xFF444466);
+        msgTv.setTextSize(12); msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        msgTv.setLineSpacing(dp(2), 1);
+        android.widget.LinearLayout.LayoutParams msgLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        msgLp.setMargins(dp(18), dp(12), dp(18), dp(16)); msgTv.setLayoutParams(msgLp);
+        card.addView(msgTv);
+
+        // Button row
+        android.view.View btnSep = new android.view.View(this);
+        btnSep.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+        btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(btnSep);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        btnRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(52)));
+
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+        Runnable dismiss = () -> root.removeView(overlay);
+        overlay.setOnClickListener(v -> dismiss.run());
+        card.setOnClickListener(v -> {});
+
+        for (int i = 0; i < labels.length; i++) {
+            final int idx = i;
+            if (i > 0) {
+                android.view.View bd = new android.view.View(this);
+                bd.setBackgroundColor(isDarkTheme ? 0xFF0e0e1e : 0xFFddddee);
+                bd.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
+                btnRow.addView(bd);
+            }
+            android.widget.TextView btn = new android.widget.TextView(this);
+            btn.setText(labels[i]);
+            // Last button = primary (crimson), others = muted
+            boolean isPrimary = (i == 0);
+            btn.setTextColor(isPrimary ? 0xFFDC143C : (isDarkTheme ? 0xFF444466 : 0xFF888899));
+            btn.setTextSize(11);
+            btn.setTypeface(android.graphics.Typeface.MONOSPACE, isPrimary ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            btn.setGravity(android.view.Gravity.CENTER);
+            btn.setClickable(true); btn.setFocusable(true);
+            btn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+            btn.setOnClickListener(v -> {
+                dismiss.run();
+                if (actions[idx] != null) actions[idx].run();
+            });
+            btnRow.addView(btn);
+        }
+        card.addView(btnRow);
+        overlay.addView(card);
+    }
+
+    // \u2500\u2500 OTA Update \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    /** Check GitHub Releases for a newer APK and prompt to install */
+    private void checkForOtaUpdate() {
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS).build();
+                // GitHub Releases API
+                String repoUrl = cfg.otaRepo.isEmpty()
+                    ? "https://api.github.com/repos/" + getPackageName().replace("com.kira.service","i7m7r8/KiraService") + "/releases/latest"
+                    : "https://api.github.com/repos/" + cfg.otaRepo + "/releases/latest";
+                okhttp3.Response resp = client.newCall(
+                    new okhttp3.Request.Builder().url(repoUrl)
+                        .header("Accept","application/vnd.github+json").build()).execute();
+                if (resp.body() == null) return;
+                String body = resp.body().string();
+                org.json.JSONObject rel = new org.json.JSONObject(body);
+                String tagName = rel.optString("tag_name","");
+                String currentVersion = getPackageManager()
+                    .getPackageInfo(getPackageName(), 0).versionName;
+                // Find debug APK asset
+                org.json.JSONArray assets = rel.optJSONArray("assets");
+                String apkUrl = null;
+                if (assets != null) {
+                    for (int i = 0; i < assets.length(); i++) {
+                        org.json.JSONObject asset = assets.getJSONObject(i);
+                        String name = asset.optString("name","");
+                        if (name.endsWith(".apk") && name.contains("debug")) {
+                            apkUrl = asset.optString("browser_download_url","");
+                            break;
+                        }
+                    }
+                    if (apkUrl == null && assets.length() > 0) {
+                        // fallback: first APK
+                        for (int i = 0; i < assets.length(); i++) {
+                            String name = assets.getJSONObject(i).optString("name","");
+                            if (name.endsWith(".apk")) {
+                                apkUrl = assets.getJSONObject(i).optString("browser_download_url","");
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (apkUrl == null || apkUrl.isEmpty()) return;
+                // Compare versions (simple string compare \u2014 tag like "v40-20260319-1234")
+                if (tagName.equals(getSharedPreferences("kira_ota",0).getString("last_seen_tag",""))) return;
+                final String finalApkUrl = apkUrl;
+                final String finalTag = tagName;
+                uiHandler.post(() -> showKiraDialogMulti(
+                    "Update Available",
+                    "New version available\n\n" + finalTag + "\n\nCurrent: " + currentVersion + "\n\nTap INSTALL to download.",
+                    new String[]{"INSTALL", "LATER", "SKIP"},
+                    new Runnable[]{
+                        () -> downloadAndInstallApk(finalApkUrl, finalTag),
+                        null,
+                        () -> getSharedPreferences("kira_ota",0).edit().putString("last_seen_tag", finalTag).apply()
+                    }
+                ));
+            } catch (Exception e) {
+                android.util.Log.d("KiraOTA", "update check: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void downloadAndInstallApk(String apkUrl, String tag) {
+        android.widget.Toast.makeText(this, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).build();
+                okhttp3.Response resp = client.newCall(
+                    new okhttp3.Request.Builder().url(apkUrl).build()).execute();
+                if (resp.body() == null) return;
+                byte[] apkBytes = resp.body().bytes();
+                // Save to cache
+                java.io.File apkFile = new java.io.File(getCacheDir(), "kira_update.apk");
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(apkFile)) {
+                    fos.write(apkBytes);
+                }
+                uiHandler.post(() -> {
+                    try {
+                        // Use FileProvider for Android 7+
+                        android.net.Uri apkUri;
+                        if (android.os.Build.VERSION.SDK_INT >= 24) {
+                            apkUri = androidx.core.content.FileProvider.getUriForFile(
+                                this, getPackageName() + ".provider", apkFile);
+                        } else {
+                            apkUri = android.net.Uri.fromFile(apkFile);
+                        }
+                        android.content.Intent install = new android.content.Intent(
+                            android.content.Intent.ACTION_VIEW);
+                        install.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                        install.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                                         android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(install);
+                        // Mark as seen so we don't prompt again
+                        getSharedPreferences("kira_ota",0).edit().putString("last_seen_tag", tag).apply();
+                    } catch (Exception e) {
+                        Toast.makeText(this, "Install error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
+            } catch (Exception e) {
+                uiHandler.post(() -> Toast.makeText(this, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    /** Custom Kira info dialog \u2014 no stock Android chrome */
     private void showInfoDialog(String title, String msg) {
-        uiHandler.post(() -> new android.app.AlertDialog.Builder(this).setTitle(title).setMessage(msg.length()>3000?msg.substring(0,3000)+"...":msg).setPositiveButton("OK",null).show());
+        uiHandler.post(() -> showKiraDialog(title, msg.length() > 3000 ? msg.substring(0, 3000) + "\u2026" : msg, "OK", "CLOSE", null));
     }
 
     private void showConfirmDialog(String msg, Runnable action) {
-        new android.app.AlertDialog.Builder(this).setTitle("Confirm").setMessage(msg).setPositiveButton("Yes",(d,w)->action.run()).setNegativeButton("Cancel",null).show();
+        showKiraDialog("Confirm", msg, "YES", "CANCEL", action);
+    }
+
+    private void showKiraDialog(String title, String msg, String posLabel, String negLabel, Runnable posAction) {
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xBB000000);
+        overlay.setLayoutParams(new android.widget.FrameLayout.LayoutParams(MATCH, MATCH));
+
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(0xFF0c0c18);
+        cardBg.setCornerRadius(dp(4));
+        cardBg.setStroke(dp(1), 0xFF1a1a2e);
+        card.setBackground(cardBg);
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.88f), WRAP);
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Accent bar
+        android.view.View bar = new android.view.View(this);
+        bar.setBackgroundColor(0xFFDC143C);
+        bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(bar);
+
+        // Title
+        android.widget.TextView titleTv = new android.widget.TextView(this);
+        titleTv.setText(title);
+        titleTv.setTextColor(0xFFFFFFFF);
+        titleTv.setTextSize(14);
+        titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        android.widget.LinearLayout.LayoutParams ttLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        ttLp.setMargins(dp(18), dp(14), dp(18), dp(8));
+        titleTv.setLayoutParams(ttLp);
+        card.addView(titleTv);
+
+        // Separator
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(0xFF111122);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Message (scrollable for long content)
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        android.widget.LinearLayout.LayoutParams svLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        svLp.setMargins(0, 0, 0, 0);
+        sv.setLayoutParams(svLp);
+        // constrain via LayoutParams
+        svLp.height = dp(300); svLp.weight = 0;
+
+        android.widget.TextView msgTv = new android.widget.TextView(this);
+        msgTv.setText(msg);
+        msgTv.setTextColor(0xFF8888AA);
+        msgTv.setTextSize(12);
+        msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        msgTv.setLineSpacing(dp(2), 1);
+        android.widget.LinearLayout.LayoutParams msgLp = new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        msgLp.setMargins(dp(18), dp(12), dp(18), dp(14));
+        msgTv.setLayoutParams(msgLp);
+        sv.addView(msgTv);
+        card.addView(sv);
+
+        // Button row
+        android.view.View btnSep = new android.view.View(this);
+        btnSep.setBackgroundColor(0xFF0e0e1e);
+        btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(btnSep);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        btnRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(48)));
+
+        android.widget.TextView negBtn = new android.widget.TextView(this);
+        negBtn.setText(negLabel);
+        negBtn.setTextColor(0xFF333355);
+        negBtn.setTextSize(11);
+        negBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        negBtn.setGravity(android.view.Gravity.CENTER);
+        negBtn.setClickable(true); negBtn.setFocusable(true);
+        negBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        android.view.View bd = new android.view.View(this);
+        bd.setBackgroundColor(0xFF0e0e1e);
+        bd.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
+
+        android.widget.TextView posBtn = new android.widget.TextView(this);
+        posBtn.setText(posLabel);
+        posBtn.setTextColor(0xFFDC143C);
+        posBtn.setTextSize(11);
+        posBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        posBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        posBtn.setGravity(android.view.Gravity.CENTER);
+        posBtn.setClickable(true); posBtn.setFocusable(true);
+        posBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        btnRow.addView(negBtn);
+        btnRow.addView(bd);
+        btnRow.addView(posBtn);
+        card.addView(btnRow);
+
+        overlay.addView(card);
+
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+
+        Runnable dismiss = () -> root.removeView(overlay);
+
+        negBtn.setOnClickListener(v -> dismiss.run());
+        overlay.setOnClickListener(v -> dismiss.run());
+        card.setOnClickListener(v -> {});
+        posBtn.setOnClickListener(v -> {
+            dismiss.run();
+            if (posAction != null) posAction.run();
+        });
     }
 
     private void scrollToBottom() {
@@ -1017,10 +1623,15 @@ public class MainActivity extends Activity
         for (String[] item : s) {
             TextView chip = new TextView(this);
             chip.setText(item[0]);
-            chip.setTextSize(12);
-            chip.setTextColor(0xFFcccccc);
-            chip.setBackgroundColor(0xFF0D0D1A);
-            chip.setPadding(dp(12), dp(7), dp(12), dp(7));
+            chip.setTextSize(11);
+            chip.setTextColor(0xFF8888AA);
+            chip.setTypeface(android.graphics.Typeface.MONOSPACE);
+            android.graphics.drawable.GradientDrawable chipBg = new android.graphics.drawable.GradientDrawable();
+            chipBg.setColor(0xAA080814);
+            chipBg.setCornerRadius(dp(2));
+            chipBg.setStroke(dp(1), 0xFF111130);
+            chip.setBackground(chipBg);
+            chip.setPadding(dp(10), dp(6), dp(10), dp(6));
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
             p.setMargins(0, 0, dp(8), 0);
             chip.setLayoutParams(p);
@@ -1056,8 +1667,13 @@ public class MainActivity extends Activity
         for (Object[] t : tools) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setBackgroundColor(0xFF1a1a1a);
+            android.graphics.drawable.GradientDrawable rowBg = new android.graphics.drawable.GradientDrawable();
+            rowBg.setColor(0xAA060610);
+            rowBg.setCornerRadius(0);
+            row.setBackground(rowBg);
             row.setPadding(dp(14), dp(12), dp(14), dp(12));
+            // Left accent bar via start padding \u2014 fake left border
+            row.setPadding(dp(12), dp(10), dp(14), dp(10));
             LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(MATCH, WRAP);
             rp.setMargins(0, 0, 0, dp(2));
             row.setLayoutParams(rp);
@@ -1075,7 +1691,7 @@ public class MainActivity extends Activity
             info.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
             TextView name = new TextView(this); name.setText((String)t[1]);
-            name.setTextColor(0xFFffffff); name.setTextSize(13);
+            name.setTextColor(0xFFCCCCDD); name.setTextSize(12);
             name.setTypeface(android.graphics.Typeface.MONOSPACE);
 
             TextView desc = new TextView(this); desc.setText((String)t[2]);
@@ -1111,7 +1727,10 @@ public class MainActivity extends Activity
 
                 LinearLayout card = new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
-                card.setBackgroundColor(0xFF1a1a1a);
+                android.graphics.drawable.GradientDrawable histBg = new android.graphics.drawable.GradientDrawable();
+                histBg.setColor(0xAA060610);
+                histBg.setStroke(dp(1), 0xFF0e0e22);
+                card.setBackground(histBg);
                 card.setPadding(dp(14), dp(12), dp(14), dp(12));
                 LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(MATCH, WRAP);
                 cp.setMargins(0, 0, 0, dp(8));
@@ -1182,26 +1801,55 @@ public class MainActivity extends Activity
     }
 
     private void showFullDialog(String user, String kira, String time) {
-        new AlertDialog.Builder(this)
-            .setTitle(time)
-            .setMessage("YOU:\n" + user + "\n\n-------------\n\nKIRA:\n" + kira)
-            .setPositiveButton("? Resend", (d, w) -> { showTab(0); inputField.setText(user); sendMessage(); })
-            .setNeutralButton("Copy Reply", (d, w) -> copyText(kira))
-            .setNegativeButton("Close", null)
-            .show();
+        String preview = "YOU:\n" + user.substring(0, Math.min(user.length(), 200))
+            + "\n\n------\n\nKIRA:\n" + kira.substring(0, Math.min(kira.length(), 300));
+        showKiraDialogMulti(time, preview,
+            new String[]{"RESEND", "COPY", "CLOSE"},
+            new Runnable[]{
+                () -> { showTab(0); inputField.setText(user); sendMessage(); },
+                () -> copyText(kira),
+                null
+            });
     }
 
     // -- Settings --------------------------------------------------------------
 
     private void updateSettingsUI() {
-        cfg = KiraConfig.load(this);
+        cfg = com.kira.service.ai.KiraConfig.load(this);
         if (apiKeyHint == null) return;
-        apiKeyHint.setText(cfg.apiKey.isEmpty() ? "Tap to set" : "????" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
-        modelHint.setText(cfg.model.isEmpty() ? "Not set" : cfg.model);
-        baseUrlHint.setText(cfg.baseUrl.isEmpty() ? "Not set" : cfg.baseUrl);
-        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "Not set" : "? Configured");
+        apiKeyHint.setText(cfg.apiKey.isEmpty() ? "tap to set" :
+            "\u25CF\u25CF\u25CF\u25CF" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
+        modelHint.setText(cfg.model.isEmpty() ? "not set" : cfg.model);
+        String urlDisplay = cfg.baseUrl.isEmpty() ? "not set" :
+            cfg.baseUrl.replace("https://","").replace("http://","");
+        if (urlDisplay.length() > 36) urlDisplay = urlDisplay.substring(0, 33) + "\u2026";
+        baseUrlHint.setText(urlDisplay);
+        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "not configured" : "\u2713 configured");
         tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
         if (visionHint != null) visionHint.setText(cfg.visionModel.isEmpty() ? "not set" : cfg.visionModel);
+        if (providerHint != null) {
+            String pu = cfg.baseUrl;
+            String label;
+            if      (pu.contains("groq.com"))          label = "Groq \u00B7 llama-3.1-8b";
+            else if (pu.contains("openai.com"))         label = "OpenAI \u00B7 " + cfg.model;
+            else if (pu.contains("anthropic.com"))      label = "Anthropic \u00B7 claude";
+            else if (pu.contains("googleapis.com"))     label = "Gemini \u00B7 " + cfg.model;
+            else if (pu.contains("deepseek.com"))       label = "DeepSeek";
+            else if (pu.contains("openrouter.ai"))      label = "OpenRouter";
+            else if (pu.contains("localhost"))          label = "Ollama (local)";
+            else if (pu.contains("together.xyz"))       label = "Together AI";
+            else if (pu.contains("mistral.ai"))         label = "Mistral";
+            else if (pu.contains("cohere.ai"))          label = "Cohere";
+            else if (pu.contains("perplexity.ai"))      label = "Perplexity";
+            else if (pu.contains("x.ai"))               label = "xAI Grok";
+            else if (pu.contains("cerebras.ai"))        label = "Cerebras";
+            else if (pu.contains("fireworks.ai"))       label = "Fireworks AI";
+            else if (pu.contains("sambanova.ai"))       label = "SambaNova";
+            else if (pu.contains("novita.ai"))          label = "Novita AI";
+            else if (!pu.isEmpty())                     label = "custom: " + urlDisplay;
+            else                                        label = "not set";
+            providerHint.setText(label);
+        }
         updateShizukuStatus();
     }
 
@@ -1233,46 +1881,59 @@ public class MainActivity extends Activity
     }
 
     private void clearMemory() {
-        new AlertDialog.Builder(this)
-            .setTitle("Clear Memory")
-            .setMessage("Delete all stored facts? Conversation history is kept.")
-            .setPositiveButton("Clear", (d, w) -> {
-                try { new KiraMemory(this).clearFacts(); loadMemorySection(); Toast.makeText(this,"Facts cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
-            })
-            .setNegativeButton("Cancel", null).show();
+        showKiraDialog("Clear Memory", "Delete all stored facts?\nConversation history is kept.",
+            "CLEAR", "CANCEL", () -> {
+                try { new KiraMemory(this).clearFacts(); loadMemorySection();
+                    Toast.makeText(this,"Facts cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
+            });
     }
 
     private void clearHistory() {
-        new AlertDialog.Builder(this)
-            .setTitle("Clear Conversation History")
-            .setMessage("Delete all conversation history?")
-            .setPositiveButton("Clear", (d, w) -> {
-                try { new KiraMemory(this).clearHistory(); loadMemorySection(); Toast.makeText(this,"History cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
-            })
-            .setNegativeButton("Cancel", null).show();
+        showKiraDialog("Clear History", "Delete all conversation history?",
+            "CLEAR", "CANCEL", () -> {
+                try { new KiraMemory(this).clearHistory(); loadMemorySection();
+                    Toast.makeText(this,"History cleared",Toast.LENGTH_SHORT).show(); } catch (Exception e) {}
+            });
     }
 
     private void updateShizukuStatus() {
         if (shizukuStatusTitle == null) return;
-        boolean ok = ShizukuShell.isAvailable();
-        boolean installed = ShizukuShell.isInstalled();
-        String title = ok ? "Shizuku ? God Mode Active" : (installed ? "Shizuku ? Permission Needed (tap)" : "Shizuku ? Not Running (tap)");
-        int color = ok ? 0xFFDC143C : (installed ? 0xFFffaa00 : 0xFFcc4444);
+        boolean permOk    = ShizukuShell.isAvailable();        // binder alive + permission granted
+        boolean binderUp  = ShizukuShell.isInstalled();        // binder alive (no permission yet)
+        boolean apkExists = ShizukuShell.isApkInstalled(this); // APK installed on device
+
+        String title; int color; String icon; int bg;
+        if (permOk) {
+            title = "Shizuku \u2713  god mode active";
+            color = 0xFFDC143C; icon = "\u2713"; bg = 0xFF080f08;
+        } else if (binderUp) {
+            title = "Shizuku running  \u2014  tap to grant permission";
+            color = 0xFFffaa00; icon = "!"; bg = 0xFF0f0c00;
+        } else if (apkExists) {
+            title = "Shizuku installed  \u2014  tap to start service";
+            color = 0xFFffaa00; icon = "\u25B6"; bg = 0xFF0f0c00;
+        } else {
+            title = "Shizuku not installed  \u2014  tap to get it";
+            color = 0xFF555566; icon = "\u2193"; bg = 0xFF0a0a14;
+        }
         shizukuStatusTitle.setText(title);
         shizukuStatusTitle.setTextColor(color);
-        shizukuStatusIcon.setText(ok ? "?" : (installed ? "!" : "?"));
+        shizukuStatusIcon.setText(icon);
         shizukuStatusIcon.setTextColor(color);
-        if (shizukuStatus != null) shizukuStatus.setBackgroundColor(ok ? 0xFF0a1a0a : (installed ? 0xFF1a1200 : 0xFF1a0a0a));
+        if (shizukuStatus != null) shizukuStatus.setBackgroundColor(bg);
+        // Sync to Rust state
+        try { RustBridge.updateShizukuStatus(binderUp, permOk, ""); } catch (Exception ignored) {}
     }
 
     private void toggleFloating() {
         if (!Settings.canDrawOverlays(this)) {
-            new AlertDialog.Builder(this)
-                .setTitle("Overlay Permission Needed")
-                .setMessage("For the floating window, Kira needs 'Display over other apps'.\n\nSettings ? Apps ? Kira ? Display over other apps ? Enable")
-                .setPositiveButton("Open Settings", (d, w) ->
-                    startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))))
-                .setNegativeButton("Cancel", null).show();
+            showKiraDialogMulti("Overlay Permission",
+                "Kira needs 'Display over other apps'.\n\nSettings \u2192 Apps \u2192 Kira \u2192 Display over other apps \u2192 Enable",
+                new String[]{"OPEN SETTINGS", "CANCEL"},
+                new Runnable[]{
+                    () -> startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))),
+                    null
+                });
             return;
         }
         floatingActive = !floatingActive;
@@ -1296,21 +1957,161 @@ public class MainActivity extends Activity
 
     interface StringCallback { void onResult(String v); }
 
+    /**
+     * Modern Kira dialog \u2014 replaces stock Android AlertDialog.
+     * Dark obsidian panel, crimson accent bar, styled EditText.
+     */
     private void editSetting(String title, String current, boolean numeric, StringCallback cb) {
-        AlertDialog.Builder b = new AlertDialog.Builder(this);
-        b.setTitle(title);
-        EditText et = new EditText(this);
+        // Full-screen dim overlay
+        android.widget.FrameLayout overlay = new android.widget.FrameLayout(this);
+        overlay.setBackgroundColor(0xBB000000);
+        android.widget.FrameLayout.LayoutParams ovLp = new android.widget.FrameLayout.LayoutParams(MATCH, MATCH);
+        overlay.setLayoutParams(ovLp);
+
+        // Card panel
+        android.widget.LinearLayout card = new android.widget.LinearLayout(this);
+        card.setOrientation(android.widget.LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
+        cardBg.setColor(0xFF0c0c18);
+        cardBg.setCornerRadius(dp(4));
+        cardBg.setStroke(dp(1), 0xFF1a1a2e);
+        card.setBackground(cardBg);
+
+        android.widget.FrameLayout.LayoutParams cardLp = new android.widget.FrameLayout.LayoutParams(
+            (int)(getResources().getDisplayMetrics().widthPixels * 0.88f), WRAP);
+        cardLp.gravity = android.view.Gravity.CENTER;
+        card.setLayoutParams(cardLp);
+
+        // Top accent bar (crimson line)
+        android.view.View accentBar = new android.view.View(this);
+        accentBar.setBackgroundColor(0xFFDC143C);
+        accentBar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
+        card.addView(accentBar);
+
+        // Title row
+        android.widget.LinearLayout titleRow = new android.widget.LinearLayout(this);
+        titleRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        titleRow.setPadding(dp(20), dp(16), dp(20), dp(12));
+
+        android.widget.TextView titleTv = new android.widget.TextView(this);
+        titleTv.setText(title);
+        titleTv.setTextColor(0xFFFFFFFF);
+        titleTv.setTextSize(15);
+        titleTv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
+        titleRow.addView(titleTv);
+
+        // Small K monogram
+        android.widget.TextView kMono = new android.widget.TextView(this);
+        kMono.setText("K");
+        kMono.setTextColor(0x44DC143C);
+        kMono.setTextSize(22);
+        kMono.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        titleRow.addView(kMono);
+        card.addView(titleRow);
+
+        // Separator
+        android.view.View sep = new android.view.View(this);
+        sep.setBackgroundColor(0xFF111122);
+        sep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(sep);
+
+        // Input field
+        android.widget.EditText et = new android.widget.EditText(this);
         et.setText(current);
-        et.setTextColor(0xFFffffff);
-        if (numeric) et.setInputType(InputType.TYPE_CLASS_NUMBER);
-        LinearLayout w = new LinearLayout(this);
-        w.setPadding(dp(48), dp(16), dp(48), 0);
-        w.addView(et);
-        b.setView(w);
-        b.setPositiveButton("Save", (d, x) -> cb.onResult(et.getText().toString().trim()));
-        b.setNegativeButton("Cancel", null);
-        b.show();
+        et.setTextColor(0xFFFFFFFF);
+        et.setHintTextColor(0xFF333355);
+        et.setTextSize(15);
+        et.setTypeface(android.graphics.Typeface.MONOSPACE);
+        et.setSingleLine(!numeric);
+        et.setMaxLines(numeric ? 1 : 3);
+        android.graphics.drawable.GradientDrawable inputBg = new android.graphics.drawable.GradientDrawable();
+        inputBg.setColor(0xFF080814);
+        inputBg.setCornerRadius(dp(3));
+        inputBg.setStroke(dp(1), 0xFF1e1e3a);
+        et.setBackground(inputBg);
+        et.setPadding(dp(14), dp(12), dp(14), dp(12));
+        et.setInputType(numeric
+            ? android.text.InputType.TYPE_CLASS_NUMBER
+            : (android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));
+        android.widget.LinearLayout.LayoutParams etLp =
+            new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
+        etLp.setMargins(dp(16), dp(14), dp(16), dp(16));
+        et.setLayoutParams(etLp);
+        card.addView(et);
+
+        // Button row
+        android.view.View btnSep = new android.view.View(this);
+        btnSep.setBackgroundColor(0xFF0e0e1e);
+        btnSep.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(1)));
+        card.addView(btnSep);
+
+        android.widget.LinearLayout btnRow = new android.widget.LinearLayout(this);
+        btnRow.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        btnRow.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(52)));
+
+        android.widget.TextView cancelBtn = new android.widget.TextView(this);
+        cancelBtn.setText("CANCEL");
+        cancelBtn.setTextColor(0xFF444466);
+        cancelBtn.setTextSize(12);
+        cancelBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        cancelBtn.setGravity(android.view.Gravity.CENTER);
+        cancelBtn.setClickable(true); cancelBtn.setFocusable(true);
+        cancelBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        android.view.View btnDivider = new android.view.View(this);
+        btnDivider.setBackgroundColor(0xFF0e0e1e);
+        btnDivider.setLayoutParams(new android.widget.LinearLayout.LayoutParams(dp(1), MATCH));
+
+        android.widget.TextView saveBtn = new android.widget.TextView(this);
+        saveBtn.setText("SAVE");
+        saveBtn.setTextColor(0xFFDC143C);
+        saveBtn.setTextSize(12);
+        saveBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
+        saveBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        saveBtn.setGravity(android.view.Gravity.CENTER);
+        saveBtn.setClickable(true); saveBtn.setFocusable(true);
+        saveBtn.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, MATCH, 1));
+
+        btnRow.addView(cancelBtn);
+        btnRow.addView(btnDivider);
+        btnRow.addView(saveBtn);
+        card.addView(btnRow);
+
+        overlay.addView(card);
+
+        // Add overlay to window
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView();
+        root.addView(overlay);
+
+        // Show keyboard
+        et.requestFocus();
+        uiHandler.postDelayed(() -> {
+            android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        }, 150);
+
+        // Dismiss + callbacks
+        Runnable dismiss = () -> {
+            root.removeView(overlay);
+            android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
+        };
+
+        cancelBtn.setOnClickListener(v -> dismiss.run());
+        overlay.setOnClickListener(v -> dismiss.run()); // tap outside = dismiss
+        card.setOnClickListener(v -> {}); // consume clicks so card doesn't dismiss
+
+        saveBtn.setOnClickListener(v -> {
+            String val = et.getText().toString().trim();
+            dismiss.run();
+            cb.onResult(val);
+        });
     }
+
 
     // Setup handled by SetupActivity
 

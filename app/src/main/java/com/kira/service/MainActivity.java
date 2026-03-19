@@ -137,8 +137,6 @@ public class MainActivity extends Activity
         boolean savedDark = getSharedPreferences("kira_theme", MODE_PRIVATE)
             .getBoolean("dark", uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES);
         isDarkTheme = savedDark;
-        applyTheme();
-
 
         // Init accelerometer for star parallax
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -148,6 +146,7 @@ public class MainActivity extends Activity
         agent = new com.kira.service.ai.KiraAgent(this);
         chain = new com.kira.service.ai.KiraChain(this);
         initViews();
+        applyTheme(); // after initViews so fragment views exist
         showTab(0);
 
         // Register Shizuku permission result listener before requesting
@@ -231,6 +230,8 @@ public class MainActivity extends Activity
     // -- View init -------------------------------------------------------------
 
     private void initViews() {
+        try {
+
         FrameLayout frame = findViewById(R.id.contentFrame);
         homeFragment     = getLayoutInflater().inflate(R.layout.fragment_home,     frame, false);
         toolsFragment    = getLayoutInflater().inflate(R.layout.fragment_tools,    frame, false);
@@ -413,9 +414,9 @@ public class MainActivity extends Activity
         if (rowHistory2 != null) rowHistory2.setOnClickListener(v -> showConfirmDialog("Clear all history?", () -> { new com.kira.service.ai.KiraMemory(this).clearHistory(); conversation.clear(); chatContainer.removeAllViews(); }));
 
         settingsFragment.findViewById(R.id.cardAccessibility).setOnClickListener(v ->
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))); }
         // shizuku card click wired via cardShizuku above
-        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating());
+        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating()); }
 
         buildToolsList();
         updateSettingsUI();
@@ -431,7 +432,12 @@ public class MainActivity extends Activity
         // rust stats row already handled by rowRustStats above
         if (memoryClearBtn != null) memoryClearBtn.setOnClickListener(v -> clearMemory());
         // clearHistory wired via rowHistory2 above
-    }
+    
+        } catch (Exception e) {
+            android.util.Log.e("KiraInit", "initViews crash: " + e.getMessage(), e);
+            android.widget.Toast.makeText(this, "UI init error: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+        }
+}
 
     // -- Tab nav ---------------------------------------------------------------
 

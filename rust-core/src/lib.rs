@@ -592,19 +592,236 @@ struct SetupState {
 
 #[derive(Clone)]
 struct ThemeConfig {
-    accent_color:    u32,
-    bg_color:        u32,
-    card_color:      u32,
-    muted_color:     u32,
-    star_count:      u32,
-    star_speed:      f32,
-    star_tilt_x:     f32,
-    star_tilt_y:     f32,
-    star_parallax_x: f32,
-    star_parallax_y: f32,
+    accent_color:      u32,
+    bg_color:          u32,
+    card_color:        u32,
+    muted_color:       u32,
+    star_count:        u32,
+    star_speed:        f32,
+    star_tilt_x:       f32,
+    star_tilt_y:       f32,
+    star_parallax_x:   f32,
+    star_parallax_y:   f32,
+    // ── M3 core tokens ────────────────────────────────────────────────────────
+    theme_name:        String,
+    surface_color:     u32,   // Base surface (elevation 0)
+    on_surface_color:  u32,   // Text/icons on surface
+    on_accent_color:   u32,   // Text/icons on primary/accent
+    surface_var_color: u32,   // Surface tonal variant (elevation +1)
+    outline_color:     u32,   // Borders, dividers
+    error_color:       u32,   // Error state
+    is_dark:           bool,
+    // ── M3 extended tokens (Material Aether) ──────────────────────────────────
+    secondary_color:   u32,   // Secondary brand color
+    on_secondary:      u32,   // Text on secondary
+    tertiary_color:    u32,   // Accent complement / highlights
+    on_tertiary:       u32,   // Text on tertiary
+    surface2_color:    u32,   // Elevation level 2 (nav rail, drawer)
+    surface3_color:    u32,   // Elevation level 3 (app bar)
+    surface5_color:    u32,   // Elevation level 5 (dialogs, menus)
+    outline_var_color: u32,   // Subtle dividers (lower contrast than outline)
+    success_color:     u32,   // Success / positive state
+    warning_color:     u32,   // Warning state
+    scrim_color:       u32,   // Modal backdrop scrim
+    ripple_color:      u32,   // Touch ripple overlay
+    // ── Typography / shape hints ───────────────────────────────────────────────
+    corner_radius_sm:  u32,   // Small component radius (chip, badge) dp
+    corner_radius_md:  u32,   // Medium component radius (card, button) dp
+    corner_radius_lg:  u32,   // Large component radius (bottom sheet) dp
+    corner_radius_xl:  u32,   // Extra large (dialog, nav drawer) dp
 }
 impl Default for ThemeConfig {
-    fn default() -> Self { ThemeConfig { accent_color:0xFFDC143C, bg_color:0xFF050508, card_color:0xFF0e0e18, muted_color:0xFF666680, star_count:110, star_speed:0.013, star_tilt_x:0.0, star_tilt_y:0.0, star_parallax_x:0.0, star_parallax_y:0.0 } }
+    fn default() -> Self {
+        ThemeConfig {
+            // Legacy "Kira" dark crimson/space theme
+            accent_color:     0xFFDC143C,
+            bg_color:         0xFF050508,
+            card_color:       0xFF0E0E18,
+            muted_color:      0xFF666680,
+            star_count:       110,
+            star_speed:       0.013,
+            star_tilt_x:      0.0,
+            star_tilt_y:      0.0,
+            star_parallax_x:  0.0,
+            star_parallax_y:  0.0,
+            theme_name:       String::from("kira"),
+            surface_color:    0xFF0E0E18,
+            on_surface_color: 0xFFE6E1E5,
+            on_accent_color:  0xFFFFFFFF,
+            surface_var_color:0xFF1C1B2E,
+            outline_color:    0xFF938F99,
+            error_color:      0xFFCF6679,
+            is_dark:          true,
+            secondary_color:  0xFF9B2335,
+            on_secondary:     0xFFFFFFFF,
+            tertiary_color:   0xFF7B2D8B,
+            on_tertiary:      0xFFFFFFFF,
+            surface2_color:   0xFF12111F,
+            surface3_color:   0xFF161525,
+            surface5_color:   0xFF1E1D30,
+            outline_var_color:0xFF4A4860,
+            success_color:    0xFF4CAF7D,
+            warning_color:    0xFFFFB347,
+            scrim_color:      0xCC000000,
+            ripple_color:     0x1FDC143C,
+            corner_radius_sm: 8,
+            corner_radius_md: 16,
+            corner_radius_lg: 24,
+            corner_radius_xl: 28,
+        }
+    }
+}
+
+impl ThemeConfig {
+    /// ── Material Aether Dark ─────────────────────────────────────────────────
+    ///
+    /// Design language: "Warm Intelligence"
+    ///
+    /// Core insight: most AI dark themes use cold blue/teal which feels sterile.
+    /// Aether uses a warm indigo-purple primary — premium, approachable, distinct.
+    ///
+    /// Palette:
+    ///   Primary:      #7C6AF6  Aether violet — vibrant but not neon
+    ///   On-primary:   #FFFFFF  Pure white — maximum legibility
+    ///   Secondary:    #C792EA  Soft lavender — complement, not compete
+    ///   On-secondary: #1A0030  Deep purple on lavender
+    ///   Tertiary:     #FFD166  Warm gold — energy, highlights, badges
+    ///   On-tertiary:  #2C1A00  Deep brown on gold
+    ///   BG:           #0F0E17  Near-black with warm purple undertone
+    ///   Surface 0:    #14131E  Warm dark surface — base
+    ///   Surface 2:    #1C1B2A  Nav rail, drawer (+2 tonal)
+    ///   Surface 3:    #201F30  App bar (+3 tonal)
+    ///   Surface 5:    #272539  Dialogs, menus (+5 tonal)
+    ///   Card:         #1C1B2A  = Surface 2 for cards
+    ///   On-surface:   #E8E3FF  Warm white — subtle purple tint, reduces harshness
+    ///   Surface-var:  #2D2B45  Elevated surface variant (bottom sheets)
+    ///   Outline:      #4E4B6E  Subtle warm-purple border
+    ///   Outline-var:  #2A2840  Barely-visible dividers
+    ///   Error:        #FF6B80  Warm rose — friendlier than pure red
+    ///   Success:      #58D68D  Mint green
+    ///   Warning:      #FFD166  = Tertiary (gold doubles as warning)
+    ///   Scrim:        #CC0F0E17 Semi-transparent bg
+    ///   Ripple:       #1F7C6AF6 Tinted violet ripple
+    ///   Corner radii: 8 / 16 / 24 / 28 dp (full M3 spec)
+    fn material_dark() -> Self {
+        ThemeConfig {
+            // ── Primary brand ────────────────────────────────────────────────
+            accent_color:     0xFF7C6AF6, // Aether violet primary
+            on_accent_color:  0xFFFFFFFF, // Pure white on violet
+            // ── Secondary ────────────────────────────────────────────────────
+            secondary_color:  0xFFC792EA, // Soft lavender
+            on_secondary:     0xFF1A0030, // Deep purple text on lavender
+            // ── Tertiary / highlights ─────────────────────────────────────────
+            tertiary_color:   0xFFFFD166, // Warm gold — badges, highlights
+            on_tertiary:      0xFF2C1A00, // Deep brown on gold
+            // ── Backgrounds & surfaces ────────────────────────────────────────
+            bg_color:         0xFF0F0E17, // Near-black, warm purple undertone
+            surface_color:    0xFF14131E, // Base surface (elevation 0)
+            surface2_color:   0xFF1C1B2A, // Elevation +2 (nav rail, drawer)
+            surface3_color:   0xFF201F30, // Elevation +3 (app bar)
+            surface5_color:   0xFF272539, // Elevation +5 (dialogs, menus)
+            card_color:       0xFF1C1B2A, // Card = surface2
+            surface_var_color:0xFF2D2B45, // Bottom sheets, elevated panels
+            // ── On-surface text ───────────────────────────────────────────────
+            on_surface_color: 0xFFE8E3FF, // Warm white — purple tint reduces harshness
+            muted_color:      0xFF8A84B3, // Muted secondary text / icons
+            // ── Borders ───────────────────────────────────────────────────────
+            outline_color:    0xFF4E4B6E, // Visible borders
+            outline_var_color:0xFF2A2840, // Subtle dividers
+            // ── Semantic states ───────────────────────────────────────────────
+            error_color:      0xFFFF6B80, // Warm rose error
+            success_color:    0xFF58D68D, // Mint green success
+            warning_color:    0xFFFFD166, // Gold warning (= tertiary)
+            // ── Overlays ──────────────────────────────────────────────────────
+            scrim_color:      0xCC0F0E17, // Modal backdrop
+            ripple_color:     0x1F7C6AF6, // Touch ripple — tinted violet
+            // ── Shape / corner radii (Material 3 spec) ────────────────────────
+            corner_radius_sm: 8,          // Chip, badge, small fab
+            corner_radius_md: 16,         // Card, button, text field
+            corner_radius_lg: 24,         // Bottom sheet, large FAB
+            corner_radius_xl: 28,         // Dialog, navigation drawer
+            // ── Stars (off for clean M3 surface) ─────────────────────────────
+            star_count:       0,
+            star_speed:       0.0,
+            star_tilt_x:      0.0,
+            star_tilt_y:      0.0,
+            star_parallax_x:  0.0,
+            star_parallax_y:  0.0,
+            theme_name:       String::from("material"),
+            is_dark:          true,
+        }
+    }
+
+    /// ── Material Aether Light ────────────────────────────────────────────────
+    ///
+    /// Light counterpart: "Soft Intelligence"
+    ///
+    ///   Primary:    #5B4BE0  Deeper violet (accessible on white)
+    ///   Secondary:  #7B59C0  Mid-purple secondary
+    ///   Tertiary:   #D4900A  Warm amber (gold darkened for light surface)
+    ///   BG:         #FAFAFF  Warm white — subtle violet tint, not harsh
+    ///   Surface 0:  #FFFFFF  Pure white cards
+    ///   Surface 2:  #F0EEFF  Tinted nav rail
+    ///   Surface 3:  #EAE7FF  App bar tint
+    ///   Surface 5:  #E0DCFF  Dialog tint
+    fn material_light() -> Self {
+        ThemeConfig {
+            accent_color:     0xFF5B4BE0, // Deep violet primary
+            on_accent_color:  0xFFFFFFFF, // White on violet
+            secondary_color:  0xFF7B59C0, // Mid-purple secondary
+            on_secondary:     0xFFFFFFFF, // White on mid-purple
+            tertiary_color:   0xFFD4900A, // Warm amber
+            on_tertiary:      0xFFFFFFFF, // White on amber
+            bg_color:         0xFFFAFAFF, // Warm white bg
+            surface_color:    0xFFFFFFFF, // Pure white surface
+            surface2_color:   0xFFF0EEFF, // Tinted nav rail
+            surface3_color:   0xFFEAE7FF, // Tinted app bar
+            surface5_color:   0xFFE0DCFF, // Tinted dialog
+            card_color:       0xFFFFFFFF, // White cards
+            surface_var_color:0xFFE4E0F0, // Bottom sheet
+            on_surface_color: 0xFF1A1730, // Near-black, warm purple
+            muted_color:      0xFF6B6490, // Muted mid-purple text
+            outline_color:    0xFF8F8AB5, // Visible border
+            outline_var_color:0xFFCDC9E4, // Subtle divider
+            error_color:      0xFFD93651, // Deep rose error
+            success_color:    0xFF1B8B5A, // Forest green success
+            warning_color:    0xFFB86E00, // Deep amber warning
+            scrim_color:      0xCC1A1730, // Dark scrim over light bg
+            ripple_color:     0x1F5B4BE0, // Violet ripple
+            corner_radius_sm: 8,
+            corner_radius_md: 16,
+            corner_radius_lg: 24,
+            corner_radius_xl: 28,
+            star_count:       0,
+            star_speed:       0.0,
+            star_tilt_x:      0.0,
+            star_tilt_y:      0.0,
+            star_parallax_x:  0.0,
+            star_parallax_y:  0.0,
+            theme_name:       String::from("material_light"),
+            is_dark:          false,
+        }
+    }
+
+    fn to_json(&self) -> String {
+        format!(
+            r#"{{"name":"{}","accent":{},"bg":{},"card":{},"muted":{},"surface":{},"on_surface":{},"on_accent":{},"surface_var":{},"outline":{},"error":{},"is_dark":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6},"secondary":{},"on_secondary":{},"tertiary":{},"on_tertiary":{},"surface2":{},"surface3":{},"surface5":{},"outline_var":{},"success":{},"warning":{},"scrim":{},"ripple":{},"corner_sm":{},"corner_md":{},"corner_lg":{},"corner_xl":{}}}"#,
+            self.theme_name,
+            self.accent_color, self.bg_color, self.card_color, self.muted_color,
+            self.surface_color, self.on_surface_color, self.on_accent_color,
+            self.surface_var_color, self.outline_color, self.error_color,
+            self.is_dark, self.star_count,
+            self.star_parallax_x, self.star_parallax_y,
+            self.secondary_color, self.on_secondary,
+            self.tertiary_color, self.on_tertiary,
+            self.surface2_color, self.surface3_color, self.surface5_color,
+            self.outline_var_color,
+            self.success_color, self.warning_color,
+            self.scrim_color, self.ripple_color,
+            self.corner_radius_sm, self.corner_radius_md,
+            self.corner_radius_lg, self.corner_radius_xl
+        )
+    }
 }
 
 #[derive(Clone)]
@@ -830,7 +1047,7 @@ lazy_static::lazy_static! {
         active_provider: "groq".to_string(),
         active_profile:  "default".to_string(),
         soul_md: "You are Kira, a powerful Android AI agent. You are helpful, proactive, and autonomous.".to_string(),
-        theme:   ThemeConfig::default(),
+        theme:   ThemeConfig::material_dark(),
         config:  KiraConfig::default(),
         setup:   SetupState::default(),
         shizuku: ShizukuStatus::default(),
@@ -1766,7 +1983,22 @@ mod jni_bridge {
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) -> *mut c_char {
         let s = STATE.lock().unwrap();
-        CString::new(format!(r#"{{"accent":{},"bg":{},"card":{},"muted":{},"star_count":{}}}"#, s.theme.accent_color,s.theme.bg_color,s.theme.card_color,s.theme.muted_color,s.theme.star_count)).unwrap_or_default().into_raw()
+        CString::new(s.theme.to_json()).unwrap_or_default().into_raw()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_setTheme(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        name: *const c_char,
+    ) {
+        let name = unsafe { std::ffi::CStr::from_ptr(name).to_str().unwrap_or("material") };
+        let mut s = STATE.lock().unwrap();
+        s.theme = match name {
+            "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(),
+            "material_light" | "material_neo_light"       => ThemeConfig::material_light(),
+            "kira"                                        => ThemeConfig::default(),
+            _                                             => ThemeConfig::material_dark(),
+        };
     }
 
     #[no_mangle]
@@ -2705,7 +2937,8 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET",  "/setup")             => { let s=STATE.lock().unwrap(); format!(r#"{{"page":{},"done":{},"user_name":"{}","model":"{}","base_url":"{}","selected_provider":"{}","custom_url":"{}","quote_index":{}}}"#, s.setup.current_page,s.setup.done,esc(&s.setup.user_name),esc(&s.setup.model),esc(&s.setup.base_url),esc(&s.setup.selected_provider_id),esc(&s.setup.custom_url),s.setup.quote_index) }
         ("POST", "/setup/page")        => { if let Some(page)=extract_json_num(body,"page") { STATE.lock().unwrap().setup.current_page=page as u8; } r#"{"ok":true}"#.to_string() }
         ("POST", "/setup/complete")    => { let mut s=STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; r#"{"ok":true}"#.to_string() }
-        ("GET",  "/theme")             => { let s=STATE.lock().unwrap(); format!(r#"{{"accent":{},"bg":{},"card":{},"muted":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6}}}"#, s.theme.accent_color,s.theme.bg_color,s.theme.card_color,s.theme.muted_color,s.theme.star_count,s.theme.star_parallax_x,s.theme.star_parallax_y) }
+        ("GET",  "/theme")             => { let s=STATE.lock().unwrap(); s.theme.to_json() }
+        ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
         ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap(); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
         ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }
         ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap(); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }

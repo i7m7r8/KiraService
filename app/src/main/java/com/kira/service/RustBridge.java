@@ -163,6 +163,8 @@ public class RustBridge {
     public static native void   updateTilt(float ax, float ay);
     public static native String getStarParallax();
     public static native String getTheme();
+    /** Set active theme: "material" (dark), "material_light", "kira" (legacy) */
+    public static native void   setTheme(String name);
 
     // \u2500\u2500 v38: Local stats \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native String getStatsJson();

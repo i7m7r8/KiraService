@@ -72,9 +72,11 @@ jobs:
           PASS="${{ secrets.KEYSTORE_PASSWORD }}"
           [ -z "$PASS" ] && PASS="kira_stable_2024"
 
-          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > kira.jks
-          else
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > kira.jks
+
+          SIZE=$(wc -c < kira.jks)
+          if [ "$SIZE" -lt 100 ]; then
+            echo "Keystore decode failed (size=$SIZE), generating fallback"
             keytool -genkeypair \
               -alias kira \
               -keyalg RSA -keysize 2048 \

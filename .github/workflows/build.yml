@@ -72,7 +72,7 @@ jobs:
           PASS="${{ secrets.KEYSTORE_PASSWORD }}"
           [ -z "$PASS" ] && PASS="kira_stable_2024"
 
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > kira.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d > kira.jks
 
           SIZE=$(wc -c < kira.jks)
           if [ "$SIZE" -lt 100 ]; then

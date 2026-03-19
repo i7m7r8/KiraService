@@ -20,7 +20,15 @@ package com.kira.service;
  * getTheme, getStatsJson) are preserved unchanged.
  */
 public class RustBridge {
-    static { System.loadLibrary("kira_core"); }
+    private static boolean LOADED = false;
+    static {
+        try {
+            System.loadLibrary("kira_core");
+            LOADED = true;
+        } catch (Throwable e) {
+            android.util.Log.e("KiraRust", "Failed to load kira_core: " + e);
+        }
+    }
 
     // \u2500\u2500 Lifecycle \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     public static native void startServer(int port);

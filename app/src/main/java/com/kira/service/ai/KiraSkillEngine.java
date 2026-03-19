@@ -65,7 +65,9 @@ public class KiraSkillEngine {
 
     private void registerBuiltinSkills() {
         for (String[] skill : BUILTIN_SKILLS) {
-            com.kira.service.RustBridge.registerSkill(skill[0], skill[0].replace("_skill",""), skill[1], skill[2]);
+            try {
+                com.kira.service.RustBridge.registerSkill(skill[0], skill[0].replace("_skill",""), skill[1], skill[2]);
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -102,7 +104,7 @@ public class KiraSkillEngine {
      * Stored in Rust skill registry and persists via memory.
      */
     public void registerCustomSkill(String name, String trigger, String content) {
-        com.kira.service.RustBridge.registerSkill(name, name, trigger, content);
+        try { com.kira.service.RustBridge.registerSkill(name, name, trigger, content); } catch (Throwable ignored) {}
         // Also persist to memory so it survives restarts
         new KiraMemory(ctx).remember("skill_" + name, trigger + "|" + content);
         Log.i(TAG, "Custom skill registered: " + name);
@@ -122,7 +124,7 @@ public class KiraSkillEngine {
             String val  = line.substring(colon + 1).trim();
             String[] parts = val.split("\\|", 2);
             if (parts.length == 2) {
-                com.kira.service.RustBridge.registerSkill(name, name, parts[0], parts[1]);
+                try { com.kira.service.RustBridge.registerSkill(name, name, parts[0], parts[1]); } catch (Throwable ignored) {}
             }
         }
     }

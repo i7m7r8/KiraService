@@ -147,12 +147,18 @@ public class MainActivity extends Activity
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager != null)
             accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        ai = new KiraAI(this);
-        agent = new com.kira.service.ai.KiraAgent(this);
-        chain = new com.kira.service.ai.KiraChain(this);
         initViews();
         applyTheme(); // after initViews so fragment views exist
         showTab(0);
+        // Init AI after UI is ready (avoids Rust .so crash before Activity is set up)
+        try {
+            ai = new KiraAI(this);
+            agent = new com.kira.service.ai.KiraAgent(this);
+            chain = new com.kira.service.ai.KiraChain(this);
+        } catch (Throwable e) {
+            android.util.Log.e("KiraMain", "AI init failed: " + e, e);
+            ai = null; agent = null; chain = null;
+        }
 
         // Register Shizuku permission result listener before requesting
         try { Shizuku.addRequestPermissionResultListener(shizukuPermListener); }
@@ -162,7 +168,7 @@ public class MainActivity extends Activity
         uiHandler.postDelayed(this::checkAccessibility, 2000);
 
         // Start foreground service to keep Telegram alive
-        KiraForegroundService.start(this);
+        try { KiraForegroundService.start(this); } catch (Throwable e) { android.util.Log.w("KiraMain", "FGS start failed: " + e); }
         // v43: init OTA engine (registers version with Rust, schedules checks)
         initOta();
         // OTA check (non-blocking, 3s delay)
@@ -528,6 +534,7 @@ public class MainActivity extends Activity
         // Thinking placeholder
         ConvTurn[] kiraTurn = {null};
 
+        if (ai == null) { addErrorBubble(new ConvTurn("error", "AI not ready yet")); return; }
         ai.chat(text, new KiraAI.Callback() {
             @Override public void onThinking() {
                 uiHandler.post(() -> { if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); } });
@@ -871,6 +878,7 @@ public class MainActivity extends Activity
         if (sendBtn != null) sendBtn.setEnabled(false);
         addSystemNotice("\uD83E\uDDE0 ReAct mode: reason + act loop");
 
+        if (chain == null) { addErrorBubble(new ConvTurn("error", "AI not ready")); return; }
         chain.run(goal, new com.kira.service.ai.KiraChain.ChainCallback() {
             @Override public void onThought(String t) {
                 uiHandler.post(() -> addSystemNotice("\uD83E\uDDE0 " + t));
@@ -906,6 +914,7 @@ public class MainActivity extends Activity
 
         addSystemNotice("Agent mode: planning task...");
 
+        if (agent == null) { addErrorBubble(new ConvTurn("error", "AI not ready")); return; }
         agent.execute(goal, new com.kira.service.ai.KiraAgent.AgentCallback() {
             @Override public void onPlan(String plan) {
                 uiHandler.post(() -> addSystemNotice("Plan:\n" + plan));

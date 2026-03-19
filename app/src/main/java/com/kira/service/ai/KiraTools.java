@@ -210,18 +210,18 @@ public class KiraTools {
 
                 case "schedule_task": { RustBridge.addTrigger("sched_" + System.currentTimeMillis(), "time", String.valueOf(System.currentTimeMillis() + args.optLong("minutes",1)*60000), args.getString("task"), false); return "scheduled in " + args.optLong("minutes",1) + "m: " + args.getString("task"); }
                 case "watch_screen":  { String keyword = args.getString("keyword"); String action = args.getString("action"); memory.remember("watch_screen_" + System.currentTimeMillis(), keyword + "|" + action); return "watching screen for: " + keyword; }
-                case "watch_app":     { RustBridge.addTrigger("app_" + args.getString("package"), "app_notif", args.getString("package"), args.getString("action"), args.optBoolean("repeat", false)); return "watching app: " + args.getString("package"); }
+
                 case "watch_battery": { RustBridge.addTrigger("bat_" + args.optInt("threshold",20), "battery_low", String.valueOf(args.optInt("threshold",20)), args.getString("action"), args.optBoolean("repeat", true)); return "watching battery < " + args.optInt("threshold",20) + "%"; }
                 case "watch_notif":   { RustBridge.addTrigger("notif_" + System.currentTimeMillis(), "keyword_notif", args.getString("keyword"), args.getString("action"), args.optBoolean("repeat", true)); return "watching notifications for: " + args.getString("keyword"); }
-                case "if_then":       { String ifC=args.optString("if",""); String thenA=args.optString("then",""); if(ifC.isEmpty()||thenA.isEmpty()) return "need 'if' and 'then'"; return postRust("/auto/if_then","{"if":""+ifC.replace(""","'")+"","then":""+thenA.replace(""","'")+""}"); }
-                case "watch_app":     { String app=args.optString("app",""); String act=args.optString("action",""); return postRust("/auto/watch_app","{"app":""+app+"","action":""+act.replace(""","'")+""}"); }
-                case "repeat_task":   { String task=args.optString("task",""); int min=args.optInt("every_minutes",30); return postRust("/auto/repeat","{"task":""+task.replace(""","'")+"","every_minutes":"+min+"}"); }
-                case "on_notif":      { String kw=args.optString("keyword",""); String act=args.optString("action",""); String app=args.optString("app",""); return postRust("/auto/on_notif","{"keyword":""+kw+"","action":""+act.replace(""","'")+"","app":""+app+""}"); }
-                case "on_time":       { String t=args.optString("time","08:00"); String act=args.optString("action",""); return postRust("/auto/on_time","{"time":""+t+"","action":""+act.replace(""","'")+""}"); }
-                case "on_charge":     { String act=args.optString("action",""); String st=args.optString("state","plugged"); return postRust("/auto/on_charge","{"action":""+act.replace(""","'")+"","state":""+st+""}"); }
+                case "if_then":       { String ifC=args.optString("if",""); String thenA=args.optString("then",""); if(ifC.isEmpty()||thenA.isEmpty()) return "need 'if' and 'then'"; return postRust("/auto/if_then","{\"if\":\""+ifC.replace("\"","'")+"\",\"then\":\""+thenA.replace("\"","'")+"\"}"); }
+                case "watch_app":     { String app=args.optString("app",""); String act=args.optString("action",""); return postRust("/auto/watch_app","{\"app\":\""+app+"\",\"action\":\""+act.replace("\"","'")+"\"}"); }
+                case "repeat_task":   { String task=args.optString("task",""); int min=args.optInt("every_minutes",30); return postRust("/auto/repeat","{\"task\":\""+task.replace("\"","'")+"\",\"every_minutes\":"+min+"}"); }
+                case "on_notif":      { String kw=args.optString("keyword",""); String act=args.optString("action",""); String app2=args.optString("app",""); return postRust("/auto/on_notif","{\"keyword\":\""+kw+"\",\"action\":\""+act.replace("\"","'")+"\",\"app\":\""+app2+"\"}"); }
+                case "on_time":       { String t=args.optString("time","08:00"); String act=args.optString("action",""); return postRust("/auto/on_time","{\"time\":\""+t+"\",\"action\":\""+act.replace("\"","'")+"\"}"); }
+                case "on_charge":     { String act=args.optString("action",""); String st=args.optString("state","plugged"); return postRust("/auto/on_charge","{\"action\":\""+act.replace("\"","'")+"\",\"state\":\""+st+"\"}"); }
                 case "list_automations": case "list_macros": { return getRust("/auto/list"); }
                 case "delete_automation": { return deleteRust("/auto/"+args.optString("id","")); }
-                case "enable_automation": { return postRust("/auto/enable","{"id":""+args.optString("id","")+"","enabled":"+args.optBoolean("enabled",true)+"}"); }
+                case "enable_automation": { return postRust("/auto/enable","{\"id\":\""+args.optString("id","")+"\",\"enabled\":"+args.optBoolean("enabled",true)+"}"); }
                 case "list_watches":  { return ShizukuShell.exec("echo watches active"); }
                 case "stop_watch":    { RustBridge.removeTrigger(args.getString("id")); return "stopped watch: " + args.getString("id"); }
 
@@ -866,8 +866,8 @@ public class KiraTools {
         try {
             okhttp3.Response r = RUST_CLIENT.newCall(
                 new okhttp3.Request.Builder().url("http://localhost:7070" + path).get().build()).execute();
-            return r.body() != null ? r.body().string() : "{"error":"empty"}";
-        } catch (Exception e) { return "{"error":"" + e.getMessage().replace(""","'") + ""}"; }
+            return r.body() != null ? r.body().string() : "{\"error\":\"empty\"}";
+        } catch (Exception e) { return "{\"error\":\"" + e.getMessage().replace("\"","'") + "\"}"; }
     }
 
     private String postRust(String path, String jsonBody) {
@@ -876,8 +876,8 @@ public class KiraTools {
                 new okhttp3.Request.Builder().url("http://localhost:7070" + path)
                     .post(okhttp3.RequestBody.create(jsonBody,
                         okhttp3.MediaType.parse("application/json"))).build()).execute();
-            return r.body() != null ? r.body().string() : "{"ok":true}";
-        } catch (Exception e) { return "{"error":"" + e.getMessage().replace(""","'") + ""}"; }
+            return r.body() != null ? r.body().string() : "{\"ok\":true}";
+        } catch (Exception e) { return "{\"error\":\"" + e.getMessage().replace("\"","'") + "\"}"; }
     }
 
     private String deleteRust(String path) {
@@ -885,8 +885,8 @@ public class KiraTools {
             okhttp3.Response r = RUST_CLIENT.newCall(
                 new okhttp3.Request.Builder().url("http://localhost:7070" + path)
                     .delete().build()).execute();
-            return r.body() != null ? r.body().string() : "{"ok":true}";
-        } catch (Exception e) { return "{"error":"" + e.getMessage().replace(""","'") + ""}"; }
+            return r.body() != null ? r.body().string() : "{\"ok\":true}";
+        } catch (Exception e) { return "{\"error\":\"" + e.getMessage().replace("\"","'") + "\"}"; }
     }
 
     public String getToolList() {

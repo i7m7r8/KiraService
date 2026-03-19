@@ -1,13 +1,13 @@
-// Kira Rust Core v9 \u2014 v40 edition
+// Kira Rust Core v9 \u{2014} v40 edition
 //
-// NEW in v40 (Tasker/MacroDroid automation engine \u2014 pure Rust):
+// NEW in v40 (Tasker/MacroDroid automation engine \u{2014} pure Rust):
 //   - MacroEngine: full IF/THEN/ELSE automation macros
 //   - 40+ TriggerType variants (time, geo, app, notif, battery, screen,
 //     wifi, bluetooth, charging, shake, volume-btn, sms, call, headset,
-//     airplane, power-connected, idle, unlock, nfc, clipboard, signal\u2026)
+//     airplane, power-connected, idle, unlock, nfc, clipboard, signal\u{2026})
 //   - 60+ ActionType variants (HTTP, shell via Shizuku, clipboard, media,
 //     volume, torch, TTS, brightness, airplane, send-notif, open-app,
-//     toast, vibrate, set-variable, log, wait, stop-flow, loop, intent\u2026)
+//     toast, vibrate, set-variable, log, wait, stop-flow, loop, intent\u{2026})
 //   - Variable engine (store/retrieve named vars, math + string expr)
 //   - Named Profiles (Work/Home/Sleep/Car) with auto-switch rules
 //   - Flow control: Loop, Delay, If/Else, Stop
@@ -23,11 +23,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
-// v40: AUTOMATION ENGINE \u2014 Triggers, Conditions, Actions, Macros, Profiles
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
+// v40: AUTOMATION ENGINE \u{2014} Triggers, Conditions, Actions, Macros, Profiles
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
-/// Every possible trigger type \u2014 mirrors Tasker + MacroDroid combined
+/// Every possible trigger type \u{2014} mirrors Tasker + MacroDroid combined
 #[derive(Clone, Debug, PartialEq)]
 enum MacroTriggerKind {
     // Time-based
@@ -68,7 +68,7 @@ enum MacroTriggerKind {
     // Notification
     NotifReceived,    // pkg + keyword
     NotifDismissed,
-    // Location (geofence \u2014 lat/lon + radius fed from Java)
+    // Location (geofence \u{2014} lat/lon + radius fed from Java)
     GeofenceEnter,
     GeofenceExit,
     // UI
@@ -217,7 +217,7 @@ enum MacroActionKind {
     KillApp,
     LaunchIntent,     // action + extras JSON
     // Kira AI
-    KiraAsk,          // prompt \u2192 stores result in variable
+    KiraAsk,          // prompt \u{2192} stores result in variable
     KiraSpeak,        // TTS via Kira voice
     KiraMessage,      // send message to active session
     // Variables
@@ -227,7 +227,7 @@ enum MacroActionKind {
     ClearVariable,
     // Flow control
     Wait,             // ms
-    If,               // condition \u2192 else_action_index
+    If,               // condition \u{2192} else_action_index
     Loop,             // count + action_list
     StopFlow,
     StopMacro,
@@ -360,7 +360,7 @@ impl MacroActionKind {
 #[derive(Clone)]
 struct MacroAction {
     kind:        MacroActionKind,
-    /// Generic key-value params (url, body, variable_name, value, ms, pkg\u2026)
+    /// Generic key-value params (url, body, variable_name, value, ms, pkg\u{2026})
     params:      HashMap<String, String>,
     /// For If/Loop: nested action list index stored as JSON string
     /// (the Java side sends sub-actions as a JSON array string)
@@ -372,7 +372,7 @@ struct MacroAction {
 #[derive(Clone)]
 struct MacroTrigger {
     kind:    MacroTriggerKind,
-    /// Extra match data: SSID, package name, battery threshold, cron expr\u2026
+    /// Extra match data: SSID, package name, battery threshold, cron expr\u{2026}
     config:  HashMap<String, String>,
     enabled: bool,
 }
@@ -380,7 +380,7 @@ struct MacroTrigger {
 /// Condition for If action or macro-level constraint
 #[derive(Clone)]
 struct MacroCondition {
-    lhs:      String,   // variable name or built-in: %BATTERY%, %SCREEN_PKG%, %TIME_H%\u2026
+    lhs:      String,   // variable name or built-in: %BATTERY%, %SCREEN_PKG%, %TIME_H%\u{2026}
     operator: String,   // eq, neq, gt, lt, gte, lte, contains, starts, ends, matches
     rhs:      String,   // value or %VAR%
 }
@@ -446,9 +446,9 @@ struct MacroRunLog {
     error:      String,
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // v38: Setup / Theme / Config / Shizuku (unchanged)
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 #[derive(Default, Clone)]
 struct SetupState {
@@ -509,9 +509,9 @@ struct ShizukuStatus {
     error_msg:          String,
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // Core State
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 #[derive(Default)]
 struct KiraState {
@@ -611,7 +611,7 @@ struct KiraState {
     config:            KiraConfig,
     shizuku:           ShizukuStatus,
 
-    // \u2500\u2500 v40: Automation Engine \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} v40: Automation Engine \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
     macros:            Vec<AutoMacro>,
     profiles:          Vec<AutoProfile>,
     active_profile:    String,
@@ -641,12 +641,12 @@ struct KiraState {
     sig_app_closed:    String,
     sig_geofence:      String,   // "enter:label" or "exit:label"
 
-    // \u2500\u2500 Roboru / E-Robot / Automate engine \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} Roboru / E-Robot / Automate engine \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
     roboru_flows:      HashMap<String, AutoFlow>,
     roboru_keywords:   HashMap<String, Keyword>,
     roboru_pipelines:  HashMap<String, HyperPipeline>,
 
-    // \u2500\u2500 Roubao / Open-AutoGLM VLM phone agent \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} Roubao / Open-AutoGLM VLM phone agent \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
     phone_agent_tasks:    Vec<PhoneAgentTask>,
     screen_observations:  VecDeque<ScreenObservation>,
 
@@ -716,9 +716,9 @@ lazy_static::lazy_static! {
     }));
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // v40: Variable engine helpers
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 /// Expand %VAR_NAME% tokens and built-ins in a string
 fn expand_vars(s: &KiraState, text: &str) -> String {
@@ -766,10 +766,6 @@ fn eval_condition(s: &KiraState, cond: &MacroCondition) -> bool {
         }
         "is_empty" => lhs.is_empty(),
         "not_empty"=> !lhs.is_empty(),
-        // OTA
-        ("GET", "/ota/status") => { let s=STATE.lock().unwrap(); format!("{{\"current\":\"{}\",\"latest\":\"{}\",\"available\":{},\"checked\":{},\"url\":\"{}\"}}",esc(&s.ota_current_version),esc(&s.ota_latest_version),s.ota_update_available,s.ota_last_check,esc(&s.ota_download_url)) }
-        ("POST", "/ota/check") => { let lat=extract_json_str(body,"latest").unwrap_or_default();let url=extract_json_str(body,"download_url").unwrap_or_default();let log=extract_json_str(body,"changelog").unwrap_or_default();let mut s=STATE.lock().unwrap();s.ota_latest_version=lat.clone();s.ota_download_url=url;s.ota_changelog=log;s.ota_update_available= !lat.is_empty() && lat!=s.ota_current_version;s.ota_last_check=now_ms();format!("{{\"ok\":true,\"available\":{}}}",s.ota_update_available) }
-        ("POST", "/ota/set_version") => { if let Some(v)=extract_json_str(body,"version"){STATE.lock().unwrap().ota_current_version=v;} r#"{"ok":true}"#.to_string() }
         _ => false,
     }
 }
@@ -931,7 +927,7 @@ fn enqueue_action(s: &mut KiraState, macro_id: &str, action: &MacroAction) {
         _ => {}
     }
 
-    // All other actions \u2192 enqueue for Java
+    // All other actions \u{2192} enqueue for Java
     let pa = PendingMacroAction {
         macro_id:  macro_id.to_string(),
         action_id: gen_id(),
@@ -966,7 +962,7 @@ fn execute_macro_actions(s: &mut KiraState, macro_id: &str, actions: &[MacroActi
                     steps += sub_steps;
                 } else {
                     // else_actions stored in params as JSON (parsed at add time in simple impl)
-                    // For now just skip \u2014 full else branch is handled at the Java UI level
+                    // For now just skip \u{2014} full else branch is handled at the Java UI level
                 }
             }
             MacroActionKind::Loop => {
@@ -1040,10 +1036,10 @@ fn run_triggered_macros(s: &mut KiraState) {
     s.sig_geofence      = String::new();
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // Parse a macro from JSON body (simple hand-rolled parser matching the
 // format the Java UI will POST)
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 fn parse_macro_from_json(body: &str) -> AutoMacro {
     let id          = extract_json_str(body, "id").unwrap_or_else(|| gen_id());
@@ -1080,7 +1076,7 @@ fn parse_triggers_from_json(body: &str) -> Vec<MacroTrigger> {
                 let obj = &slice[obj_start..=i];
                 let kind_str = extract_json_str(obj, "kind").unwrap_or_else(|| "manual".to_string());
                 let enabled  = !obj.contains("\"enabled\":false");
-                // Parse config as flat key\u2192value from "config":{...}
+                // Parse config as flat key\u{2192}value from "config":{...}
                 let mut config = HashMap::new();
                 if let Some(ci) = obj.find("\"config\":{") {
                     let cs = &obj[ci + "\"config\":{".len()..];
@@ -1204,9 +1200,9 @@ fn action_to_json(a: &MacroAction) -> String {
         a.kind.to_str(), a.enabled, params_json.join(","), sub_json.join(","))
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // JNI Bridge
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 mod jni_bridge {
     use super::*;
@@ -1218,7 +1214,7 @@ mod jni_bridge {
         unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() }
     }
 
-    // \u2500\u2500 Lifecycle \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} Lifecycle \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_startServer(
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, port: i32,
@@ -1247,7 +1243,7 @@ mod jni_bridge {
         thread::spawn(run_watchdog);
     }
 
-    // \u2500\u2500 v40: Device signal injectors (called from Java on each device event) \u2500\u2500
+    // \u{2500}\u{2500} v40: Device signal injectors (called from Java on each device event) \u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOn(
@@ -1344,7 +1340,7 @@ mod jni_bridge {
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, event: *const c_char,
     ) { STATE.lock().unwrap().sig_kira_event = cs(event); }
 
-    // \u2500\u2500 v40: Macro management JNI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} v40: Macro management JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     /// Add or replace a macro. Body is full macro JSON.
     #[no_mangle]
@@ -1431,7 +1427,7 @@ mod jni_bridge {
         }
     }
 
-    // \u2500\u2500 v40: Variable management \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} v40: Variable management \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setVariable(
@@ -1469,7 +1465,7 @@ mod jni_bridge {
         CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
-    // \u2500\u2500 v40: Profile management \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} v40: Profile management \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setProfile(
@@ -1505,7 +1501,7 @@ mod jni_bridge {
         CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
-    // \u2500\u2500 v38 JNI (unchanged) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} v38 JNI (unchanged) \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_syncConfig(
@@ -1659,8 +1655,8 @@ mod jni_bridge {
         CString::new(format!(
             r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"profiles":{},"active_profile":"{}","variables":{}}}"#,
             s.memory_index.len(), s.context_turns.len(),
-            if s.shizuku.permission_granted{"active \u2713"} else if s.shizuku.installed{"no permission"} else{"not running"},
-            if !s.agent_context.is_empty(){"enabled \u2713"} else{"disabled"},
+            if s.shizuku.permission_granted{"active \u{2713}"} else if s.shizuku.installed{"no permission"} else{"not running"},
+            if !s.agent_context.is_empty(){"enabled \u{2713}"} else{"disabled"},
             esc(&s.config.model), esc(&s.config.base_url),
             now_ms().saturating_sub(s.uptime_start),
             s.macros.len(), s.profiles.len(), esc(&s.active_profile),
@@ -1668,7 +1664,7 @@ mod jni_bridge {
         )).unwrap_or_default().into_raw()
     }
 
-    // \u2500\u2500 v7 JNI (unchanged) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} v7 JNI (unchanged) \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushNotification(
@@ -1849,7 +1845,7 @@ mod jni_bridge {
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id:*const c_char,
     ) { let id=cs(id); STATE.lock().unwrap().triggers.retain(|t| t.id!=id); }
 
-    // \u2500\u2500 OpenClaw v3 JNI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} OpenClaw v3 JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runDslScript(
@@ -1935,7 +1931,7 @@ mod jni_bridge {
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, s:*mut c_char,
     ) { if !s.is_null() { unsafe { drop(CString::from_raw(s)); } } }
 
-    // \u2500\u2500 OpenClaw / NanoBot / ZeroClaw extended JNI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} OpenClaw / NanoBot / ZeroClaw extended JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_exportMacros(
@@ -1971,7 +1967,7 @@ mod jni_bridge {
         CString::new(result).unwrap_or_default().into_raw()
     }
 
-    // \u2500\u2500 Roubao / Open-AutoGLM VLM JNI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} Roubao / Open-AutoGLM VLM JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     /// Start a new phone agent task. Returns {ok, task_id}
     #[no_mangle]
@@ -2092,7 +2088,7 @@ Context: {}",
         CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
-    // \u2500\u2500 Roboru JNI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // \u{2500}\u{2500} Roboru JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addFlow(
@@ -2250,9 +2246,9 @@ Context: {}",
     }
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // HTTP Server
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 fn run_http(port: u16) {
     let listener = match TcpListener::bind(format!("0.0.0.0:{}", port)) {
@@ -2348,7 +2344,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap(); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
         ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }
         ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap(); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }
-        ("GET",  "/appstats")          => { let s=STATE.lock().unwrap(); format!(r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"active_profile":"{}","variables":{}}}"#, s.memory_index.len(),s.context_turns.len(), if s.shizuku.permission_granted{"active \u2713"}else if s.shizuku.installed{"no permission"}else{"not running"}, if !s.agent_context.is_empty(){"enabled \u2713"}else{"disabled"}, esc(&s.config.model),esc(&s.config.base_url),now_ms().saturating_sub(s.uptime_start),s.macros.len(),esc(&s.active_profile),s.variables.len()) }
+        ("GET",  "/appstats")          => { let s=STATE.lock().unwrap(); format!(r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"active_profile":"{}","variables":{}}}"#, s.memory_index.len(),s.context_turns.len(), if s.shizuku.permission_granted{"active \u{2713}"}else if s.shizuku.installed{"no permission"}else{"not running"}, if !s.agent_context.is_empty(){"enabled \u{2713}"}else{"disabled"}, esc(&s.config.model),esc(&s.config.base_url),now_ms().saturating_sub(s.uptime_start),s.macros.len(),esc(&s.active_profile),s.variables.len()) }
         ("GET",  "/providers")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.providers.iter().map(|p| format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/providers/set")     => { let id=extract_json_str(body,"id").unwrap_or_default(); if !id.is_empty() { let mut s=STATE.lock().unwrap(); let found=s.providers.iter().find(|p| p.id==id).cloned(); if let Some(p)=found { s.active_provider=id.clone(); s.config.base_url=p.base_url; s.config.model=p.model; } } format!(r#"{{"ok":true,"active":"{}"}}"#, id) }
         ("POST", "/providers/custom")  => { let url=extract_json_str(body,"url").unwrap_or_default(); let model=extract_json_str(body,"model").unwrap_or_default(); if !url.is_empty() { let mut s=STATE.lock().unwrap(); s.setup.custom_url=url.clone(); s.setup.selected_provider_id="custom".to_string(); s.config.base_url=url.clone(); if !model.is_empty() { s.config.model=model.clone(); } if let Some(p)=s.providers.iter_mut().find(|p| p.id=="custom") { p.base_url=url; if !model.is_empty() { p.model=model; } } s.active_provider="custom".to_string(); } r#"{"ok":true}"#.to_string() }
@@ -2423,6 +2419,10 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("POST", "/credentials/get")   => get_credential(body),
 
         // OpenClaw v3 / NanoBot / ZeroClaw routes
+        // OTA update
+        ("GET", "/ota/status") => { let s=STATE.lock().unwrap(); format!(r#"{{"current":"{}","latest":"{}","available":{},"checked":{},"url":"{}"}}"#,esc(&s.ota_current_version),esc(&s.ota_latest_version),s.ota_update_available,s.ota_last_check,esc(&s.ota_download_url)) }
+        ("POST", "/ota/check") => { let lat=extract_json_str(body,"latest").unwrap_or_default();let url=extract_json_str(body,"download_url").unwrap_or_default();let log=extract_json_str(body,"changelog").unwrap_or_default();let mut s=STATE.lock().unwrap();s.ota_latest_version=lat.clone();s.ota_download_url=url;s.ota_changelog=log;s.ota_update_available= !lat.is_empty()&&lat!=s.ota_current_version;s.ota_last_check=now_ms();format!(r#"{{"ok":true,"available":{}}}"#,s.ota_update_available) }
+        ("POST", "/ota/set_version") => { if let Some(v)=extract_json_str(body,"version"){STATE.lock().unwrap().ota_current_version=v;} r#"{"ok":true}"#.to_string() }
         _ => {
             if let Some(r) = route_openclaw_v3(method, path_clean, body) { r }
             else if let Some(r) = route_vlm_agent(method, path_clean, body) { r }
@@ -2433,11 +2433,11 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
     }
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // Background threads
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
-/// v40: Watchdog thread \u2014 cleans stale pending actions every 30s
+/// v40: Watchdog thread \u{2014} cleans stale pending actions every 30s
 fn run_watchdog() {
     loop {
         thread::sleep(Duration::from_secs(30));
@@ -2445,7 +2445,7 @@ fn run_watchdog() {
     }
 }
 
-/// v40/v3: Dedicated macro engine \u2014 triggers + context zones + battery defer every 500ms
+/// v40/v3: Dedicated macro engine \u{2014} triggers + context zones + battery defer every 500ms
 fn run_macro_engine() {
     loop {
         thread::sleep(Duration::from_millis(500));
@@ -2506,9 +2506,9 @@ fn run_cron_scheduler() {
     }
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // Helpers (unchanged from v8)
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 fn config_to_json(c: &KiraConfig) -> String {
     format!(r#"{{"user_name":"{}","api_key_set":{},"base_url":"{}","model":"{}","vision_model":"{}","tg_configured":{},"agent_max_steps":{},"agent_auto_approve":{},"heartbeat_interval":{},"setup_done":{}}}"#,
@@ -2806,9 +2806,9 @@ fn push_event_feed(event: &str, data: &str) {
     if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // OpenClaw / NanoBot / ZeroClaw Extended Automation Engine
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 //
 // Features added beyond basic Tasker/MacroDroid parity:
 //   - Expression evaluator: math + string ops on %VAR% tokens
@@ -2885,7 +2885,7 @@ fn eval_math(expr: &str) -> Option<String> {
     None
 }
 
-/// Cooldown tracker \u2014 returns true if macro is allowed to run now
+/// Cooldown tracker \u{2014} returns true if macro is allowed to run now
 fn check_cooldown(s: &KiraState, macro_id: &str) -> bool {
     let now = now_ms();
     if let Some(m) = s.macros.iter().find(|m| m.id == macro_id) {
@@ -2898,7 +2898,7 @@ fn check_cooldown(s: &KiraState, macro_id: &str) -> bool {
             }
         }
     }
-    true // no cooldown set \u2192 always allowed
+    true // no cooldown set \u{2192} always allowed
 }
 
 /// Rate limiter state: count runs in last 60s window
@@ -2968,10 +2968,10 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
     };
 
     vec![
-        // 1. Battery guardian \u2014 warn + enable power saver
+        // 1. Battery guardian \u{2014} warn + enable power saver
         AutoMacro {
             id: "tpl_battery_guardian".to_string(),
-            name: "\uD83D\uDD0B Battery Guardian".to_string(),
+            name: "\u{1F50B} Battery Guardian".to_string(),
             description: "Toast warning when battery drops below 20%, vibrate at 10%".to_string(),
             enabled: false, // templates off by default
             triggers: vec![MacroTrigger {
@@ -2981,7 +2981,7 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
             }],
             conditions: vec![],
             actions: vec![
-                act("show_toast", vec![("message", "\u26A0\uFE0F Battery low: %BATTERY%%")]),
+                act("show_toast", vec![("message", "\u{26A0}\u{FE0F} Battery low: %BATTERY%%")]),
                 act("vibrate", vec![("ms", "500")]),
                 act("log_event", vec![("message", "Battery guardian fired at %BATTERY%%")]),
             ],
@@ -2989,10 +2989,10 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
             tags: vec!["template".to_string(), "battery".to_string(), "cooldown:300000".to_string()],
         },
 
-        // 2. Work mode \u2014 activate when connecting to work WiFi
+        // 2. Work mode \u{2014} activate when connecting to work WiFi
         AutoMacro {
             id: "tpl_work_mode".to_string(),
-            name: "\uD83D\uDCBC Work Mode".to_string(),
+            name: "\u{1F4BC} Work Mode".to_string(),
             description: "Switch to Work profile + mute media when joining work WiFi".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3004,17 +3004,17 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
             actions: vec![
                 act("activate_profile", vec![("profile", "work")]),
                 act("mute_volume", vec![("stream", "music")]),
-                act("show_toast", vec![("message", "\uD83D\uDCBC Work mode activated")]),
+                act("show_toast", vec![("message", "\u{1F4BC} Work mode activated")]),
                 act("log_event", vec![("message", "Work mode: connected to %WIFI%")]),
             ],
             profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
             tags: vec!["template".to_string(), "wifi".to_string(), "work".to_string()],
         },
 
-        // 3. Sleep mode \u2014 dim screen, silence at night
+        // 3. Sleep mode \u{2014} dim screen, silence at night
         AutoMacro {
             id: "tpl_sleep_mode".to_string(),
-            name: "\uD83C\uDF19 Sleep Mode".to_string(),
+            name: "\u{1F319} Sleep Mode".to_string(),
             description: "Activate Sleep profile on screen off between 22:00-07:00".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3036,10 +3036,10 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
             tags: vec!["template".to_string(), "sleep".to_string(), "cooldown:3600000".to_string()],
         },
 
-        // 4. Car mode \u2014 BT connect auto-opens maps + disables notifications
+        // 4. Car mode \u{2014} BT connect auto-opens maps + disables notifications
         AutoMacro {
             id: "tpl_car_mode".to_string(),
-            name: "\uD83D\uDE97 Car Mode".to_string(),
+            name: "\u{1F697} Car Mode".to_string(),
             description: "Open maps + set car profile when BT device connects".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3052,16 +3052,16 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
                 act("activate_profile", vec![("profile", "car")]),
                 act("open_app", vec![("package", "com.google.android.apps.maps")]),
                 act("set_volume", vec![("stream", "navigation"), ("level", "12")]),
-                act("show_toast", vec![("message", "\uD83D\uDE97 Car mode \u2014 drive safe!")]),
+                act("show_toast", vec![("message", "\u{1F697} Car mode \u{2014} drive safe!")]),
             ],
             profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
             tags: vec!["template".to_string(), "car".to_string(), "bluetooth".to_string()],
         },
 
-        // 5. AI morning briefing \u2014 Kira speaks summary on unlock
+        // 5. AI morning briefing \u{2014} Kira speaks summary on unlock
         AutoMacro {
             id: "tpl_morning_briefing".to_string(),
-            name: "\uD83C\uDF05 Morning Briefing".to_string(),
+            name: "\u{1F305} Morning Briefing".to_string(),
             description: "Kira speaks a morning summary on first device unlock".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3082,10 +3082,10 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
             tags: vec!["template".to_string(), "ai".to_string(), "morning".to_string(), "cooldown:3600000".to_string()],
         },
 
-        // 6. Smart notification filter \u2014 AI decides if notif is urgent
+        // 6. Smart notification filter \u{2014} AI decides if notif is urgent
         AutoMacro {
             id: "tpl_notif_filter".to_string(),
-            name: "\uD83E\uDDE0 Smart Notif Filter".to_string(),
+            name: "\u{1F9E0} Smart Notif Filter".to_string(),
             description: "Kira reads notifications and speaks urgent ones aloud".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3114,10 +3114,10 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
             tags: vec!["template".to_string(), "ai".to_string(), "notifications".to_string()],
         },
 
-        // 7. Clipboard AI enhancer \u2014 transform clipboard text with AI
+        // 7. Clipboard AI enhancer \u{2014} transform clipboard text with AI
         AutoMacro {
             id: "tpl_clipboard_ai".to_string(),
-            name: "\uD83D\uDCCB Clipboard AI".to_string(),
+            name: "\u{1F4CB} Clipboard AI".to_string(),
             description: "When clipboard changes, Kira can rewrite/translate/summarize".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3133,17 +3133,17 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
                     ("out_var", "FIXED_CLIP"),
                 ]),
                 act("set_clipboard", vec![("text", "%FIXED_CLIP%")]),
-                act("show_toast", vec![("message", "\u2705 Clipboard enhanced by Kira")]),
+                act("show_toast", vec![("message", "\u{2705} Clipboard enhanced by Kira")]),
             ],
             profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
             tags: vec!["template".to_string(), "ai".to_string(), "clipboard".to_string()],
         },
 
-        // 8. Webhook automation \u2014 receive external trigger, run AI, reply
+        // 8. Webhook automation \u{2014} receive external trigger, run AI, reply
         AutoMacro {
             id: "tpl_webhook_ai".to_string(),
-            name: "\uD83C\uDF10 Webhook AI Agent".to_string(),
-            description: "Receive HTTP POST \u2192 Kira processes \u2192 HTTP reply (OpenClaw pattern)".to_string(),
+            name: "\u{1F310} Webhook AI Agent".to_string(),
+            description: "Receive HTTP POST \u{2192} Kira processes \u{2192} HTTP reply (OpenClaw pattern)".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
                 kind: MacroTriggerKind::WebhookPost,
@@ -3167,10 +3167,10 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
             tags: vec!["template".to_string(), "webhook".to_string(), "ai".to_string()],
         },
 
-        // 9. NFC tag launcher \u2014 tap tag to run specific macro
+        // 9. NFC tag launcher \u{2014} tap tag to run specific macro
         AutoMacro {
             id: "tpl_nfc_launcher".to_string(),
-            name: "\uD83D\uDCE1 NFC Tag Launcher".to_string(),
+            name: "\u{1F4E1} NFC Tag Launcher".to_string(),
             description: "Tap NFC tag to activate Home profile and run home routine".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3183,17 +3183,17 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
                 act("activate_profile", vec![("profile", "home")]),
                 act("set_volume", vec![("stream", "music"), ("level", "8")]),
                 act("set_brightness", vec![("level", "200")]),
-                act("show_toast", vec![("message", "\uD83C\uDFE0 Welcome home!")]),
+                act("show_toast", vec![("message", "\u{1F3E0} Welcome home!")]),
                 act("kira_speak", vec![("text", "Welcome home. I've set your home profile.")]),
             ],
             profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
             tags: vec!["template".to_string(), "nfc".to_string(), "home".to_string()],
         },
 
-        // 10. Shake-to-SOS \u2014 shake 3x to send emergency SMS
+        // 10. Shake-to-SOS \u{2014} shake 3x to send emergency SMS
         AutoMacro {
             id: "tpl_shake_sos".to_string(),
-            name: "\uD83C\uDD98 Shake SOS".to_string(),
+            name: "\u{1F198} Shake SOS".to_string(),
             description: "Shake device to send SOS SMS with location to emergency contact".to_string(),
             enabled: false,
             triggers: vec![MacroTrigger {
@@ -3206,10 +3206,10 @@ fn make_builtin_templates() -> Vec<AutoMacro> {
                 act("get_location", vec![("out_lat", "SOS_LAT"), ("out_lon", "SOS_LON")]),
                 act("send_sms", vec![
                     ("number", "+1234567890"), // replace with emergency contact
-                    ("message", "\uD83C\uDD98 SOS! I need help. My location: https://maps.google.com/?q=%SOS_LAT%,%SOS_LON%"),
+                    ("message", "\u{1F198} SOS! I need help. My location: https://maps.google.com/?q=%SOS_LAT%,%SOS_LON%"),
                 ]),
                 act("vibrate", vec![("ms", "2000")]),
-                act("show_toast", vec![("message", "\uD83C\uDD98 SOS sent!")]),
+                act("show_toast", vec![("message", "\u{1F198} SOS sent!")]),
             ],
             profile: String::new(), run_count: 0, last_run_ms: 0, created_ms: ts,
             tags: vec!["template".to_string(), "sos".to_string(), "emergency".to_string(), "cooldown:60000".to_string()],
@@ -3230,27 +3230,27 @@ fn install_builtin_templates(s: &mut KiraState) {
 
 
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // Roubao Vision-Language Agent  (github.com/Turbo1123/roubao)
 // Open-AutoGLM Phone Agent      (github.com/zai-org/Open-AutoGLM)
 //
 // Core architecture implemented in pure Rust:
 //
 // ROUBAO pattern:
-//   screenshot \u2192 VLM prompt \u2192 structured action decision \u2192 execute
+//   screenshot \u{2192} VLM prompt \u{2192} structured action decision \u{2192} execute
 //   - Screenshot observation loop
 //   - VLM-grounded element detection (describe what to tap)
 //   - Action confidence scoring
 //   - Task success verification via follow-up screenshot
 //
 // OPEN-AUTOGLM pattern:
-//   user_goal \u2192 task_planner \u2192 action_executor \u2192 state_observer \u2192 loop
+//   user_goal \u{2192} task_planner \u{2192} action_executor \u{2192} state_observer \u{2192} loop
 //   - Multi-step phone task decomposition
 //   - Thought-Action-Observation (TAO) loop (ReAct variant)
 //   - Sub-task tracking with completion state
 //   - Grounded element location via text description
 //   - Memory of previous actions in session
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 /// Roubao: A VLM grounded action on a specific screen element
 #[derive(Clone, Debug)]
@@ -3328,7 +3328,7 @@ fn build_vlm_action_prompt(
     max_steps: u32,
 ) -> String {
     let history_str: String = history.iter().rev().take(5).rev().map(|h| {
-        format!("Step {}: {} \u2192 {} \u2192 {}",
+        format!("Step {}: {} \u{2192} {} \u{2192} {}",
             h.step_num,
             h.thought.chars().take(60).collect::<String>(),
             h.action.action_type,
@@ -3462,7 +3462,7 @@ fn vlm_action_to_macro(action: &VlmAction) -> MacroAction {
     }
 }
 
-/// Enqueue a VLM step: screenshot \u2192 VLM prompt \u2192 Java executes \u2192 Rust processes result
+/// Enqueue a VLM step: screenshot \u{2192} VLM prompt \u{2192} Java executes \u{2192} Rust processes result
 /// This implements the Roubao/Open-AutoGLM TAO loop
 fn enqueue_vlm_step(s: &mut KiraState, task_id: &str) {
     // Step 1: Take screenshot and describe screen via VLM
@@ -3722,8 +3722,8 @@ fn record_screen_observation(s: &mut KiraState, task_id: &str, step: u32, vlm_de
 }
 
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
-// OpenClaw v3 / NanoBot / ZeroClaw \u2014 Extended Automation Engine
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
+// OpenClaw v3 / NanoBot / ZeroClaw \u{2014} Extended Automation Engine
 //
 // New in this version:
 //   - Reactive programming: event streams + filter chains (NanoBot Rx pattern)
@@ -3737,9 +3737,9 @@ fn record_screen_observation(s: &mut KiraState, task_id: &str, step: u32, vlm_de
 //   - Smart home integration hooks (MQTT/WebSocket stubs)
 //   - Battery-aware scheduling: defer tasks when battery low
 //   - AI-assisted macro generation: convert natural language to macro JSON
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
-// \u2500\u2500 NanoBot Rx: Reactive event stream \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} NanoBot Rx: Reactive event stream \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// An event in the reactive stream
 #[derive(Clone)]
@@ -3764,7 +3764,7 @@ enum RxOperator {
     Buffer(u32),                     // collect N events then emit as batch
 }
 
-/// A reactive subscription: event source \u2192 operators \u2192 macro trigger
+/// A reactive subscription: event source \u{2192} operators \u{2192} macro trigger
 #[derive(Clone)]
 struct RxSubscription {
     id:          String,
@@ -3831,7 +3831,7 @@ fn rx_process_event(sub: &mut RxSubscription, event: &RxEvent, s: &KiraState) ->
     Some(event.data.clone())
 }
 
-// \u2500\u2500 ZeroClaw FSM: Finite State Machine engine \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} ZeroClaw FSM: Finite State Machine engine \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// A state in a ZeroClaw FSM
 #[derive(Clone)]
@@ -3914,12 +3914,12 @@ fn fsm_process_event(s: &mut KiraState, machine_id: &str, event_kind: &str) {
         }
 
         // Log the transition
-        s.daily_log.push_back(format!("[fsm:{}] {}\u2192{} via {}", machine_id, from, trans.to_state, event_kind));
+        s.daily_log.push_back(format!("[fsm:{}] {}\u{2192}{} via {}", machine_id, from, trans.to_state, event_kind));
         if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
     }
 }
 
-// \u2500\u2500 Sensor Fusion: Composite triggers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} Sensor Fusion: Composite triggers \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// A composite trigger: multiple signals combined with AND/OR/NOT logic
 #[derive(Clone)]
@@ -3951,7 +3951,7 @@ fn check_composite_trigger(s: &KiraState, ct: &CompositeTrigger) -> bool {
     }
 }
 
-// \u2500\u2500 NanoBot Macro DSL: Mini scripting language \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} NanoBot Macro DSL: Mini scripting language \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// Execute a NanoBot DSL script
 /// Syntax (one statement per line):
@@ -4007,7 +4007,7 @@ fn execute_dsl_script(s: &mut KiraState, macro_id: &str, script: &str) -> Vec<St
             }
             ["CALL", target_id] | ["CHAIN", target_id] => {
                 chain_macro(s, target_id);
-                log.push(format!("CHAIN \u2192 {}", target_id));
+                log.push(format!("CHAIN \u{2192} {}", target_id));
             }
             ["IF", ..] => {
                 // IF $var OP value THEN action
@@ -4036,7 +4036,7 @@ fn execute_dsl_script(s: &mut KiraState, macro_id: &str, script: &str) -> Vec<St
                             }
                             let action = MacroAction { kind: MacroActionKind::from_str(kind), params, sub_actions: vec![], enabled: true };
                             enqueue_action(s, macro_id, &action);
-                            log.push(format!("IF {} \u2192 executed {}", cond_part, kind));
+                            log.push(format!("IF {} \u{2192} executed {}", cond_part, kind));
                         }
                     }
                 }
@@ -4054,7 +4054,7 @@ fn execute_dsl_script(s: &mut KiraState, macro_id: &str, script: &str) -> Vec<St
                         let action = MacroAction { kind: MacroActionKind::from_str(kind), params: params.clone(), sub_actions: vec![], enabled: true };
                         enqueue_action(s, macro_id, &action);
                     }
-                    log.push(format!("REPEAT {} \u00D7 {}", count, kind));
+                    log.push(format!("REPEAT {} \u{00D7} {}", count, kind));
                 }
             }
             ["NOTIFY", ..] => {
@@ -4099,7 +4099,7 @@ fn execute_dsl_script(s: &mut KiraState, macro_id: &str, script: &str) -> Vec<St
     log
 }
 
-// \u2500\u2500 Battery-aware scheduling \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} Battery-aware scheduling \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// Check if it's safe to run a macro given battery state
 fn battery_allows_run(s: &KiraState, macro_id: &str) -> bool {
@@ -4134,7 +4134,7 @@ fn defer_until_charged(s: &mut KiraState, macro_id: &str, min_pct: i32) {
     if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
 }
 
-// \u2500\u2500 Context zones: time + location based automation \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} Context zones: time + location based automation \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// A context zone: when device is in this context, activate/deactivate macros
 #[derive(Clone)]
@@ -4222,7 +4222,7 @@ fn apply_context_zones(s: &mut KiraState) {
     if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
 }
 
-// \u2500\u2500 Macro bundle: import/export marketplace \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} Macro bundle: import/export marketplace \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// Export macros + keywords + flows as a shareable bundle
 fn export_bundle(s: &KiraState, tag_filter: Option<&str>) -> String {
@@ -4242,7 +4242,7 @@ fn export_bundle(s: &KiraState, tag_filter: Option<&str>) -> String {
     )
 }
 
-// \u2500\u2500 Cross-macro channel communication \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} Cross-macro channel communication \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// Post a message to a named channel (macros can subscribe via kira_event trigger)
 fn channel_post(s: &mut KiraState, channel: &str, message: &str) {
@@ -4256,11 +4256,11 @@ fn channel_post(s: &mut KiraState, channel: &str, message: &str) {
     if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
 }
 
-// \u2500\u2500 HTTP routes for new features \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500} HTTP routes for new features \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
     match (method, path) {
-        // \u2500\u2500 DSL Script execution
+        // \u{2500}\u{2500} DSL Script execution
         ("POST", "/dsl/run") => {
             let macro_id = extract_json_str(body, "macro_id").unwrap_or_else(gen_id);
             let script   = extract_json_str(body, "script").unwrap_or_default();
@@ -4269,7 +4269,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 log.iter().map(|l| format!(r#""{}""#, esc(l))).collect::<Vec<_>>().join(",")))
         }
 
-        // \u2500\u2500 Reactive subscriptions
+        // \u{2500}\u{2500} Reactive subscriptions
         ("GET",  "/rx/subscriptions") => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.rx_subscriptions.iter().map(|sub|
@@ -4317,7 +4317,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             Some(r#"{"ok":true}"#.to_string())
         }
 
-        // \u2500\u2500 State machines
+        // \u{2500}\u{2500} State machines
         ("GET",  "/fsm/machines")   => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.state_machines.iter().map(|m|
@@ -4333,7 +4333,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             Some(r#"{"ok":true}"#.to_string())
         }
 
-        // \u2500\u2500 Context zones
+        // \u{2500}\u{2500} Context zones
         ("GET",  "/zones")          => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.context_zones.iter().map(|z|
@@ -4343,7 +4343,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             Some(format!("[{}]", items.join(",")))
         }
 
-        // \u2500\u2500 Bundle export/import
+        // \u{2500}\u{2500} Bundle export/import
         ("GET",  "/bundle/export")  => {
             let tag = path.find("tag=").map(|i| &path[i+4..]).map(|s| s.split('&').next().unwrap_or(""));
             Some(export_bundle(&STATE.lock().unwrap(), tag))
@@ -4353,7 +4353,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             Some(r#"{"ok":true}"#.to_string())
         }
 
-        // \u2500\u2500 Channel messaging
+        // \u{2500}\u{2500} Channel messaging
         ("POST", "/channel/post")   => {
             let ch  = extract_json_str(body, "channel").unwrap_or_default();
             let msg = extract_json_str(body, "message").unwrap_or_default();
@@ -4361,7 +4361,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             Some(r#"{"ok":true}"#.to_string())
         }
 
-        // \u2500\u2500 Battery-aware scheduling
+        // \u{2500}\u{2500} Battery-aware scheduling
         ("POST", "/battery/defer")  => {
             let macro_id = extract_json_str(body, "macro_id").unwrap_or_default();
             let min_pct  = extract_json_num(body, "min_pct").unwrap_or(20.0) as i32;
@@ -4373,11 +4373,11 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
     }
 }
 
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // Roboru / E-Robot / Automate Engine
 // Inspired by: LlamaLab Automate (flowchart), E-Robot (170+ events, 150+ actions),
 // Robot Framework (keyword-driven RPA), UiPath (intelligent automation)
-// \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501
+// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 /// Flowchart block types (Automate-style visual programming)
 #[derive(Clone, Debug)]
@@ -4531,7 +4531,7 @@ fn execute_flow(s: &mut KiraState, flow: &AutoFlow, start_id: Option<&str>) -> u
             None => break,
         };
 
-        // Loop guard \u2014 prevent infinite loops
+        // Loop guard \u{2014} prevent infinite loops
         let visit_count = visited.entry(current_id.clone()).or_insert(0);
         *visit_count += 1;
         if *visit_count > 100 { break; } // stuck in a loop
@@ -4632,7 +4632,7 @@ fn execute_flow(s: &mut KiraState, flow: &AutoFlow, start_id: Option<&str>) -> u
                 current_id = block.next.first().cloned().unwrap_or_default();
             }
             FlowBlockKind::Catch => {
-                // Error catch \u2014 just continue to next
+                // Error catch \u{2014} just continue to next
                 current_id = block.next.first().cloned().unwrap_or_default();
             }
             FlowBlockKind::Join => {
@@ -5026,12 +5026,12 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
     }
 }
 
-// \u2500\u2500\u2500 OpenClaw v2: Advanced automation features \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u{2500}\u{2500}\u{2500} OpenClaw v2: Advanced automation features \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
 /// Macro schedule: run macro at specific time daily (HH:MM format)
 /// Stored as a cron job internally
 fn schedule_macro_daily(s: &mut KiraState, macro_id: &str, time_hhmm: &str) {
-    // Parse HH:MM \u2192 store as cron job with interval = 24h
+    // Parse HH:MM \u{2192} store as cron job with interval = 24h
     // The trigger watcher checks against current time string
     let job_id = format!("daily_{}_{}", macro_id, time_hhmm.replace(':', ""));
     s.cron_jobs.retain(|j| j.id != job_id);
@@ -5049,7 +5049,7 @@ fn schedule_macro_daily(s: &mut KiraState, macro_id: &str, time_hhmm: &str) {
 fn run_macro_group(s: &mut KiraState, macro_ids: &[&str], parallel: bool) {
     if !check_rate_limit(s) { return; }
     if parallel {
-        // Enqueue all at once \u2014 Java executes them concurrently
+        // Enqueue all at once \u{2014} Java executes them concurrently
         for id in macro_ids {
             let actions: Vec<MacroAction> = s.macros.iter()
                 .find(|m| m.id == *id && m.enabled)
@@ -5087,7 +5087,7 @@ fn is_debounced(s: &KiraState, macro_id: &str, debounce_ms: u128) -> bool {
     false
 }
 
-/// Variable interpolation in action params \u2014 supports math expressions
+/// Variable interpolation in action params \u{2014} supports math expressions
 fn resolve_param(s: &KiraState, param: &str) -> String {
     let expanded = expand_vars(s, param);
     // If it looks like an expression (has operators), try to evaluate
@@ -5100,7 +5100,7 @@ fn resolve_param(s: &KiraState, param: &str) -> String {
     expanded
 }
 
-/// Get macro by name (case-insensitive) \u2014 useful for natural language commands
+/// Get macro by name (case-insensitive) \u{2014} useful for natural language commands
 fn find_macro_by_name(s: &KiraState, name: &str) -> Option<String> {
     let lower = name.to_lowercase();
     s.macros.iter()
@@ -5155,7 +5155,7 @@ fn get_automation_report(s: &KiraState) -> String {
     lines.push("Recent runs:".to_string());
     for r in s.macro_run_log.iter().rev().take(5) {
         let ago = (now - r.ts) / 1000;
-        lines.push(format!("  \u2022 {} \u2014 {} steps \u2014 {}s ago", r.macro_name, r.steps_run, ago));
+        lines.push(format!("  \u{2022} {} \u{2014} {} steps \u{2014} {}s ago", r.macro_name, r.steps_run, ago));
     }
     lines.push(String::new());
     lines.push("Variables:".to_string());
@@ -5238,7 +5238,7 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
             Some(format!(r#"{{"ok":true,"pipeline":"{}"}}"#, esc(&id)))
         }
         ("GET",  "/expr")           => {
-            // Evaluate expression: GET /expr?e=5+3 \u2192 {"result":"8"}
+            // Evaluate expression: GET /expr?e=5+3 \u{2192} {"result":"8"}
             let expr = path.find("e=").map(|i| &path[i+2..]).unwrap_or("").replace('+', " ");
             let result = eval_expr(&STATE.lock().unwrap(), &expr);
             Some(format!(r#"{{"result":"{}"}}"#, esc(&result)))

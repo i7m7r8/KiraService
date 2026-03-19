@@ -10,7 +10,7 @@ android {
         minSdk 26
         targetSdk 34
         versionCode buildVersionCode
-        versionName "0.0.1"
+        versionName "9.0.0"
         ndk { abiFilters "arm64-v8a", "armeabi-v7a" }
         externalNativeBuild { cmake { cppFlags "" } }
     }
@@ -19,35 +19,36 @@ android {
     }
     buildTypes {
         debug   { debuggable true }
-        release { minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt') }
+        release { minifyEnabled false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'); signingConfig signingConfigs.debug }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
-    packaging {
+    packagingOptions {
         jniLibs { useLegacyPackaging true }
         resources {
-            excludes += ['META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
-                         'META-INF/DEPENDENCIES', 'META-INF/LICENSE.md', 'META-INF/NOTICE.md',
-                         'META-INF/LICENSE', 'META-INF/NOTICE']
+            excludes += ['META-INF/INDEX.LIST','META-INF/io.netty.versions.properties',
+                         'META-INF/DEPENDENCIES','META-INF/LICENSE.md','META-INF/NOTICE.md',
+                         'META-INF/LICENSE','META-INF/NOTICE']
         }
+    }
+    configurations.all {
+        exclude group: 'org.jetbrains', module: 'annotations-java5'
+        resolutionStrategy { force 'org.jetbrains:annotations:23.0.0' }
     }
 }
 
-// Remove resolutionStrategy.force entirely ? it conflicts with AGP's own
-// ConstraintHandler alignment pass in Gradle 8.5+.
-// Use a simple exclude for the old annotations artifact instead.
-configurations.all {
-    exclude group: 'org.jetbrains', module: 'annotations-java5'
-}
-
 dependencies {
-    // Core Android Agent (Shizuku ? shell god mode)
+    // Core Android (FileProvider for OTA installs)
+    implementation 'androidx.core:core:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+
+    // Shizuku ADB bridge
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
 
-    // HTTP (AI APIs + web)
+    // HTTP client (AI APIs + Rust engine)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
@@ -56,41 +57,44 @@ dependencies {
     // JSON
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // Markdown rendering
+    // Markdown rendering (chat bubbles)
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
     implementation 'io.noties.markwon:ext-tables:4.6.2'
     implementation 'io.noties.markwon:html:4.6.2'
 
-    // Background work
+    // Background work scheduler
     implementation 'androidx.work:work-runtime:2.9.0'
 
-    // Local database (conversation history, task logs)
+    // Room database (conversation history, task logs)
     implementation 'androidx.room:room-runtime:2.6.1'
     annotationProcessor 'androidx.room:room-compiler:2.6.1'
 
-    // HTML parsing / web scraping
+    // HTML / web scraping
     implementation 'org.jsoup:jsoup:1.17.2'
 
-    // Utilities
+    // File utilities
     implementation 'commons-io:commons-io:2.15.1'
     implementation 'org.apache.commons:commons-lang3:3.14.0'
 
-    // OpenClaw / ZeroClaw EventBus (component messaging)
+    // OpenClaw EventBus
     implementation 'org.greenrobot:eventbus:3.3.1'
 
-    // Security: AES256-GCM credential storage
+    // Secure credential storage
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 
-    // Settings and preferences
+    // Settings UI
     implementation 'androidx.preference:preference:1.2.1'
 
-    // Biometric auth gate
+    // Biometric auth
     implementation 'androidx.biometric:biometric:1.1.0'
 
-    // On-device OCR (ZeroClaw vision without internet)
+    // On-device OCR (ZeroClaw vision)
     implementation 'com.google.mlkit:text-recognition:16.0.1'
 
-    // FileProvider for OTA APK install
-    implementation 'androidx.core:core:1.12.0'
+    // Sensor / location for automation triggers
+    implementation 'com.google.android.gms:play-services-location:21.1.0'
+
+    // Speech recognition (voice commands)
+    implementation 'androidx.activity:activity:1.8.2'
 }

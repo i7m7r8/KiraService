@@ -71,14 +71,19 @@ jobs:
         run: |
           PASS="${{ secrets.KEYSTORE_PASSWORD }}"
           [ -z "$PASS" ] && PASS="kira_stable_2024"
-          keytool -genkeypair \
-            -alias kira \
-            -keyalg RSA -keysize 1024 \
-            -validity 10000 \
-            -keystore kira.jks \
-            -storepass "$PASS" -keypass "$PASS" \
-            -dname "CN=Kira,O=KiraAI,C=US" \
-            -noprompt 2>/dev/null
+
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > kira.jks
+          else
+            keytool -genkeypair \
+              -alias kira \
+              -keyalg RSA -keysize 2048 \
+              -validity 10000 \
+              -keystore kira.jks \
+              -storepass "$PASS" -keypass "$PASS" \
+              -dname "CN=KiraAI,OU=KiraService,O=KiraAI,L=US,ST=US,C=US" \
+              -noprompt 2>/dev/null
+          fi
           echo "KEYSTORE_PATH=$(pwd)/kira.jks" >> $GITHUB_ENV
           echo "KEYSTORE_PASS=$PASS"           >> $GITHUB_ENV
 
@@ -114,15 +119,15 @@ jobs:
           [ -n "$UNIV" ] && cp "$UNIV" "dist/KiraAgent-v${VER}-universal.apk"
 
           # arm64-v8a (modern Android phones)
-          ARM64=$(find app/build/outputs/apk/release -name "*arm64*" -o -name "*arm64-v8a*" 2>/dev/null | head -1)
+          ARM64=$(find app/build/outputs/apk/release \( -name "*arm64-v8a*" \) -not -name "*universal*" 2>/dev/null | head -1)
           [ -n "$ARM64" ] && cp "$ARM64" "dist/KiraAgent-v${VER}-arm64-v8a.apk"
 
           # armeabi-v7a (older 32-bit phones)
-          ARM32=$(find app/build/outputs/apk/release -name "*armeabi-v7a*" -o -name "*armv7*" 2>/dev/null | head -1)
+          ARM32=$(find app/build/outputs/apk/release \( -name "*armeabi-v7a*" \) -not -name "*universal*" 2>/dev/null | head -1)
           [ -n "$ARM32" ] && cp "$ARM32" "dist/KiraAgent-v${VER}-armeabi-v7a.apk"
 
           # x86_64 (emulators, Chromebooks, some tablets)
-          X64=$(find app/build/outputs/apk/release -name "*x86_64*" 2>/dev/null | head -1)
+          X64=$(find app/build/outputs/apk/release \( -name "*x86_64*" \) -not -name "*universal*" 2>/dev/null | head -1)
           [ -n "$X64" ] && cp "$X64" "dist/KiraAgent-v${VER}-x86_64.apk"
 
           # Fallback: if splits didn't work, copy whatever is there
@@ -158,7 +163,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.TAG }}
-          name: "Kira Agent v${{ steps.ver.outputs.VER }}"
+          name: "Kira Agent v${{ steps.ver.outputs.VER }} (alpha)"
+          prerelease: true
           body: |
             ## Kira Agent v${{ steps.ver.outputs.VER }}
             **Released:** ${{ steps.ver.outputs.TS }}

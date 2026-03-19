@@ -172,8 +172,13 @@ public class KiraOtaUpdater {
                     tag, apkUrl, body, date, "", apkBytes
                 );
 
-                if (action == null) action = "{}";
-                JSONObject decision = new JSONObject(action);
+                if (action == null || action.trim().isEmpty()) action = "{}";
+                JSONObject decision;
+                try { decision = new JSONObject(action); }
+                catch (Exception ex) {
+                    Log.w(TAG, "OTA: bad JSON from Rust: " + action);
+                    decision = new JSONObject();
+                }
                 String act = decision.optString("action", "up_to_date");
 
                 Log.d(TAG, "Rust OTA decision: " + act + " for " + tag);
@@ -263,8 +268,13 @@ public class KiraOtaUpdater {
                 String instJson = RustBridge.otaOnDownloaded(
                     apkFile.getAbsolutePath(), sha256
                 );
-                if (instJson == null) instJson = "{}";
-                JSONObject inst = new JSONObject(instJson);
+                if (instJson == null || instJson.trim().isEmpty()) instJson = "{}";
+                JSONObject inst;
+                try { inst = new JSONObject(instJson); }
+                catch (Exception ex) {
+                    Log.w(TAG, "OTA: bad install JSON from Rust: " + instJson);
+                    inst = new JSONObject();
+                }
 
                 if (!inst.optBoolean("ok", false)) {
                     throw new Exception(inst.optString("error", "SHA256 mismatch"));

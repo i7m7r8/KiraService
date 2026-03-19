@@ -1326,10 +1326,54 @@ public class MainActivity extends Activity
         otaUpdater.scheduleChecks();
     }
 
+    // ── Live theme tokens loaded from Rust getTheme() ─────────────────────
+    private int T_BG=0xFF11111B, T_SURFACE=0xFF1E1E2E, T_SURFACE2=0xFF181825;
+    private int T_SURFACE5=0xFF313244, T_SURFACE_VAR=0xFF313244;
+    private int T_TEXT=0xFFCDD6F4, T_TEXT2=0xFF9399B2;
+    private int T_OUTLINE=0xFF585B70, T_OUTLINE_VAR=0xFF313244;
+    private int T_ACCENT=0xFFB4BEFE, T_ON_ACCENT=0xFF1E1E2E;
+    private int T_SECONDARY=0xFFCBA6F7, T_TERTIARY=0xFFFAB387;
+    private int T_ERROR=0xFFF38BA8, T_SUCCESS=0xFFA6E3A1, T_WARNING=0xFFFAB387;
+    private int T_RIPPLE=0x1FB4BEFE;
+    private int T_CORNER_SM=10, T_CORNER_MD=16, T_CORNER_LG=24;
+
+    private void loadThemeTokens() {
+        try {
+            String json = RustBridge.getTheme();
+            if (json == null || json.isEmpty()) return;
+            org.json.JSONObject t = new org.json.JSONObject(json);
+            T_BG          = (int) t.optLong("bg",          T_BG);
+            T_SURFACE     = (int) t.optLong("surface",     T_SURFACE);
+            T_SURFACE2    = (int) t.optLong("surface2",    T_SURFACE2);
+            T_SURFACE5    = (int) t.optLong("surface5",    T_SURFACE5);
+            T_SURFACE_VAR = (int) t.optLong("surface_var", T_SURFACE_VAR);
+            T_TEXT        = (int) t.optLong("on_surface",  T_TEXT);
+            T_TEXT2       = (int) t.optLong("muted",       T_TEXT2);
+            T_OUTLINE     = (int) t.optLong("outline",     T_OUTLINE);
+            T_OUTLINE_VAR = (int) t.optLong("outline_var", T_OUTLINE_VAR);
+            T_ACCENT      = (int) t.optLong("accent",      T_ACCENT);
+            T_ON_ACCENT   = (int) t.optLong("on_accent",   T_ON_ACCENT);
+            T_SECONDARY   = (int) t.optLong("secondary",   T_SECONDARY);
+            T_TERTIARY    = (int) t.optLong("tertiary",    T_TERTIARY);
+            T_ERROR       = (int) t.optLong("error",       T_ERROR);
+            T_SUCCESS     = (int) t.optLong("success",     T_SUCCESS);
+            T_WARNING     = (int) t.optLong("warning",     T_WARNING);
+            T_RIPPLE      = (int) t.optLong("ripple",      T_RIPPLE);
+            T_CORNER_SM   = t.optInt("corner_sm", T_CORNER_SM);
+            T_CORNER_MD   = t.optInt("corner_md", T_CORNER_MD);
+            T_CORNER_LG   = t.optInt("corner_lg", T_CORNER_LG);
+            isDarkTheme   = t.optBoolean("is_dark", true);
+        } catch (Throwable e) {
+            Log.w("KiraTheme", "loadThemeTokens: " + e.getMessage());
+        }
+    }
+
     private void applyTheme() {
-        // ── System chrome ───────────────────────────────────────────────────
-        getWindow().setStatusBarColor(isDarkTheme ? D_BG : L_BG);
-        getWindow().setNavigationBarColor(isDarkTheme ? D_NAV : L_NAV);
+        loadThemeTokens();
+
+        // ── System chrome ────────────────────────────────────────────────────
+        getWindow().setStatusBarColor(T_BG);
+        getWindow().setNavigationBarColor(T_SURFACE2);
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             int flags = getWindow().getDecorView().getSystemUiVisibility();
             if (!isDarkTheme) {
@@ -1342,41 +1386,37 @@ public class MainActivity extends Activity
             getWindow().getDecorView().setSystemUiVisibility(flags);
         }
 
-        // ── Nav bar ─────────────────────────────────────────────────────────
+        // ── Nav bar ──────────────────────────────────────────────────────────
         View nav = findViewById(R.id.bottomNav);
-        if (nav != null) nav.setBackgroundColor(isDarkTheme ? D_NAV : L_NAV);
-        // Re-colour nav icons to correct active/inactive state
+        if (nav != null) nav.setBackgroundColor((T_SURFACE2 & 0x00FFFFFF) | 0xF0000000);
         for (int i = 0; i < 4; i++) {
             boolean on = i == currentTab;
             if (navIcons != null && navIcons[i] != null)
-                navIcons[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
+                navIcons[i].setTextColor(on ? T_ACCENT : T_TEXT2);
             if (navTexts != null && navTexts[i] != null)
-                navTexts[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
+                navTexts[i].setTextColor(on ? T_ACCENT : T_TEXT2);
         }
 
-        // ── Fragment backgrounds ────────────────────────────────────────────
-        // Dark: transparent so GalaxyView shows through
-        // Light: solid warm white
-        int fragBg = isDarkTheme ? 0x00000000 : L_BG;
-        if (homeFragment    != null) homeFragment.setBackgroundColor(fragBg);
-        if (settingsFragment!= null) settingsFragment.setBackgroundColor(fragBg);
-        if (historyFragment != null) historyFragment.setBackgroundColor(fragBg);
-        if (toolsFragment   != null) toolsFragment.setBackgroundColor(fragBg);
+        // ── Fragment backgrounds (transparent — galaxy shows through) ────────
+        if (homeFragment     != null) homeFragment.setBackgroundColor(0x00000000);
+        if (settingsFragment != null) settingsFragment.setBackgroundColor(0x00000000);
+        if (historyFragment  != null) historyFragment.setBackgroundColor(0x00000000);
+        if (toolsFragment    != null) toolsFragment.setBackgroundColor(0x00000000);
 
-        // ── Chat input bar ──────────────────────────────────────────────────
+        // ── Chat input bar ───────────────────────────────────────────────────
         View inputBar = homeFragment != null ? homeFragment.findViewWithTag("inputBar") : null;
-        if (inputBar != null) inputBar.setBackgroundColor(isDarkTheme ? 0xF0090913 : 0xF0F0F0FC);
+        if (inputBar != null)
+            inputBar.setBackgroundColor((T_SURFACE2 & 0x00FFFFFF) | 0xF2000000);
         if (inputField != null) {
-            inputField.setBackgroundColor(isDarkTheme ? D_INPUT_BG : L_INPUT_BG);
-            inputField.setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
-            inputField.setHintTextColor(isDarkTheme ? D_TEXT3 : L_TEXT3);
+            inputField.setBackgroundColor((T_SURFACE_VAR & 0x00FFFFFF) | 0xCC000000);
+            inputField.setTextColor(T_TEXT);
+            inputField.setHintTextColor(T_TEXT2);
         }
 
-        // ── Header subtitle ─────────────────────────────────────────────────
-        if (headerSubtitle != null)
-            headerSubtitle.setTextColor(isDarkTheme ? D_TEXT3 : L_TEXT3);
+        // ── Header ───────────────────────────────────────────────────────────
+        if (headerSubtitle != null) headerSubtitle.setTextColor(T_TEXT2);
 
-        // ── Chat bubbles ────────────────────────────────────────────────────
+        // ── Chat bubbles ─────────────────────────────────────────────────────
         if (chatContainer != null) {
             for (int i = 0; i < chatContainer.getChildCount(); i++) {
                 View child = chatContainer.getChildAt(i);
@@ -1388,22 +1428,21 @@ public class MainActivity extends Activity
                 if (ts.startsWith("user_") && ll.getChildCount() > 1) {
                     View msgV = ll.getChildAt(1);
                     if (msgV instanceof android.widget.TextView) {
-                        msgV.setBackgroundColor(isDarkTheme ? D_USER_BUBBLE : L_USER_BUBBLE);
-                        ((android.widget.TextView)msgV).setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
+                        msgV.setBackgroundColor((T_SURFACE_VAR & 0x00FFFFFF) | 0xDD000000);
+                        ((android.widget.TextView)msgV).setTextColor(T_TEXT);
                     }
                 } else if (ts.startsWith("kira_") && ll.getChildCount() > 1) {
                     View msgV = ll.getChildAt(1);
                     if (msgV instanceof android.widget.TextView) {
-                        msgV.setBackgroundColor(isDarkTheme ? D_KIRA_BUBBLE : L_KIRA_BUBBLE);
-                        ((android.widget.TextView)msgV).setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
+                        msgV.setBackgroundColor((T_SURFACE & 0x00FFFFFF) | 0xCC000000);
+                        ((android.widget.TextView)msgV).setTextColor(T_TEXT);
                     }
                 }
             }
         }
 
-        // ── Settings hints ──────────────────────────────────────────────────
+        // ── Settings hints ───────────────────────────────────────────────────
         if (settingsFragment != null) {
-            int hintCol = isDarkTheme ? D_TEXT3 : L_TEXT3;
             int[] hintIds = { R.id.apiKeyHint, R.id.modelHint, R.id.baseUrlHint,
                 R.id.tgTokenHint, R.id.tgIdHint, R.id.visionHint, R.id.maxStepsHint,
                 R.id.heartbeatHint, R.id.personaHint, R.id.providerHint, R.id.skillsHint,
@@ -1411,24 +1450,24 @@ public class MainActivity extends Activity
                 R.id.rustStatsHint, R.id.memoryHint, R.id.historySettingHint };
             for (int id : hintIds) {
                 android.widget.TextView tv = settingsFragment.findViewById(id);
-                if (tv != null) tv.setTextColor(hintCol);
+                if (tv != null) tv.setTextColor(T_TEXT2);
             }
             if (rustStatsContent != null) {
-                rustStatsContent.setTextColor(isDarkTheme ? 0xFF44AA44 : 0xFF226622);
-                rustStatsContent.setBackgroundColor(isDarkTheme ? 0xFF030308 : 0xFFF4F8F4);
+                rustStatsContent.setTextColor(T_SUCCESS);
+                rustStatsContent.setBackgroundColor((T_BG & 0x00FFFFFF) | 0xEE000000);
             }
             if (memoryContent != null) {
-                memoryContent.setTextColor(isDarkTheme ? 0xFF44AA44 : 0xFF226622);
-                memoryContent.setBackgroundColor(isDarkTheme ? 0xFF050508 : 0xFFF4F8F4);
+                memoryContent.setTextColor(T_SUCCESS);
+                memoryContent.setBackgroundColor((T_BG & 0x00FFFFFF) | 0xEE000000);
             }
         }
 
-        // ── Save preference ─────────────────────────────────────────────────
+        // ── Persist ──────────────────────────────────────────────────────────
         getSharedPreferences("kira_theme", MODE_PRIVATE)
             .edit().putBoolean("dark", isDarkTheme).apply();
     }
 
-    /** Toggle theme and persist */
+    /** Toggle theme */
     private void toggleTheme() {
         isDarkTheme = !isDarkTheme;
         applyTheme();

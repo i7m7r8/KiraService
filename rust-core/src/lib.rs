@@ -803,6 +803,52 @@ impl ThemeConfig {
         }
     }
 
+    /// ── Catppuccin Mocha — "Mocha Lens" ─────────────────────────────────────
+    /// Warm dark, soft glass, pastel accents. Official Catppuccin Mocha palette.
+    /// Primary:   Lavender #B4BEFE  Secondary: Mauve #CBA6F7
+    /// Tertiary:  Peach    #FAB387  Success:   Green #A6E3A1
+    /// Error:     Pink     #F38BA8  Warning:   Peach #FAB387
+    /// BG:        Crust    #11111B  Surface:   Base  #1E1E2E
+    /// Text:      #CDD6F4           Muted:     #9399B2
+    fn catppuccin_mocha() -> Self {
+        ThemeConfig {
+            accent_color:     0xFFB4BEFE,
+            on_accent_color:  0xFF1E1E2E,
+            secondary_color:  0xFFCBA6F7,
+            on_secondary:     0xFF1E1E2E,
+            tertiary_color:   0xFFFAB387,
+            on_tertiary:      0xFF1E1E2E,
+            bg_color:         0xFF11111B,
+            surface_color:    0xFF1E1E2E,
+            surface2_color:   0xFF181825,
+            surface3_color:   0xFF181825,
+            surface5_color:   0xFF313244,
+            card_color:       0xFF1E1E2E,
+            surface_var_color:0xFF313244,
+            on_surface_color: 0xFFCDD6F4,
+            muted_color:      0xFF9399B2,
+            outline_color:    0xFF585B70,
+            outline_var_color:0xFF313244,
+            error_color:      0xFFF38BA8,
+            success_color:    0xFFA6E3A1,
+            warning_color:    0xFFFAB387,
+            scrim_color:      0xCC11111B,
+            ripple_color:     0x1FB4BEFE,
+            corner_radius_sm: 10,
+            corner_radius_md: 16,
+            corner_radius_lg: 24,
+            corner_radius_xl: 32,
+            star_count:       55,
+            star_speed:       0.006,
+            star_tilt_x:      0.0,
+            star_tilt_y:      0.0,
+            star_parallax_x:  0.0,
+            star_parallax_y:  0.0,
+            theme_name:       String::from("catppuccin_mocha"),
+            is_dark:          true,
+        }
+    }
+
     fn to_json(&self) -> String {
         format!(
             r#"{{"name":"{}","accent":{},"bg":{},"card":{},"muted":{},"surface":{},"on_surface":{},"on_accent":{},"surface_var":{},"outline":{},"error":{},"is_dark":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6},"secondary":{},"on_secondary":{},"tertiary":{},"on_tertiary":{},"surface2":{},"surface3":{},"surface5":{},"outline_var":{},"success":{},"warning":{},"scrim":{},"ripple":{},"corner_sm":{},"corner_md":{},"corner_lg":{},"corner_xl":{}}}"#,
@@ -1047,7 +1093,7 @@ lazy_static::lazy_static! {
         active_provider: "groq".to_string(),
         active_profile:  "default".to_string(),
         soul_md: "You are Kira, a powerful Android AI agent. You are helpful, proactive, and autonomous.".to_string(),
-        theme:   ThemeConfig::material_dark(),
+        theme:   ThemeConfig::catppuccin_mocha(),
         config:  KiraConfig::default(),
         setup:   SetupState::default(),
         shizuku: ShizukuStatus::default(),
@@ -1991,13 +2037,14 @@ mod jni_bridge {
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         name: *const c_char,
     ) {
-        let name = unsafe { std::ffi::CStr::from_ptr(name).to_str().unwrap_or("material") };
+        let name = unsafe { std::ffi::CStr::from_ptr(name).to_str().unwrap_or("catppuccin_mocha") };
         let mut s = STATE.lock().unwrap();
         s.theme = match name {
             "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(),
             "material_light" | "material_neo_light"       => ThemeConfig::material_light(),
             "kira"                                        => ThemeConfig::default(),
-            _                                             => ThemeConfig::material_dark(),
+            "catppuccin_mocha" | "catppuccin" | "mocha"  => ThemeConfig::catppuccin_mocha(),
+            _                                             => ThemeConfig::catppuccin_mocha(),
         };
     }
 

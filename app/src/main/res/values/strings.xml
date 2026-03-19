@@ -3,62 +3,28 @@
     <string name="app_name">Kira</string>
     <string name="accessibility_description">Gives Kira AI full phone control including screen reading, tapping, typing, and notifications.</string>
 
-    <!-- ── Material 3 Dark Theme (default) ──────────────────────────────── -->
-    <style name="AppTheme" parent="Theme.MaterialComponents.NoActionBar.Bridge">
-        <!-- Surface colours -->
-        <item name="android:windowBackground">#FF111318</item>
-        <item name="colorSurface">#FF1C1F26</item>
-        <item name="colorSurfaceVariant">#FF2A2D35</item>
-        <item name="android:colorBackground">#FF111318</item>
-        <!-- Primary / accent -->
-        <item name="colorPrimary">#FFBB86FC</item>
-        <item name="colorPrimaryVariant">#FF3700B3</item>
-        <item name="colorOnPrimary">#FF000000</item>
-        <item name="colorSecondary">#FF03DAC6</item>
-        <item name="colorOnSecondary">#FF000000</item>
-        <item name="colorError">#FFCF6679</item>
-        <item name="colorOnError">#FF000000</item>
-        <!-- Text -->
-        <item name="android:textColorPrimary">#FFE6E1E5</item>
-        <item name="android:textColorSecondary">#FF938F99</item>
-        <item name="android:editTextColor">#FFE6E1E5</item>
-        <!-- System bars -->
-        <item name="android:statusBarColor">#FF111318</item>
-        <item name="android:navigationBarColor">#FF1C1F26</item>
-        <!-- Controls -->
-        <item name="android:colorControlActivated">#FFBB86FC</item>
-        <item name="android:colorControlHighlight">#22BB86FC</item>
-        <!-- Elevation overlay (Material dark surfaces) -->
-        <item name="elevationOverlayEnabled">true</item>
-        <item name="elevationOverlayColor">#FFFFFFFF</item>
-        <!-- Shape system -->
-        <item name="shapeAppearanceSmallComponent">@style/ShapeSmall</item>
-        <item name="shapeAppearanceMediumComponent">@style/ShapeMedium</item>
-        <item name="shapeAppearanceLargeComponent">@style/ShapeLarge</item>
+    <!-- ── Catppuccin Mocha — pure android theme, no Material dependency ──── -->
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF11111B</item>
+        <item name="android:statusBarColor">#FF11111B</item>
+        <item name="android:navigationBarColor">#FF181825</item>
+        <item name="android:textColorPrimary">#FFCDD6F4</item>
+        <item name="android:textColorSecondary">#FF9399B2</item>
+        <item name="android:editTextColor">#FFCDD6F4</item>
+        <item name="android:colorControlActivated">#FFB4BEFE</item>
+        <item name="android:colorControlHighlight">#22B4BEFE</item>
+        <item name="android:colorAccent">#FFB4BEFE</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Activity</item>
     </style>
 
-    <!-- ── Material 3 Setup Theme ─────────────────────────────────────────── -->
-    <style name="SetupTheme" parent="Theme.MaterialComponents.NoActionBar.Bridge">
-        <item name="android:windowBackground">#FF111318</item>
-        <item name="colorSurface">#FF1C1F26</item>
-        <item name="colorPrimary">#FFBB86FC</item>
-        <item name="colorOnPrimary">#FF000000</item>
-        <item name="android:textColorPrimary">#FFE6E1E5</item>
-        <item name="android:editTextColor">#FFE6E1E5</item>
-        <item name="android:statusBarColor">#FF111318</item>
-        <item name="android:colorControlActivated">#FFBB86FC</item>
-        <item name="elevationOverlayEnabled">true</item>
-    </style>
-
-    <!-- ── Shape overrides ───────────────────────────────────────────────── -->
-    <style name="ShapeSmall" parent="ShapeAppearance.MaterialComponents.SmallComponent">
-        <item name="cornerSize">8dp</item>
-    </style>
-    <style name="ShapeMedium" parent="ShapeAppearance.MaterialComponents.MediumComponent">
-        <item name="cornerSize">12dp</item>
-    </style>
-    <style name="ShapeLarge" parent="ShapeAppearance.MaterialComponents.LargeComponent">
-        <item name="cornerSize">16dp</item>
+    <!-- ── Setup Theme ───────────────────────────────────────────────────── -->
+    <style name="SetupTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF11111B</item>
+        <item name="android:statusBarColor">#FF11111B</item>
+        <item name="android:textColorPrimary">#FFCDD6F4</item>
+        <item name="android:editTextColor">#FFCDD6F4</item>
+        <item name="android:colorControlActivated">#FFB4BEFE</item>
+        <item name="android:colorAccent">#FFB4BEFE</item>
     </style>
 
     <!-- ── Settings row base ─────────────────────────────────────────────── -->
@@ -114,7 +80,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:text">›</item>
-        <item name="android:textColor">#FF49454F</item>
+        <item name="android:textColor">#FF585B70</item>
         <item name="android:textSize">24sp</item>
         <item name="android:paddingStart">8dp</item>
     </style>
@@ -124,7 +90,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textSize">11sp</item>
-        <item name="android:textColor">#FFBB86FC</item>
+        <item name="android:textColor">#FFB4BEFE</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.15</item>
         <item name="android:paddingStart">20dp</item>
@@ -132,4 +98,6 @@
         <item name="android:paddingBottom">6dp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
+
+    <!-- Shape styles removed - not needed without MaterialComponents -->
 </resources>

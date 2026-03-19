@@ -115,27 +115,21 @@ jobs:
         run: |
           mkdir -p dist
           VER="${{ steps.ver.outputs.VER }}"
+          APKDIR="app/build/outputs/apk/release"
 
-          # Universal APK (fat — contains all ABIs)
-          UNIV=$(find app/build/outputs/apk/release -name "*universal*.apk" 2>/dev/null | head -1)
-          [ -n "$UNIV" ] && cp "$UNIV" "dist/KiraAgent-v${VER}-universal.apk"
+          for f in "$APKDIR"/*.apk; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *universal*) cp "$f" "dist/KiraAgent-v${VER}-universal.apk" ;;
+              *arm64-v8a*) cp "$f" "dist/KiraAgent-v${VER}-arm64-v8a.apk" ;;
+              *armeabi-v7a*) cp "$f" "dist/KiraAgent-v${VER}-armeabi-v7a.apk" ;;
+              *x86_64*)    cp "$f" "dist/KiraAgent-v${VER}-x86_64.apk" ;;
+            esac
+          done
 
-          # arm64-v8a (modern Android phones)
-          ARM64=$(find app/build/outputs/apk/release \( -name "*arm64-v8a*" \) -not -name "*universal*" 2>/dev/null | head -1)
-          [ -n "$ARM64" ] && cp "$ARM64" "dist/KiraAgent-v${VER}-arm64-v8a.apk"
-
-          # armeabi-v7a (older 32-bit phones)
-          ARM32=$(find app/build/outputs/apk/release \( -name "*armeabi-v7a*" \) -not -name "*universal*" 2>/dev/null | head -1)
-          [ -n "$ARM32" ] && cp "$ARM32" "dist/KiraAgent-v${VER}-armeabi-v7a.apk"
-
-          # x86_64 (emulators, Chromebooks, some tablets)
-          X64=$(find app/build/outputs/apk/release \( -name "*x86_64*" \) -not -name "*universal*" 2>/dev/null | head -1)
-          [ -n "$X64" ] && cp "$X64" "dist/KiraAgent-v${VER}-x86_64.apk"
-
-          # Fallback: if splits didn't work, copy whatever is there
+          # Fallback
           if [ -z "$(ls dist/*.apk 2>/dev/null)" ]; then
-            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-            cp "$APK" "dist/KiraAgent-v${VER}.apk"
+            cp "$APKDIR"/*.apk "dist/KiraAgent-v${VER}.apk" 2>/dev/null || true
           fi
 
           echo "=== dist contents ==="

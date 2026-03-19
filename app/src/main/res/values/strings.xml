@@ -9,7 +9,7 @@
         <item name="android:windowBackground">#FF111318</item>
         <item name="colorSurface">#FF1C1F26</item>
         <item name="colorSurfaceVariant">#FF2A2D35</item>
-        <item name="colorBackground">#FF111318</item>
+        <item name="android:colorBackground">#FF111318</item>
         <!-- Primary / accent -->
         <item name="colorPrimary">#FFBB86FC</item>
         <item name="colorPrimaryVariant">#FF3700B3</item>

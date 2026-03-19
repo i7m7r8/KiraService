@@ -23,7 +23,7 @@
             <View
                 android:layout_width="3dp"
                 android:layout_height="24dp"
-                android:background="#DC143C"
+                android:background="#B4BEFE"
                 android:layout_marginEnd="10dp"/>
 
             <TextView
@@ -33,7 +33,7 @@
                 android:text="CAPABILITY MATRIX"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:textColor="#DC143C"
+                android:textColor="#B4BEFE"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.15"/>
         </LinearLayout>
@@ -43,7 +43,7 @@
             android:layout_height="wrap_content"
             android:text="176+ phone control &amp; AI tools"
             android:textSize="11sp"
-            android:textColor="#222240"
+            android:textColor="#333355"
             android:fontFamily="monospace"
             android:layout_marginTop="4dp"
             android:paddingStart="13dp"/>
@@ -52,7 +52,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#11DC143C"/>
+        android:background="#0FB4BEFE"/>
 
     <ScrollView
         android:layout_width="match_parent"

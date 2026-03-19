@@ -84,7 +84,7 @@ public class GalaxyView extends View {
         float t = now * 0.001f;
 
         // Background — Catppuccin Crust
-        canvas.drawColor(0xFF11111B);
+        canvas.drawColor(0xFF0B0B0F);
 
         float px = parallaxX * w * 0.04f;
         float py = parallaxY * h * 0.04f;

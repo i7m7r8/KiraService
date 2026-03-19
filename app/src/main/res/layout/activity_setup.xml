@@ -2,7 +2,7 @@
 <!-- v38: Setup built entirely in SetupActivity.java ? this layout is not used but kept for R id references -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="#050508">
+    android:background="#0B0B0F">
 
     <!-- IDs referenced programmatically in SetupActivity -->
     <FrameLayout android:id="@+id/setupPageContainer"
@@ -30,7 +30,7 @@
             android:layout_width="170dp" android:layout_height="52dp"
             android:text="Get Started" android:textColor="#EEEEF5"
             android:textSize="15sp" android:textStyle="bold"
-            android:gravity="center" android:background="#DC143C"
+            android:gravity="center" android:background="#B4BEFE"
             android:clickable="true" android:focusable="true"/>
     </LinearLayout>
 </FrameLayout>

@@ -3,54 +3,51 @@
     <string name="app_name">Kira</string>
     <string name="accessibility_description">Gives Kira AI full phone control including screen reading, tapping, typing, and notifications.</string>
 
-    <!-- ── Catppuccin Mocha — pure android theme, no Material dependency ──── -->
+    <!-- ── Obsidian Glass theme — pure android, zero external deps ────────── -->
     <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#FF11111B</item>
-        <item name="android:statusBarColor">#FF11111B</item>
-        <item name="android:navigationBarColor">#FF181825</item>
-        <item name="android:textColorPrimary">#FFCDD6F4</item>
-        <item name="android:textColorSecondary">#FF9399B2</item>
-        <item name="android:editTextColor">#FFCDD6F4</item>
+        <item name="android:windowBackground">#FF0B0B0F</item>
+        <item name="android:statusBarColor">#FF0B0B0F</item>
+        <item name="android:navigationBarColor">#FF0B0B0F</item>
+        <item name="android:textColorPrimary">#FFE6E6F0</item>
+        <item name="android:textColorSecondary">#FF8888AA</item>
+        <item name="android:editTextColor">#FFE6E6F0</item>
         <item name="android:colorControlActivated">#FFB4BEFE</item>
-        <item name="android:colorControlHighlight">#22B4BEFE</item>
+        <item name="android:colorControlHighlight">#1AB4BEFE</item>
         <item name="android:colorAccent">#FFB4BEFE</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Activity</item>
     </style>
 
-    <!-- ── Setup Theme ───────────────────────────────────────────────────── -->
     <style name="SetupTheme" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#FF11111B</item>
-        <item name="android:statusBarColor">#FF11111B</item>
-        <item name="android:textColorPrimary">#FFCDD6F4</item>
-        <item name="android:editTextColor">#FFCDD6F4</item>
+        <item name="android:windowBackground">#FF0B0B0F</item>
+        <item name="android:statusBarColor">#FF0B0B0F</item>
+        <item name="android:textColorPrimary">#FFE6E6F0</item>
+        <item name="android:editTextColor">#FFE6E6F0</item>
         <item name="android:colorControlActivated">#FFB4BEFE</item>
         <item name="android:colorAccent">#FFB4BEFE</item>
     </style>
 
-    <!-- ── Settings row base ─────────────────────────────────────────────── -->
+    <!-- Settings row — glass card style -->
     <style name="SettingsRow">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">64dp</item>
+        <item name="android:layout_height">60dp</item>
         <item name="android:orientation">horizontal</item>
-        <item name="android:background">#CC1E1E2E</item>
-        <item name="android:paddingStart">16dp</item>
-        <item name="android:paddingEnd">12dp</item>
+        <item name="android:background">#08FFFFFF</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">14dp</item>
         <item name="android:layout_marginBottom">1dp</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
     </style>
 
-    <!-- ── Settings icon box ─────────────────────────────────────────────── -->
     <style name="SettingsIcon">
-        <item name="android:layout_width">36dp</item>
-        <item name="android:layout_height">36dp</item>
+        <item name="android:layout_width">32dp</item>
+        <item name="android:layout_height">32dp</item>
         <item name="android:gravity">center</item>
-        <item name="android:textSize">18sp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:layout_marginEnd">14dp</item>
     </style>
 
-    <!-- ── Settings text block ───────────────────────────────────────────── -->
     <style name="SettingsTextBlock">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
@@ -58,46 +55,40 @@
         <item name="android:orientation">vertical</item>
     </style>
 
-    <!-- ── Settings label ────────────────────────────────────────────────── -->
     <style name="SettingsLabel">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">#FFCDD6F4</item>
+        <item name="android:textColor">#FFE6E6F0</item>
         <item name="android:textSize">14sp</item>
     </style>
 
-    <!-- ── Settings hint ─────────────────────────────────────────────────── -->
     <style name="SettingsHint">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">#FF9399B2</item>
+        <item name="android:textColor">#FF666688</item>
         <item name="android:textSize">11sp</item>
         <item name="android:fontFamily">monospace</item>
     </style>
 
-    <!-- ── Chevron › ─────────────────────────────────────────────────────── -->
     <style name="SettingsChevron">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:text">›</item>
-        <item name="android:textColor">#FF585B70</item>
-        <item name="android:textSize">24sp</item>
+        <item name="android:textColor">#FF333355</item>
+        <item name="android:textSize">22sp</item>
         <item name="android:paddingStart">8dp</item>
     </style>
 
-    <!-- ── Section header ────────────────────────────────────────────────── -->
     <style name="SectionHeader">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">11sp</item>
-        <item name="android:textColor">#FFB4BEFE</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">#88B4BEFE</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.15</item>
-        <item name="android:paddingStart">20dp</item>
-        <item name="android:paddingTop">16dp</item>
+        <item name="android:letterSpacing">0.2</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingTop">20dp</item>
         <item name="android:paddingBottom">6dp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
-
-    <!-- Shape styles removed - not needed without MaterialComponents -->
 </resources>

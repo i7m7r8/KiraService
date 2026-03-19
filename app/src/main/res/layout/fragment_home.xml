@@ -1,82 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Kira v0.0.2 — Chat fragment — Catppuccin Mocha -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#00000000">
 
-    <!-- Header bar — Mantle surface, lavender accent strip -->
+    <!-- Header: glass strip -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#E6181825">
+        android:layout_height="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:background="#0CFFFFFF">
+
+        <!-- K badge -->
+        <TextView
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:text="K"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#0B0B0F"
+            android:gravity="center"
+            android:background="#FFB4BEFE"/>
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp">
-
-            <!-- Lavender K pill -->
-            <FrameLayout
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="#FFB4BEFE">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="K"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#1E1E2E"
-                    android:fontFamily="sans-serif-medium"/>
-            </FrameLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingStart="12dp">
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:paddingStart="12dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Kira"
-                    android:textSize="17sp"
-                    android:textStyle="bold"
-                    android:textColor="#CDD6F4"
-                    android:fontFamily="sans-serif-medium"/>
-                <TextView
-                    android:id="@+id/headerSubtitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="autonomous agent · ready"
-                    android:textSize="10sp"
-                    android:textColor="#6C7086"
-                    android:fontFamily="monospace"/>
-            </LinearLayout>
-
-            <!-- Live dot -->
-            <View
-                android:id="@+id/statusDot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:background="#FFA6E3A1"/>
+                android:text="Kira"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#FFE6E6F0"/>
+            <TextView
+                android:id="@+id/headerSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ready"
+                android:textSize="10sp"
+                android:textColor="#FF666688"
+                android:fontFamily="monospace"/>
         </LinearLayout>
 
-        <!-- Lavender accent line -->
+        <!-- Status dot -->
         <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#44B4BEFE"/>
+            android:id="@+id/statusDot"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:background="#FFA6E3A1"/>
     </LinearLayout>
 
-    <!-- Chat scroll -->
+    <!-- Divider -->
+    <View android:layout_width="match_parent" android:layout_height="1dp"
+        android:background="#0FB4BEFE"/>
+
+    <!-- Chat area -->
     <ScrollView
         android:id="@+id/chatScroll"
         android:layout_width="match_parent"
@@ -84,7 +69,7 @@
         android:layout_weight="1"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
-        android:paddingTop="10dp"
+        android:paddingTop="8dp"
         android:clipToPadding="false"
         android:scrollbars="none">
         <LinearLayout
@@ -101,10 +86,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:scrollbars="none"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
         android:paddingTop="4dp"
-        android:paddingBottom="4dp">
+        android:paddingBottom="2dp">
         <LinearLayout
             android:id="@+id/suggestionsRow"
             android:layout_width="wrap_content"
@@ -112,16 +97,16 @@
             android:orientation="horizontal"/>
     </HorizontalScrollView>
 
-    <!-- Input bar — Mantle bg -->
+    <!-- Input bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:background="#F2181825"
-        android:paddingStart="12dp"
+        android:background="#0E0B0B0F"
+        android:paddingStart="10dp"
         android:paddingEnd="10dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
         android:gravity="center_vertical">
 
         <EditText
@@ -129,28 +114,28 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="message kira  ·  /agent for autopilot"
-            android:textColor="#CDD6F4"
-            android:textColorHint="#45475A"
+            android:hint="ask kira anything…"
+            android:textColor="#FFE6E6F0"
+            android:textColorHint="#FF333355"
             android:textSize="14sp"
-            android:background="#CC313244"
+            android:background="#0AFFFFFF"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
-            android:paddingTop="11dp"
-            android:paddingBottom="11dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             android:imeOptions="actionSend"
             android:inputType="textMultiLine|textCapSentences"
             android:maxLines="4"/>
 
-        <!-- Send button — lavender pill -->
+        <!-- Send -->
         <TextView
             android:id="@+id/sendBtn"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:text="▶"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:gravity="center"
-            android:textColor="#1E1E2E"
+            android:textColor="#FF0B0B0F"
             android:background="#FFB4BEFE"
             android:layout_marginStart="8dp"/>
     </LinearLayout>

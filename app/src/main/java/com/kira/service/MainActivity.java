@@ -718,7 +718,7 @@ public class MainActivity extends Activity
             msg.setText(turn.text);
             msg.setTextColor(0xFFeeeeee);
             msg.setTextSize(14);
-            msg.setBackgroundColor(0x880e0e18);
+            msg.setBackgroundColor(0x0AFFFFFF);
             msg.setPadding(dp(14), dp(10), dp(14), dp(10));
             msg.setLineSpacing(dp(2), 1);
             msg.setTextIsSelectable(true);
@@ -1176,7 +1176,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView urlLabel = new android.widget.TextView(this);
         urlLabel.setText("Base URL  (e.g. https://your-server/v1)");
-        urlLabel.setTextColor(0xFF8888AA); urlLabel.setTextSize(11);
+        urlLabel.setTextColor(0xFF8888BB); urlLabel.setTextSize(11);
         layout.addView(urlLabel);
 
         android.widget.EditText urlInput = styledEditText(cfg.baseUrl, false);
@@ -1184,7 +1184,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView modelLabel = new android.widget.TextView(this);
         modelLabel.setText("Model name");
-        modelLabel.setTextColor(0xFF8888AA); modelLabel.setTextSize(11);
+        modelLabel.setTextColor(0xFF8888BB); modelLabel.setTextSize(11);
         android.widget.LinearLayout.LayoutParams mlp =
             new android.widget.LinearLayout.LayoutParams(MATCH, WRAP);
         mlp.topMargin = dp(12);
@@ -1629,7 +1629,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView msgTv = new android.widget.TextView(this);
         msgTv.setText(msg);
-        msgTv.setTextColor(0xFF8888AA);
+        msgTv.setTextColor(0xFF8888BB);
         msgTv.setTextSize(12);
         msgTv.setTypeface(android.graphics.Typeface.MONOSPACE);
         msgTv.setLineSpacing(dp(2), 1);
@@ -1754,7 +1754,7 @@ public class MainActivity extends Activity
             TextView chip = new TextView(this);
             chip.setText(item[0]);
             chip.setTextSize(11);
-            chip.setTextColor(0xFF8888AA);
+            chip.setTextColor(0xFF8888BB);
             chip.setTypeface(android.graphics.Typeface.MONOSPACE);
             android.graphics.drawable.GradientDrawable chipBg = new android.graphics.drawable.GradientDrawable();
             chipBg.setColor(0xAA080814);
@@ -1840,7 +1840,7 @@ public class MainActivity extends Activity
             name.setTypeface(android.graphics.Typeface.MONOSPACE);
 
             TextView desc = new TextView(this); desc.setText((String)t[2]);
-            desc.setTextColor(0xFF8888AA); desc.setTextSize(12);
+            desc.setTextColor(0xFF8888BB); desc.setTextSize(12);
 
             info.addView(name); info.addView(desc);
             row.addView(icon); row.addView(info);

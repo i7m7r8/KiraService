@@ -810,41 +810,53 @@ impl ThemeConfig {
     /// Error:     Pink     #F38BA8  Warning:   Peach #FAB387
     /// BG:        Crust    #11111B  Surface:   Base  #1E1E2E
     /// Text:      #CDD6F4           Muted:     #9399B2
+    /// ── Obsidian Glass — Kira default theme ────────────────────────────────
+    /// Near-black background, lavender primary, glass surface cards.
     fn catppuccin_mocha() -> Self {
         ThemeConfig {
+            // Primary: Lavender
             accent_color:     0xFFB4BEFE,
-            on_accent_color:  0xFF1E1E2E,
+            on_accent_color:  0xFF0B0B0F,
+            // Secondary: Soft purple
             secondary_color:  0xFFCBA6F7,
-            on_secondary:     0xFF1E1E2E,
+            on_secondary:     0xFF0B0B0F,
+            // Tertiary: Peach
             tertiary_color:   0xFFFAB387,
-            on_tertiary:      0xFF1E1E2E,
-            bg_color:         0xFF11111B,
-            surface_color:    0xFF1E1E2E,
-            surface2_color:   0xFF181825,
-            surface3_color:   0xFF181825,
-            surface5_color:   0xFF313244,
-            card_color:       0xFF1E1E2E,
-            surface_var_color:0xFF313244,
-            on_surface_color: 0xFFCDD6F4,
-            muted_color:      0xFF9399B2,
-            outline_color:    0xFF585B70,
-            outline_var_color:0xFF313244,
+            on_tertiary:      0xFF0B0B0F,
+            // Backgrounds
+            bg_color:         0xFF0B0B0F,  // Near-black
+            surface_color:    0xFF0F0F14,  // Glass surface
+            surface2_color:   0xFF0D0D12,  // Deeper surface
+            surface3_color:   0xFF0D0D12,
+            surface5_color:   0xFF151520,  // Elevated
+            card_color:       0xFF0F0F14,
+            surface_var_color:0xFF131320,
+            // Text
+            on_surface_color: 0xFFE6E6F0,  // Primary text
+            muted_color:      0xFF666688,   // Secondary text
+            // Borders
+            outline_color:    0xFF2A2A3A,
+            outline_var_color:0xFF1A1A28,
+            // States
             error_color:      0xFFF38BA8,
             success_color:    0xFFA6E3A1,
             warning_color:    0xFFFAB387,
-            scrim_color:      0xCC11111B,
-            ripple_color:     0x1FB4BEFE,
-            corner_radius_sm: 10,
-            corner_radius_md: 16,
-            corner_radius_lg: 24,
-            corner_radius_xl: 32,
-            star_count:       55,
-            star_speed:       0.006,
+            // Overlays
+            scrim_color:      0xCC0B0B0F,
+            ripple_color:     0x1AB4BEFE,
+            // Shape
+            corner_radius_sm: 8,
+            corner_radius_md: 12,
+            corner_radius_lg: 18,
+            corner_radius_xl: 24,
+            // Stars
+            star_count:       70,
+            star_speed:       0.005,
             star_tilt_x:      0.0,
             star_tilt_y:      0.0,
             star_parallax_x:  0.0,
             star_parallax_y:  0.0,
-            theme_name:       String::from("catppuccin_mocha"),
+            theme_name:       String::from("obsidian"),
             is_dark:          true,
         }
     }

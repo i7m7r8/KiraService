@@ -58,20 +58,20 @@ public class SetupActivity extends Activity implements SensorEventListener {
         "Build something worthy of the future you imagine.",
     };
 
-    // Catppuccin Mocha palette
-    private static final int C_BG         = 0xFF11111B; // Crust
-    private static final int C_CARD       = 0xFF1E1E2E; // Base
-    private static final int C_SURFACE    = 0xFF181825; // Mantle
-    private static final int C_SURFACE2   = 0xFF313244; // Surface0
+    // Obsidian Glass palette
+    private static final int C_BG         = 0xFF0B0B0F;
+    private static final int C_CARD       = 0xFF0F0F14;
+    private static final int C_SURFACE    = 0xFF0D0D12;
+    private static final int C_SURFACE2   = 0xFF151520;
     private static final int C_ACCENT     = 0xFFB4BEFE; // Lavender
-    private static final int C_ACCENT2    = 0xFFCBA6F7; // Mauve
-    private static final int C_ACCENT_DIM = 0xFF2A2A3E; // muted lavender bg
-    private static final int C_TEXT       = 0xFFCDD6F4; // Text
-    private static final int C_MUTED      = 0xFF9399B2; // Overlay2
-    private static final int C_HINT       = 0xFF45475A; // Surface1
-    private static final int C_SUCCESS    = 0xFFA6E3A1; // Green
-    private static final int C_ERROR      = 0xFFF38BA8; // Pink
-    private static final int C_PEACH      = 0xFFFAB387; // Peach
+    private static final int C_ACCENT2    = 0xFFCBA6F7; // Soft purple
+    private static final int C_ACCENT_DIM = 0xFF1A1A28;
+    private static final int C_TEXT       = 0xFFE6E6F0;
+    private static final int C_MUTED      = 0xFF666688;
+    private static final int C_HINT       = 0xFF2A2A3A;
+    private static final int C_SUCCESS    = 0xFFA6E3A1;
+    private static final int C_ERROR      = 0xFFF38BA8;
+    private static final int C_PEACH      = 0xFFFAB387;
 
     private StarFieldView starField;
     private FrameLayout pageContainer;

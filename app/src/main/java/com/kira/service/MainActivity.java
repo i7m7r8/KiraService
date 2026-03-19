@@ -1316,14 +1316,15 @@ public class MainActivity extends Activity
     }
 
     // ── Live theme tokens loaded from Rust getTheme() ─────────────────────
-    private int T_BG=0xFF11111B, T_SURFACE=0xFF1E1E2E, T_SURFACE2=0xFF181825;
-    private int T_SURFACE5=0xFF313244, T_SURFACE_VAR=0xFF313244;
+    // Catppuccin Mocha tokens (defaults, overridden by Rust getTheme)
+    private int T_BG=0xFF1E1E2E, T_SURFACE=0xFF1E1E2E, T_SURFACE2=0xFF181825;
+    private int T_SURFACE5=0xFF45475A, T_SURFACE_VAR=0xFF313244;
     private int T_TEXT=0xFFCDD6F4, T_TEXT2=0xFF9399B2;
     private int T_OUTLINE=0xFF585B70, T_OUTLINE_VAR=0xFF313244;
     private int T_ACCENT=0xFFB4BEFE, T_ON_ACCENT=0xFF1E1E2E;
     private int T_SECONDARY=0xFFCBA6F7, T_TERTIARY=0xFFFAB387;
     private int T_ERROR=0xFFF38BA8, T_SUCCESS=0xFFA6E3A1, T_WARNING=0xFFFAB387;
-    private int T_RIPPLE=0x1FB4BEFE;
+    private int T_RIPPLE=0x1AB4BEFE;
     private int T_CORNER_SM=10, T_CORNER_MD=16, T_CORNER_LG=24;
 
     private void loadThemeTokens() {

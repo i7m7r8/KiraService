@@ -2,7 +2,7 @@
 <!-- v38: Setup built entirely in SetupActivity.java ? this layout is not used but kept for R id references -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:background="#0B0B0F">
+    android:background="#11111B">
 
     <!-- IDs referenced programmatically in SetupActivity -->
     <FrameLayout android:id="@+id/setupPageContainer"

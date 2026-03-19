@@ -121,9 +121,6 @@ public class MainActivity extends Activity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Apply Catppuccin Mocha colors programmatically (no theme XML needed)
-        getWindow().setStatusBarColor(0xFF181825);
-        getWindow().setNavigationBarColor(0xFF181825);
         // Skip setup if already configured
         com.kira.service.ai.KiraConfig cfgCheck = com.kira.service.ai.KiraConfig.load(this);
         if (!cfgCheck.setupDone && !getIntent().getBooleanExtra("skip_setup", false)) {
@@ -134,42 +131,33 @@ public class MainActivity extends Activity
         setContentView(R.layout.activity_main);
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
-        // Auto theme: follow system setting
         int uiMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
-        // Respect saved preference, else follow system
         boolean savedDark = getSharedPreferences("kira_theme", MODE_PRIVATE)
             .getBoolean("dark", uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES);
         isDarkTheme = savedDark;
+        applyTheme();
 
-        // Init accelerometer for star parallax
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager != null)
             accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        initViews();
-        applyTheme(); // after initViews so fragment views exist
-        showTab(0);
-        // Init AI after UI is ready (avoids Rust .so crash before Activity is set up)
         try {
             ai = new KiraAI(this);
             agent = new com.kira.service.ai.KiraAgent(this);
             chain = new com.kira.service.ai.KiraChain(this);
         } catch (Throwable e) {
             android.util.Log.e("KiraMain", "AI init failed: " + e, e);
-            ai = null; agent = null; chain = null;
         }
+        initViews();
+        showTab(0);
 
-        // Register Shizuku permission result listener before requesting
         try { Shizuku.addRequestPermissionResultListener(shizukuPermListener); }
         catch (Exception ignored) {}
         requestAllPermissions();
         uiHandler.postDelayed(this::checkShizuku, 500);
         uiHandler.postDelayed(this::checkAccessibility, 2000);
 
-        // Start foreground service to keep Telegram alive
-        try { KiraForegroundService.start(this); } catch (Throwable e) { android.util.Log.w("KiraMain", "FGS start failed: " + e); }
-        // v43: init OTA engine (registers version with Rust, schedules checks)
+        try { KiraForegroundService.start(this); } catch (Throwable ignored) {}
         initOta();
-        // OTA check (non-blocking, 3s delay)
     }
 
     // -- Permissions -----------------------------------------------------------

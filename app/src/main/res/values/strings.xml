@@ -3,17 +3,26 @@
     <string name="app_name">Kira</string>
     <string name="accessibility_description">Gives Kira AI full phone control including screen reading, tapping, typing, and notifications.</string>
 
-    <!-- App-level fallback theme — as simple as possible -->
-    <style name="AppTheme" parent="android:Theme.NoTitleBar.Fullscreen">
+    <!-- EXACT original theme that worked — do NOT change parent -->
+    <style name="AppTheme" parent="android:Theme.Holo.NoActionBar">
         <item name="android:windowBackground">#FF1E1E2E</item>
+        <item name="android:statusBarColor">#FF181825</item>
+        <item name="android:navigationBarColor">#FF181825</item>
+        <item name="android:textColorPrimary">#FFCDD6F4</item>
+        <item name="android:textColorSecondary">#FF9399B2</item>
+        <item name="android:editTextColor">#FFCDD6F4</item>
+        <item name="android:colorControlActivated">#FFB4BEFE</item>
+        <item name="android:colorControlHighlight">#1AB4BEFE</item>
     </style>
 
-    <!-- Setup uses this directly -->
-    <style name="SetupTheme" parent="android:Theme.NoTitleBar.Fullscreen">
+    <style name="SetupTheme" parent="android:Theme.Holo.NoActionBar">
         <item name="android:windowBackground">#FF1E1E2E</item>
+        <item name="android:statusBarColor">#FF181825</item>
+        <item name="android:textColorPrimary">#FFCDD6F4</item>
+        <item name="android:editTextColor">#FFCDD6F4</item>
+        <item name="android:colorControlActivated">#FFB4BEFE</item>
     </style>
 
-    <!-- Settings rows — Catppuccin Mocha -->
     <style name="SettingsRow">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">60dp</item>

@@ -121,6 +121,9 @@ public class MainActivity extends Activity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Apply Catppuccin Mocha colors programmatically (no theme XML needed)
+        getWindow().setStatusBarColor(0xFF181825);
+        getWindow().setNavigationBarColor(0xFF181825);
         // Skip setup if already configured
         com.kira.service.ai.KiraConfig cfgCheck = com.kira.service.ai.KiraConfig.load(this);
         if (!cfgCheck.setupDone && !getIntent().getBooleanExtra("skip_setup", false)) {

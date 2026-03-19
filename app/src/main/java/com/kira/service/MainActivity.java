@@ -414,9 +414,9 @@ public class MainActivity extends Activity
         if (rowHistory2 != null) rowHistory2.setOnClickListener(v -> showConfirmDialog("Clear all history?", () -> { new com.kira.service.ai.KiraMemory(this).clearHistory(); conversation.clear(); chatContainer.removeAllViews(); }));
 
         settingsFragment.findViewById(R.id.cardAccessibility).setOnClickListener(v ->
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))); }
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         // shizuku card click wired via cardShizuku above
-        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating()); }
+        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating());
 
         buildToolsList();
         updateSettingsUI();
@@ -437,7 +437,7 @@ public class MainActivity extends Activity
             android.util.Log.e("KiraInit", "initViews crash: " + e.getMessage(), e);
             android.widget.Toast.makeText(this, "UI init error: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
         }
-}
+    }
 
     // -- Tab nav ---------------------------------------------------------------
 

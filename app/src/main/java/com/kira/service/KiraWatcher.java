@@ -119,7 +119,7 @@ public class KiraWatcher {
     /** Poll Rust for fired macro actions and execute them */
     private void pollAndExecuteMacroActions() {
         try {
-            String next = RustBridge.nextMacroAction(null);
+            String next = RustBridge.nextMacroAction();
             while (next != null && !next.isEmpty()) {
                 Log.d(TAG, "macro action: " + next);
                 org.json.JSONObject action = new org.json.JSONObject(next);
@@ -139,7 +139,7 @@ public class KiraWatcher {
                                     @Override public void onTool(String n, String r) {}
                                     @Override public void onReply(String reply) {
                                         // Post result to Kira event bus
-                                        KiraEventBus.post("macro_result", reply);
+                                        KiraEventBus.post(reply);
                                     }
                                     @Override public void onError(String e) {
                                         Log.w(TAG, "macro chat error: " + e);
@@ -157,7 +157,7 @@ public class KiraWatcher {
                             final org.json.JSONObject finalParams = params;
                             new Thread(() -> {
                                 try {
-                                    String result = tools.runTool(finalTool, finalParams);
+                                    String result = tools.execute(finalTool, finalParams);
                                     RustBridge.logTaskStep("macro_tool", 1, finalTool, result, true);
                                 } catch (Exception e) {
                                     Log.w(TAG, "macro tool error: " + e.getMessage());
@@ -175,7 +175,7 @@ public class KiraWatcher {
                     default:
                         Log.d(TAG, "unhandled macro action type: " + type);
                 }
-                next = RustBridge.nextMacroAction(null);
+                next = RustBridge.nextMacroAction();
             }
         } catch (Exception e) {
             Log.w(TAG, "pollMacroActions error: " + e.getMessage());

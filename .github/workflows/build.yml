@@ -12,7 +12,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Force gradlew to use the wrapper (never system gradle)
       GRADLE_USER_HOME: /home/runner/.gradle-kira
 
     steps:
@@ -39,22 +38,28 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
-      - name: Build Rust arm64
+      - name: Build Rust arm64-v8a
         working-directory: rust-core
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: cargo ndk -t arm64-v8a -o ../app/src/main/rust-libs build --release
 
-      - name: Build Rust armv7
+      - name: Build Rust armeabi-v7a
         working-directory: rust-core
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: cargo ndk -t armeabi-v7a -o ../app/src/main/rust-libs build --release
+
+      - name: Build Rust x86_64
+        working-directory: rust-core
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: cargo ndk -t x86_64 -o ../app/src/main/rust-libs build --release
 
       - name: List rust-libs
         run: find app/src/main/rust-libs -type f | sort
@@ -62,9 +67,6 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # Generate a stable keystore so every build has the SAME cert.
-      # Use 1024-bit RSA for speed (debug-quality, sufficient for sideload).
-      # Set KEYSTORE_PASSWORD secret in repo settings for a custom password.
       - name: Create stable signing keystore
         run: |
           PASS="${{ secrets.KEYSTORE_PASSWORD }}"
@@ -80,7 +82,6 @@ jobs:
           echo "KEYSTORE_PATH=$(pwd)/kira.jks" >> $GITHUB_ENV
           echo "KEYSTORE_PASS=$PASS"           >> $GITHUB_ENV
 
-      # Extract version from build.gradle for the tag
       - name: Get version
         id: ver
         run: |
@@ -90,8 +91,7 @@ jobs:
           echo "TS=$TS"    >> $GITHUB_OUTPUT
           echo "TAG=v${VER}-${TS}" >> $GITHUB_OUTPUT
 
-      # Build ONLY release APK (signed). No debug build needed.
-      - name: Build signed Release APK
+      - name: Build signed Release APKs (all ABIs + universal)
         run: |
           ./gradlew assembleRelease --no-daemon --no-configuration-cache \
             -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
@@ -104,26 +104,48 @@ jobs:
       - name: List APK outputs
         run: find app/build/outputs/apk -type f | sort
 
-      - name: Rename APK
+      - name: Collect and rename APKs
         run: |
           mkdir -p dist
-          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          cp "$APK" "dist/KiraAgent-v${{ steps.ver.outputs.VER }}.apk"
-          echo "APK_NAME=KiraAgent-v${{ steps.ver.outputs.VER }}.apk" >> $GITHUB_ENV
+          VER="${{ steps.ver.outputs.VER }}"
 
-      - name: Upload artifact
+          # Universal APK (fat — contains all ABIs)
+          UNIV=$(find app/build/outputs/apk/release -name "*universal*.apk" 2>/dev/null | head -1)
+          [ -n "$UNIV" ] && cp "$UNIV" "dist/KiraAgent-v${VER}-universal.apk"
+
+          # arm64-v8a (modern Android phones)
+          ARM64=$(find app/build/outputs/apk/release -name "*arm64*" -o -name "*arm64-v8a*" 2>/dev/null | head -1)
+          [ -n "$ARM64" ] && cp "$ARM64" "dist/KiraAgent-v${VER}-arm64-v8a.apk"
+
+          # armeabi-v7a (older 32-bit phones)
+          ARM32=$(find app/build/outputs/apk/release -name "*armeabi-v7a*" -o -name "*armv7*" 2>/dev/null | head -1)
+          [ -n "$ARM32" ] && cp "$ARM32" "dist/KiraAgent-v${VER}-armeabi-v7a.apk"
+
+          # x86_64 (emulators, Chromebooks, some tablets)
+          X64=$(find app/build/outputs/apk/release -name "*x86_64*" 2>/dev/null | head -1)
+          [ -n "$X64" ] && cp "$X64" "dist/KiraAgent-v${VER}-x86_64.apk"
+
+          # Fallback: if splits didn't work, copy whatever is there
+          if [ -z "$(ls dist/*.apk 2>/dev/null)" ]; then
+            APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+            cp "$APK" "dist/KiraAgent-v${VER}.apk"
+          fi
+
+          echo "=== dist contents ==="
+          ls -lh dist/
+          echo "DIST_APKS=$(ls dist/*.apk | tr '\n' ' ')" >> $GITHUB_ENV
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: KiraAgent-${{ steps.ver.outputs.VER }}
+          name: KiraAgent-v${{ steps.ver.outputs.VER }}-all-abis
           path: dist/*.apk
           retention-days: 30
 
-      # Read CHANGELOG.md if present, else use auto-generated notes
       - name: Read changelog
         id: cl
         run: |
           if [ -f CHANGELOG.md ]; then
-            # Extract first section (up to second ##)
             NOTES=$(awk '/^## /{i++} i==1' CHANGELOG.md | tail -n +2 | head -40)
           else
             NOTES="Automated release. See commit history for changes."
@@ -144,8 +166,16 @@ jobs:
             ${{ steps.cl.outputs.NOTES }}
 
             ---
+            ### Which APK to download?
+            | File | Device type |
+            |------|-------------|
+            | `KiraAgent-v*-arm64-v8a.apk` | **Most phones** (2016+) — recommended |
+            | `KiraAgent-v*-armeabi-v7a.apk` | Older 32-bit phones |
+            | `KiraAgent-v*-x86_64.apk` | Emulators, Chromebooks |
+            | `KiraAgent-v*-universal.apk` | Any device (larger file) |
+
             ### Install
-            1. Download **${{ env.APK_NAME }}**
+            1. Download the APK for your device
             2. Enable "Install from unknown sources"
             3. Install — **no uninstall needed** (same signing key every build)
 

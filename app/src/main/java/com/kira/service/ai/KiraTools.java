@@ -889,6 +889,162 @@ public class KiraTools {
         } catch (Exception e) { return "{\"error\":\"" + e.getMessage().replace("\"","'") + "\"}"; }
     }
 
+    // ── Single-command automation shortcuts ─────────────────────────────────────
+    // Called when AI detects a compound intent like "open YouTube and search for music"
+    // These compose multiple tools into one call so the AI doesn't need to chain steps.
+
+    /** Execute a sequence of tool calls from a plain-English compound command */
+    public String runScenario(String scenario) {
+        String s = scenario.toLowerCase().trim();
+        StringBuilder log = new StringBuilder();
+
+        // ── Media commands ────────────────────────────────────────────────
+        if (s.contains("youtube") && (s.contains("play") || s.contains("open") || s.contains("watch"))) {
+            log.append(openApp("youtube")).append("\n");
+            return log.toString().trim();
+        }
+        if (s.contains("spotify") && (s.contains("play") || s.contains("music") || s.contains("open"))) {
+            log.append(openApp("spotify")).append("\n");
+            return log.toString().trim();
+        }
+        if ((s.contains("play music") || s.contains("music player")) && !s.contains("youtube")) {
+            log.append(openApp("spotify")).append("\n");
+            return log.toString().trim();
+        }
+
+        // ── Navigation ────────────────────────────────────────────────────
+        if (s.contains("navigate to") || s.contains("directions to") || s.contains("take me to")) {
+            String dest = s.replaceAll(".*(?:navigate to|directions to|take me to)\s*", "").trim();
+            try {
+                android.content.Intent nav = new android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("google.navigation:q=" + java.net.URLEncoder.encode(dest, "UTF-8")));
+                nav.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(nav);
+                return "navigating to: " + dest;
+            } catch (Exception e) { return openApp("maps"); }
+        }
+
+        // ── Communication ─────────────────────────────────────────────────
+        if (s.contains("call") && !s.contains("video call")) {
+            String num = s.replaceAll("[^0-9+]", "");
+            if (!num.isEmpty()) {
+                try {
+                    android.content.Intent call = new android.content.Intent(
+                        android.content.Intent.ACTION_CALL,
+                        android.net.Uri.parse("tel:" + num));
+                    call.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(call);
+                    return "calling " + num;
+                } catch (Exception e) { return "call failed: " + e.getMessage(); }
+            }
+        }
+        if (s.contains("whatsapp") && s.contains("message")) {
+            log.append(openApp("whatsapp")).append("\n");
+            return log.toString().trim();
+        }
+        if (s.contains("telegram") && (s.contains("open") || s.contains("message"))) {
+            log.append(openApp("telegram")).append("\n");
+            return log.toString().trim();
+        }
+
+        // ── Search ────────────────────────────────────────────────────────
+        if (s.contains("search") || s.contains("google")) {
+            String query = s.replaceAll(".*(?:search for|google|look up|find)\s*", "").trim();
+            if (!query.isEmpty()) {
+                try {
+                    android.content.Intent web = new android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://www.google.com/search?q=" +
+                            java.net.URLEncoder.encode(query, "UTF-8")));
+                    web.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(web);
+                    return "searching: " + query;
+                } catch (Exception e) { return "search failed"; }
+            }
+        }
+
+        // ── System shortcuts ──────────────────────────────────────────────
+        if (s.contains("screenshot") || s.contains("screen shot")) {
+            return ShizukuShell.exec("screencap -p /sdcard/Pictures/Screenshots/kira_" +
+                System.currentTimeMillis() + ".png 2>&1");
+        }
+        if (s.contains("brightness") && s.contains("max")) {
+            return ShizukuShell.exec("settings put system screen_brightness 255 2>&1");
+        }
+        if (s.contains("brightness") && (s.contains("min") || s.contains("low"))) {
+            return ShizukuShell.exec("settings put system screen_brightness 10 2>&1");
+        }
+        if (s.contains("volume") && (s.contains("mute") || s.contains("silent") || s.contains("off"))) {
+            return ShizukuShell.exec("media volume --stream 2 --set 0 2>&1");
+        }
+        if (s.contains("volume") && s.contains("max")) {
+            return ShizukuShell.exec("media volume --stream 2 --set 15 2>&1");
+        }
+        if (s.contains("wifi") && s.contains("on")) {
+            return ShizukuShell.exec("svc wifi enable 2>&1");
+        }
+        if (s.contains("wifi") && s.contains("off")) {
+            return ShizukuShell.exec("svc wifi disable 2>&1");
+        }
+        if (s.contains("bluetooth") && s.contains("on")) {
+            return ShizukuShell.exec("svc bluetooth enable 2>&1");
+        }
+        if (s.contains("bluetooth") && s.contains("off")) {
+            return ShizukuShell.exec("svc bluetooth disable 2>&1");
+        }
+        if (s.contains("flashlight") || s.contains("torch")) {
+            return ShizukuShell.exec(s.contains("off") ?
+                "settings put secure camera_torch_on 0 2>&1" :
+                "am broadcast -a android.intent.action.ACTION_POWER_SAVE_MODE_CHANGED 2>&1");
+        }
+        if (s.contains("airplane") || s.contains("flight mode")) {
+            String state = s.contains("off") ? "0" : "1";
+            return ShizukuShell.exec("settings put global airplane_mode_on " + state +
+                " && am broadcast -a android.intent.action.AIRPLANE_MODE 2>&1");
+        }
+        if (s.contains("dark mode") || s.contains("night mode")) {
+            String ui = s.contains("off") ? "1" : "2";
+            return ShizukuShell.exec("cmd uimode night " + (ui.equals("2") ? "yes" : "no") + " 2>&1");
+        }
+        if (s.contains("reboot") || s.contains("restart phone")) {
+            return ShizukuShell.exec("reboot 2>&1");
+        }
+        if (s.contains("lock screen") || s.contains("lock phone")) {
+            return ShizukuShell.exec("input keyevent 26 2>&1");
+        }
+        if (s.contains("home screen") || s.contains("go home")) {
+            return ShizukuShell.exec("input keyevent 3 2>&1");
+        }
+        if (s.contains("recent apps") || s.contains("app switcher")) {
+            return ShizukuShell.exec("input keyevent 187 2>&1");
+        }
+        if (s.contains("battery") || s.contains("charge")) {
+            return getBatteryInfo();
+        }
+        if (s.contains("notification") || s.contains("alerts")) {
+            return ShizukuShell.exec("cmd statusbar expand-notifications 2>&1");
+        }
+        if (s.contains("clear notifications")) {
+            return ShizukuShell.exec("service call notification 1 2>&1");
+        }
+
+        // ── App opening ───────────────────────────────────────────────────
+        // Catch-all: try to open any mentioned app
+        String[] knownApps = {"whatsapp","telegram","instagram","youtube","spotify","netflix",
+            "gmail","chrome","maps","camera","settings","calculator","clock","contacts","phone",
+            "messages","drive","photos","calendar","discord","reddit","twitter","facebook",
+            "snapchat","tiktok","linkedin","amazon","uber","zoom","slack","notion","teams",
+            "paypal","netflix","prime video","disney plus","twitch","zoom","spotify"};
+        for (String app : knownApps) {
+            if (s.contains(app)) {
+                return openApp(app);
+            }
+        }
+
+        return "scenario not recognised. Try: 'open YouTube', 'navigate to [place]', 'search for [query]', 'mute volume', 'take screenshot'";
+    }
+
     public String getToolList() {
         return "SCREEN: read_screen, tap_screen, tap_text, swipe_screen, scroll_screen, type_text, "
             + "press_back, press_home, press_recents, lock_screen, clipboard_get, clipboard_set, get_notifications\n"

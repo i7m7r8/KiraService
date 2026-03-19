@@ -265,14 +265,14 @@ public class MainActivity extends Activity
         suggestionsRow  = homeFragment.findViewById(R.id.suggestionsRow);
         suggestionsScroll = homeFragment.findViewById(R.id.suggestionsScroll);
 
-        sendBtn.setOnClickListener(v -> sendMessage());
-        inputField.setOnEditorActionListener((v, id, e) -> {
+        if (sendBtn != null) sendBtn.setOnClickListener(v -> sendMessage());
+        if (inputField != null) inputField.setOnEditorActionListener((v, id, e) -> {
             if (id == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendMessage(); return true; }
             return false;
         });
         buildSuggestions();
 
-        headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
+        if (headerSubtitle != null) headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
 
         // History
         historyList  = historyFragment.findViewById(R.id.historyList);
@@ -413,10 +413,10 @@ public class MainActivity extends Activity
         View rowHistory2 = settingsFragment.findViewById(R.id.rowHistory);
         if (rowHistory2 != null) rowHistory2.setOnClickListener(v -> showConfirmDialog("Clear all history?", () -> { new com.kira.service.ai.KiraMemory(this).clearHistory(); conversation.clear(); chatContainer.removeAllViews(); }));
 
-        settingsFragment.findViewById(R.id.cardAccessibility).setOnClickListener(v ->
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        // shizuku card click wired via cardShizuku above
-        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating());
+        { View _acc = settingsFragment.findViewById(R.id.cardAccessibility);
+          if (_acc != null) _acc.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))); }
+        { View _flt = settingsFragment.findViewById(R.id.rowFloating);
+          if (_flt != null) _flt.setOnClickListener(v -> toggleFloating()); }
 
         buildToolsList();
         updateSettingsUI();
@@ -443,18 +443,20 @@ public class MainActivity extends Activity
 
     private void showTab(int tab) {
         currentTab = tab;
-        homeFragment.setVisibility(tab == 0 ? View.VISIBLE : View.GONE);
-        toolsFragment.setVisibility(tab == 1 ? View.VISIBLE : View.GONE);
-        historyFragment.setVisibility(tab == 2 ? View.VISIBLE : View.GONE);
-        settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
+        if (homeFragment != null) homeFragment.setVisibility(tab == 0 ? View.VISIBLE : View.GONE);
+        if (toolsFragment != null) toolsFragment.setVisibility(tab == 1 ? View.VISIBLE : View.GONE);
+        if (historyFragment != null) historyFragment.setVisibility(tab == 2 ? View.VISIBLE : View.GONE);
+        if (settingsFragment != null) settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
             int activeColor = T_ACCENT;
             int idleColor   = T_TEXT2;
-            navIcons[i].setTextColor(on ? activeColor : idleColor);
-            navTexts[i].setTextColor(on ? activeColor : idleColor);
-            // Active tab: subtle crimson underline via background
-            navItems[i].setBackgroundColor(on ? 0x15B4BEFE : 0x00000000);
+            if (navIcons != null && navIcons[i] != null)
+                navIcons[i].setTextColor(on ? activeColor : idleColor);
+            if (navTexts != null && navTexts[i] != null)
+                navTexts[i].setTextColor(on ? activeColor : idleColor);
+            if (navItems != null && navItems[i] != null)
+                navItems[i].setBackgroundColor(on ? 0x15B4BEFE : 0x00000000);
         }
         if (tab == 2) refreshHistory();
         if (tab == 3) updateSettingsUI();
@@ -470,8 +472,8 @@ public class MainActivity extends Activity
 
     private void sendMessage(String text) {
         if (text.isEmpty()) return;
-        inputField.setText("");
-        suggestionsScroll.setVisibility(View.GONE);
+        if (inputField != null) inputField.setText("");
+        if (suggestionsScroll != null) suggestionsScroll.setVisibility(View.GONE);
 
         // Agent mode: prefix with /agent or /auto
         if (text.startsWith("/kb ")) {
@@ -515,7 +517,7 @@ public class MainActivity extends Activity
         addUserBubble(userTurn);
 
         headerSubtitle.setText("thinking...");
-        sendBtn.setEnabled(false);
+        if (sendBtn != null) sendBtn.setEnabled(false);
 
         // Thinking placeholder
         ConvTurn[] kiraTurn = {null};
@@ -539,8 +541,8 @@ public class MainActivity extends Activity
                         conversation.add(kiraTurn[0]);
                         addKiraBubble(kiraTurn[0]);
                     }
-                    sendBtn.setEnabled(true);
-                    headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
+                    if (sendBtn != null) sendBtn.setEnabled(true);
+                    if (headerSubtitle != null) headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
                     scrollToBottom();
                 });
             }
@@ -550,8 +552,8 @@ public class MainActivity extends Activity
                     ConvTurn errTurn = new ConvTurn("error", error);
                     conversation.add(errTurn);
                     addErrorBubble(errTurn);
-                    sendBtn.setEnabled(true);
-                    headerSubtitle.setText("error");
+                    if (sendBtn != null) sendBtn.setEnabled(true);
+                    if (headerSubtitle != null) headerSubtitle.setText("error");
                 });
             }
         });
@@ -612,7 +614,7 @@ public class MainActivity extends Activity
 
         wrap.addView(labelRow);
         wrap.addView(msg);
-        chatContainer.addView(wrap);
+        if (chatContainer != null) chatContainer.addView(wrap);
         scrollToBottom();
     }
 
@@ -640,7 +642,7 @@ public class MainActivity extends Activity
 
         wrap.addView(label);
         wrap.addView(msg);
-        chatContainer.addView(wrap);
+        if (chatContainer != null) chatContainer.addView(wrap);
         thinkingView = wrap;
         scrollToBottom();
     }
@@ -652,7 +654,7 @@ public class MainActivity extends Activity
             return;
         }
         // Replace the "???" with real content
-        chatContainer.removeView(thinkingView);
+        if (chatContainer != null) chatContainer.removeView(thinkingView);
         thinkingView = null;
         conversation.add(turn);
         addKiraBubble(turn);
@@ -660,7 +662,7 @@ public class MainActivity extends Activity
 
     private void removeThinkingBubble() {
         if (thinkingView != null) {
-            chatContainer.removeView(thinkingView);
+            if (chatContainer != null) chatContainer.removeView(thinkingView);
             thinkingView = null;
         }
     }
@@ -713,7 +715,7 @@ public class MainActivity extends Activity
             wrap.addView(msg);
         }
 
-        chatContainer.addView(wrap);
+        if (chatContainer != null) chatContainer.addView(wrap);
     }
 
     /**
@@ -814,7 +816,7 @@ public class MainActivity extends Activity
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(1), 0, dp(1));
         tv.setLayoutParams(p);
-        chatContainer.addView(tv);
+        if (chatContainer != null) chatContainer.addView(tv);
         scrollToBottom();
     }
 
@@ -839,12 +841,12 @@ public class MainActivity extends Activity
 
         wrap.addView(label);
         wrap.addView(msg);
-        chatContainer.addView(wrap);
+        if (chatContainer != null) chatContainer.addView(wrap);
         scrollToBottom();
     }
 
     private void rebuildChat() {
-        chatContainer.removeAllViews();
+        if (chatContainer != null) chatContainer.removeAllViews();
         for (ConvTurn turn : conversation) {
             switch (turn.role) {
                 case "user":  addUserBubble(turn); break;
@@ -862,7 +864,7 @@ public class MainActivity extends Activity
         conversation.add(userTurn);
         addUserBubble(userTurn);
         headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
-        sendBtn.setEnabled(false);
+        if (sendBtn != null) sendBtn.setEnabled(false);
         addSystemNotice("\uD83E\uDDE0 ReAct mode: reason + act loop");
 
         chain.run(goal, new com.kira.service.ai.KiraChain.ChainCallback() {
@@ -880,7 +882,7 @@ public class MainActivity extends Activity
                     ConvTurn t2 = new ConvTurn("kira", answer);
                     conversation.add(t2);
                     addKiraBubble(t2);
-                    sendBtn.setEnabled(true);
+                    if (sendBtn != null) sendBtn.setEnabled(true);
                     headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
@@ -896,7 +898,7 @@ public class MainActivity extends Activity
         conversation.add(userTurn);
         addUserBubble(userTurn);
         headerSubtitle.setText("agent running...");
-        sendBtn.setEnabled(false);
+        if (sendBtn != null) sendBtn.setEnabled(false);
 
         addSystemNotice("Agent mode: planning task...");
 
@@ -912,7 +914,7 @@ public class MainActivity extends Activity
                     ConvTurn turn = new ConvTurn("kira", summary);
                     conversation.add(turn);
                     addKiraBubble(turn);
-                    sendBtn.setEnabled(true);
+                    if (sendBtn != null) sendBtn.setEnabled(true);
                     headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
@@ -920,7 +922,7 @@ public class MainActivity extends Activity
             @Override public void onError(String error) {
                 uiHandler.post(() -> {
                     addErrorBubble(new ConvTurn("error", error));
-                    sendBtn.setEnabled(true);
+                    if (sendBtn != null) sendBtn.setEnabled(true);
                     headerSubtitle.setText("agent error");
                 });
             }
@@ -937,7 +939,7 @@ public class MainActivity extends Activity
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(2), 0, dp(2));
         tv.setLayoutParams(p);
-        chatContainer.addView(tv);
+        if (chatContainer != null) chatContainer.addView(tv);
         scrollToBottom();
     }
 
@@ -1679,6 +1681,7 @@ public class MainActivity extends Activity
     }
 
     private void scrollToBottom() {
+        if (chatScroll == null) return;
         chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN));
     }
 
@@ -1834,7 +1837,7 @@ public class MainActivity extends Activity
     // -- History -- Claude-style ------------------------------------------------
 
     private void refreshHistory() {
-        historyList.removeAllViews();
+        if (historyList == null) return; historyList.removeAllViews();
         try {
             KiraMemory mem = new KiraMemory(this);
             JSONArray arr = mem.loadHistory();

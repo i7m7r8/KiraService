@@ -334,7 +334,14 @@ public class KiraTools {
                 // Location
                 case "location":      return getLocation();
 
-                default: return "unknown tool: " + name;
+                case "scenario":      return runScenario(args.optString("cmd", args.optString("action", name)));
+                default:
+                    // Try treating name+args as a freeform scenario
+                    String fallback = runScenario(name + " " + args.optString("target",
+                        args.optString("package", args.optString("app", ""))));
+                    if (!fallback.startsWith("i don't know") && !fallback.isEmpty())
+                        return fallback;
+                    return "unknown tool: " + name;
             }
         } catch (Exception e) {
             Log.e(TAG, "tool error: " + name, e);
@@ -421,58 +428,57 @@ public class KiraTools {
     // App management
     private String openApp(String input) {
         String normalized = input.toLowerCase().trim();
+        // Resolve name → package via APP_MAP
         String pkg = APP_MAP.getOrDefault(normalized, input.trim());
 
-        // Special case: YouTube — try multiple methods in order
-        if ("com.google.android.youtube".equals(pkg) || normalized.equals("youtube") || normalized.equals("yt")) {
-            pkg = "com.google.android.youtube";
-            // Method 1: Direct getLaunchIntentForPackage (most reliable)
-            try {
-                android.content.pm.PackageManager pm2 = ctx.getPackageManager();
-                android.content.Intent launch = pm2.getLaunchIntentForPackage(pkg);
-                if (launch != null) {
-                    launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                        | android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                    ctx.startActivity(launch);
-                    android.os.SystemClock.sleep(500);
-                    return "opened YouTube";
-                }
-            } catch (Exception e1) {
-                android.util.Log.w("KiraTools", "YouTube method1: " + e1.getMessage());
-            }
-            // Method 2: am start with explicit activity via Shizuku
-            String amR = ShizukuShell.exec(
-                "am start -n com.google.android.youtube/com.google.android.youtube.HomeActivity 2>&1");
-            if (amR.contains("Starting")) return "opened YouTube (am)";
-            // Method 3: am start with package
-            amR = ShizukuShell.exec(
-                "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER" +
-                " -p com.google.android.youtube 2>&1");
-            if (amR.contains("Starting")) return "opened YouTube (am2)";
-            // Method 4: monkey
-            amR = ShizukuShell.exec(
-                "monkey -p com.google.android.youtube -c android.intent.category.LAUNCHER 1 2>&1");
-            if (!amR.contains("No activities") && !amR.contains("error"))
-                return "opened YouTube (monkey)";
-            return "YouTube not installed. Install from Play Store.";
+        // If still not a package name, try fuzzy search
+        if (!pkg.contains(".")) {
+            String found = findPackage(pkg);
+            if (found != null) pkg = found;
         }
 
-        // Resolve package if fuzzy name was given
-        if (!isInstalled(pkg)) {
+        // Method 1: getLaunchIntentForPackage — works without Shizuku
+        try {
+            android.content.pm.PackageManager pm = ctx.getPackageManager();
+            android.content.Intent launch = pm.getLaunchIntentForPackage(pkg);
+            if (launch != null) {
+                launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    | android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                    | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                ctx.startActivity(launch);
+                return "opened " + pkg;
+            }
+        } catch (Exception e) {
+            android.util.Log.w("KiraTools", "openApp launch: " + e.getMessage());
+        }
+
+        // Method 2: fuzzy package search then launch
+        if (!pkg.contains(".") || !isInstalled(pkg)) {
             String found = findPackage(input);
             if (found != null) {
-                pkg = found;
-            } else {
-                // Try am start with the fuzzy name as package
-                String amResult = ShizukuShell.exec(
-                    "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER " +
-                    "$(pm list packages | grep -i " + input.toLowerCase().replaceAll("[^a-z0-9]","") +
-                    " | head -1 | cut -d: -f2) 2>&1");
-                if (amResult.contains("Starting")) return "opened " + input + " (am-fuzzy)";
-                return "app not found: " + input + ". Is it installed? Try: find_app " + input;
+                try {
+                    android.content.Intent launch = ctx.getPackageManager().getLaunchIntentForPackage(found);
+                    if (launch != null) {
+                        launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        ctx.startActivity(launch);
+                        return "opened " + found;
+                    }
+                } catch (Exception ignored) {}
             }
         }
-        return ShizukuShell.openApp(ctx, pkg);
+
+        // Method 3: Shizuku shell fallback
+        String amR = ShizukuShell.exec("am start -a android.intent.action.MAIN"
+            + " -c android.intent.category.LAUNCHER -p " + pkg + " 2>&1");
+        if (amR != null && amR.contains("Starting")) return "opened " + pkg + " (am)";
+
+        // Method 4: monkey fallback
+        String mR = ShizukuShell.exec(
+            "monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1 2>&1");
+        if (mR != null && !mR.contains("No activities") && !mR.contains("error"))
+            return "opened " + pkg + " (monkey)";
+
+        return "could not open " + input + " — is it installed? pkg=" + pkg;
     }
 
     private String findApp(String query) {

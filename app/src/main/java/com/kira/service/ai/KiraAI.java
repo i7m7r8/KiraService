@@ -156,6 +156,10 @@ public class KiraAI {
     private String callLLM(String system, List<JSONObject> msgs) {
         KiraConfig cfg = KiraConfig.load(ctx);
         if (cfg.apiKey.isEmpty()) return "no API key -- go to settings and add one.";
+        // Use active provider (Rust-managed) with config fallback
+        String[] provider = getActiveProvider();
+        String activeUrl   = provider[0];
+        String activeModel = provider[1].isEmpty() ? cfg.model : provider[1];
 
         for (int attempt = 0; attempt < 3; attempt++) {
             try {
@@ -170,14 +174,14 @@ public class KiraAI {
                 for (JSONObject m : msgs) messages.put(m);
 
                 JSONObject body = new JSONObject();
-                body.put("model", cfg.model);
+                body.put("model", activeModel);
                 body.put("max_tokens", getMaxTokens());
                 body.put("messages", messages);
                 if (isAnthropic(cfg) && system != null) body.put("system", system);
 
                 String endpoint = isAnthropic(cfg)
-                    ? cfg.baseUrl + "/messages"
-                    : cfg.baseUrl + "/chat/completions";
+                    ? activeUrl + "/messages"
+                    : activeUrl + "/chat/completions";
 
                 URL url = new URL(endpoint);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -263,32 +267,32 @@ public class KiraAI {
         String memCtx  = memory.getContext();
         String toolList = tools.getToolList();
 
-        return "You are Kira -- " + cfg.userName + "'s AI agent running natively on Android. Female.\n"
-            + "Not a chatbot. An agent with real tools. You control this phone.\n"
-            + "Talk like a person. Short, direct, lowercase, no fluff. No emojis unless asked.\n"
-            + "Never say 'I cannot' -- say what's missing instead.\n\n"
-            + "## PERSON\nName: " + cfg.userName + "\n\n"
-            + "## MEMORY\n" + (memCtx.isEmpty() ? "nothing yet" : memCtx) + "\n\n"
-            + "## TOOLS\n" + toolList + "\n\n"
-            + "## TOOL SYNTAX\n"
+        return "You are Kira, " + cfg.userName + "'s AI agent on Android. Female. You CONTROL this phone.\n"
+            + "CRITICAL: To do ANYTHING on this phone you MUST use tools. Never say you did something without using a tool.\n"
+            + "Talk short, direct, lowercase. No emojis unless asked.\n\n"
+            + "PERSON: " + cfg.userName + "\n"
+            + "MEMORY: " + (memCtx.isEmpty() ? "nothing yet" : memCtx) + "\n\n"
+            + "AVAILABLE TOOLS:\n" + toolList + "\n"
+            + "TOOL SYNTAX -- you MUST use this exact format, no variations:\n"
             + "<tool:TOOLNAME>{\"arg\": \"value\"}</tool>\n\n"
-            + "## KEY EXAMPLES\n"
-            + "<tool:open_app>{\"package\": \"com.google.android.youtube\"}</tool>\n"
-            + "<tool:tap_screen>{\"x\": 540, \"y\": 1200}</tool>\n"
-            + "<tool:read_screen>{}</tool>\n"
-            + "<tool:sh_run>{\"cmd\": \"pm list packages | grep youtube\"}</tool>\n"
-            + "<tool:get_notifications>{}</tool>\n"
-            + "<tool:remember>{\"key\": \"user_city\", \"value\": \"Dhaka\"}</tool>\n"
-            + "<tool:recall>{\"key\": \"user_city\"}</tool>\n"
-            + "<tool:send_sms>{\"number\": \"+880...\", \"message\": \"text\"}</tool>\n"
-            + "<tool:web_search>{\"query\": \"weather Dhaka\"}</tool>\n\n"
-            + "## RULES\n"
-            + "- open_app: use exact package name. If unsure, use sh_run to find it first\n"
-            + "- After opening app, wait and verify with read_screen\n"
-            + "- Before SMS/calls: state plan and wait for confirmation\n"
-            + "- Never say done without running the tool\n"
-            + "- If a tool fails: try sh_run as fallback\n"
-            + "- remember important facts the user tells you\n";
+            + "EXAMPLES -- study these carefully:\n"
+            + "open youtube: <tool:open_app>{\"package\": \"com.google.android.youtube\"}</tool>\n"
+            + "open whatsapp: <tool:open_app>{\"package\": \"com.whatsapp\"}</tool>\n"
+            + "open settings: <tool:open_app>{\"package\": \"com.android.settings\"}</tool>\n"
+            + "open chrome: <tool:open_app>{\"package\": \"com.android.chrome\"}</tool>\n"
+            + "tap at 540,1200: <tool:tap_screen>{\"x\": 540, \"y\": 1200}</tool>\n"
+            + "read screen: <tool:read_screen>{}</tool>\n"
+            + "run shell: <tool:sh_run>{\"cmd\": \"pm list packages\"}</tool>\n"
+            + "search web: <tool:web_search>{\"query\": \"weather today\"}</tool>\n"
+            + "send sms: <tool:send_sms>{\"number\": \"+1234\", \"message\": \"hi\"}</tool>\n"
+            + "battery: <tool:battery_info>{}</tool>\n"
+            + "remember: <tool:remember>{\"key\": \"name\", \"value\": \"Imran\"}</tool>\n\n"
+            + "RULES:\n"
+            + "1. ALWAYS use a tool tag when doing something. No tool = nothing happened.\n"
+            + "2. For open_app use exact package. If unsure run: <tool:sh_run>{\"cmd\": \"pm list packages | grep -i NAME\"}</tool>\n"
+            + "3. Never say 'I cannot'. Say what tool you need instead.\n"
+            + "4. For SMS/calls: confirm with user first.\n"
+            + "5. After opening app: verify with read_screen.\n";
     }
 
     // -- Helpers ---------------------------------------------------------------

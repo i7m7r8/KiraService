@@ -60,7 +60,7 @@ public class GalaxyView extends View {
     }
 
     private void seed(int w, int h) {
-        Random rng = new Random(0xCAFE_BEBE_L);
+        Random rng = new Random(0xCAFEBEBEL);
         for (int i = 0; i < STAR_COUNT; i++) {
             sx[i]  = rng.nextFloat();
             sy[i]  = rng.nextFloat();

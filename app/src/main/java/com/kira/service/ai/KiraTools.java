@@ -1020,7 +1020,7 @@ public class KiraTools {
             return ShizukuShell.exec("input keyevent 187 2>&1");
         }
         if (s.contains("battery") || s.contains("charge")) {
-            return getBatteryInfo();
+            return getBattery();
         }
         if (s.contains("notification") || s.contains("alerts")) {
             return ShizukuShell.exec("cmd statusbar expand-notifications 2>&1");

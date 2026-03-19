@@ -210,6 +210,8 @@ public class MainActivity extends Activity
         KiraForegroundService.start(this);
         // v43: init OTA engine (registers version with Rust, schedules checks)
         initOta();
+        // Start galaxy animation polling
+        animHandler.postDelayed(animPollRunnable, 1000);
         // OTA check (non-blocking, 3s delay)
     }
 
@@ -313,14 +315,104 @@ public class MainActivity extends Activity
         suggestionsRow  = homeFragment.findViewById(R.id.suggestionsRow);
         suggestionsScroll = homeFragment.findViewById(R.id.suggestionsScroll);
 
-        sendBtn.setOnClickListener(v -> sendMessage());
+        // Layer 3: Send button — press spring animation
+        sendBtn.setOnTouchListener((v, ev) -> {
+            if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                sendBtn.animate().scaleX(0.88f).scaleY(0.88f).setDuration(80).start();
+            } else if (ev.getAction() == android.view.MotionEvent.ACTION_UP ||
+                       ev.getAction() == android.view.MotionEvent.ACTION_CANCEL) {
+                sendBtn.animate()
+                    .scaleX(1.05f).scaleY(1.05f).setDuration(120)
+                    .withEndAction(() -> sendBtn.animate()
+                        .scaleX(1f).scaleY(1f).setDuration(80).start())
+                    .start();
+            }
+            return false;  // pass through to onClick
+        });
+
+        // Layer 3: Input field border animation on focus
+        inputField.setOnFocusChangeListener((v, focused) -> {
+            android.graphics.drawable.GradientDrawable fieldBg =
+                new android.graphics.drawable.GradientDrawable();
+            fieldBg.setColor(0xFF313244);  // Surface0
+            fieldBg.setCornerRadius(dp(12));
+            fieldBg.setStroke(dp(1), focused ? 0x99B4BEFE : 0x00000000); // Lavender 60% → none
+            inputField.setBackground(fieldBg);
+            inputField.setPadding(dp(12), dp(10), dp(12), dp(10));
+        });
+
+        // Layer 3: Send button pulse when input has text
+        inputField.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {
+                boolean hasText = s.length() > 0;
+                if (hasText) {
+                    // Pulse glow: animate alpha 30→70%
+                    android.animation.ObjectAnimator pulse =
+                        android.animation.ObjectAnimator.ofFloat(sendBtn, "alpha", 0.85f, 1.0f);
+                    pulse.setDuration(800);
+                    pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+                    pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+                    sendBtn.setTag("pulse");
+                    sendBtn.setTag(R.id.tag1, pulse);
+                    pulse.start();
+                } else {
+                    // Stop pulse
+                    Object p = sendBtn.getTag(R.id.tag1);
+                    if (p instanceof android.animation.ObjectAnimator)
+                        ((android.animation.ObjectAnimator) p).cancel();
+                    sendBtn.setAlpha(1f);
+                }
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+
+        // Layer 1: keyboard visibility → nav bar float
+        final android.view.ViewTreeObserver.OnGlobalLayoutListener keyboardListener =
+            new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            private boolean wasOpen = false;
+            @Override public void onGlobalLayout() {
+                android.graphics.Rect r = new android.graphics.Rect();
+                getWindow().getDecorView().getWindowVisibleDisplayFrame(r);
+                int screenH = getWindow().getDecorView().getHeight();
+                boolean isOpen = (screenH - r.bottom) > screenH * 0.15;
+                if (isOpen != wasOpen) {
+                    wasOpen = isOpen;
+                    View nav = findViewById(R.id.bottomNav);
+                    if (nav != null) {
+                        nav.animate()
+                            .translationY(isOpen ? -dp(4) : 0f)
+                            .scaleX(isOpen ? 0.97f : 1f)
+                            .scaleY(isOpen ? 0.97f : 1f)
+                            .setDuration(200)
+                            .setInterpolator(new android.view.animation.OvershootInterpolator(1.8f))
+                            .start();
+                    }
+                }
+            }
+        };
+        getWindow().getDecorView().getViewTreeObserver()
+            .addOnGlobalLayoutListener(keyboardListener);
+
+        sendBtn.setOnClickListener(v -> {
+            // K badge rotates 360° on send
+            View kBadge = homeFragment.findViewWithTag("kBadge");
+            if (kBadge != null) {
+                kBadge.animate()
+                    .rotationBy(360f)
+                    .setDuration(600)
+                    .setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator())
+                    .start();
+            }
+            sendMessage();
+        });
         inputField.setOnEditorActionListener((v, id, e) -> {
             if (id == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendMessage(); return true; }
             return false;
         });
         buildSuggestions();
 
-        headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
+        stopSubtitleCycle(); headerSubtitle.setText("ready · " + cfg.userName.toLowerCase());
 
         // History
         historyList  = historyFragment.findViewById(R.id.historyList);
@@ -492,12 +584,21 @@ public class MainActivity extends Activity
         settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            int activeColor = 0xFFDC143C;
-            int idleColor   = 0xFF222233;
+            // Catppuccin: Lavender active, Overlay0 inactive
+            int activeColor = 0xFFB4BEFE;  // Lavender
+            int idleColor   = 0xFF6C7086;  // Overlay0
             navIcons[i].setTextColor(on ? activeColor : idleColor);
             navTexts[i].setTextColor(on ? activeColor : idleColor);
-            // Active tab: subtle crimson underline via background
-            navItems[i].setBackgroundColor(on ? 0x15DC143C : 0x00000000);
+            navItems[i].setBackgroundColor(0x00000000); // transparent — aura is drawn by NeuralNavBar
+            // Icon spring animation: grow on activate, shrink on deactivate
+            if (navIcons[i] != null) {
+                navIcons[i].animate()
+                    .scaleX(on ? 1.18f : 1.0f)
+                    .scaleY(on ? 1.18f : 1.0f)
+                    .setDuration(on ? 250 : 200)
+                    .setInterpolator(new android.view.animation.OvershootInterpolator(2.8f))
+                    .start();
+            }
         }
         if (tab == 2) refreshHistory();
         if (tab == 3) updateSettingsUI();
@@ -556,8 +657,26 @@ public class MainActivity extends Activity
         ConvTurn userTurn = new ConvTurn("user", text);
         conversation.add(userTurn);
         addUserBubble(userTurn);
+        // Layer 0: vortex ON — Kira is thinking
+        new Thread(() -> { try { new okhttp3.OkHttpClient().newCall(
+            new okhttp3.Request.Builder().url("http://localhost:7070/theme/thinking")
+                .post(okhttp3.RequestBody.create("{\"active\":true}",
+                    okhttp3.MediaType.parse("application/json"))).build()).execute();
+        } catch (Exception ignored) {} }).start();
+        // Layer 2: Pulse header border Lavender 27%→35%
+        View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
+        if (hb != null) {
+            android.animation.ObjectAnimator borderPulse =
+                android.animation.ObjectAnimator.ofArgb(hb, "backgroundColor",
+                    0x44B4BEFE, 0x59B4BEFE);
+            borderPulse.setDuration(600);
+            borderPulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            borderPulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            hb.setTag(R.id.tag2, borderPulse);
+            borderPulse.start();
+        }
 
-        headerSubtitle.setText("thinking...");
+        startSubtitleCycle(new String[]{"thinking...", "reasoning...", "processing...", "composing..."});
         sendBtn.setEnabled(false);
 
         // Thinking placeholder
@@ -583,7 +702,7 @@ public class MainActivity extends Activity
                         addKiraBubble(kiraTurn[0]);
                     }
                     sendBtn.setEnabled(true);
-                    headerSubtitle.setText("ready, " + cfg.userName.toLowerCase() + ".");
+                    stopSubtitleCycle(); headerSubtitle.setText("ready · " + cfg.userName.toLowerCase());
                     scrollToBottom();
                 });
             }
@@ -646,9 +765,13 @@ public class MainActivity extends Activity
 
         TextView msg = new TextView(this);
         msg.setText(turn.text);
-        msg.setTextColor(0xFFdddddd);
+        msg.setTextColor(0xFFCDD6F4);  // Catppuccin Text
         msg.setTextSize(14);
-        msg.setBackgroundColor(0xAA0a0a1a);
+        // Surface0 bubble, rounded corners except bottom-right
+        android.graphics.drawable.GradientDrawable userBg = new android.graphics.drawable.GradientDrawable();
+        userBg.setColor(0xFF313244);  // Surface0
+        userBg.setCornerRadii(new float[]{dp(8),dp(8), dp(8),dp(8), 0,0, dp(8),dp(8)});
+        msg.setBackground(userBg);
         msg.setPadding(dp(14), dp(10), dp(14), dp(10));
         msg.setLineSpacing(dp(2), 1);
         msg.setTextIsSelectable(true);
@@ -656,6 +779,14 @@ public class MainActivity extends Activity
         wrap.addView(labelRow);
         wrap.addView(msg);
         chatContainer.addView(wrap);
+        // Spring in from right (Layer 2)
+        wrap.setTranslationX(dp(40));
+        wrap.setAlpha(0f);
+        wrap.animate()
+            .translationX(0f).alpha(1f)
+            .setDuration(320)
+            .setInterpolator(new android.view.animation.OvershootInterpolator(1.4f))
+            .start();
         scrollToBottom();
     }
 
@@ -664,28 +795,8 @@ public class MainActivity extends Activity
 
     private void addThinkingBubble(ConvTurn turn) {
         thinkingTurn = turn;
-        LinearLayout wrap = new LinearLayout(this);
-        wrap.setOrientation(LinearLayout.VERTICAL);
-        wrap.setTag("thinking");
-        LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(MATCH, WRAP);
-        wp.setMargins(0, 0, 0, dp(4));
-        wrap.setLayoutParams(wp);
-
-        TextView label = makeLabel("KIRA");
-        label.setTextColor(0xFFDC143C);
-        label.setPadding(0, 0, 0, dp(3));
-
-        TextView msg = new TextView(this);
-        msg.setText("???");
-        msg.setTextColor(t(D_TEXT3, L_TEXT3));
-        msg.setTextSize(14);
-        msg.setTag("thinking_msg");
-
-        wrap.addView(label);
-        wrap.addView(msg);
-        chatContainer.addView(wrap);
-        thinkingView = wrap;
-        scrollToBottom();
+        showTypingIndicator();  // Layer 2: sinusoidal dot animation
+        thinkingView = typingIndicator;
     }
 
     private void updateThinkingBubble(ConvTurn turn, String reply) {
@@ -702,10 +813,8 @@ public class MainActivity extends Activity
     }
 
     private void removeThinkingBubble() {
-        if (thinkingView != null) {
-            chatContainer.removeView(thinkingView);
-            thinkingView = null;
-        }
+        hideTypingIndicator();
+        thinkingView = null;
     }
 
     private void addKiraBubble(ConvTurn turn) {
@@ -752,11 +861,36 @@ public class MainActivity extends Activity
             msg.setPadding(dp(14), dp(10), dp(14), dp(10));
             msg.setLineSpacing(dp(2), 1);
             msg.setTextIsSelectable(true);
+            // Kira bubble: Base bg + Lavender left border
+            android.graphics.drawable.GradientDrawable kiraBg =
+                new android.graphics.drawable.GradientDrawable();
+            kiraBg.setColor(0xFF1E1E2E);  // Base
+            kiraBg.setCornerRadii(new float[]{0,0, dp(8),dp(8), dp(8),dp(8), dp(8),dp(8)});
+            msg.setBackground(kiraBg);
+            msg.setTextColor(0xFFCDD6F4);  // Text
+            // Left Lavender bar wrapper
+            LinearLayout kiraRow = new LinearLayout(this);
+            kiraRow.setOrientation(LinearLayout.HORIZONTAL);
+            View lavBar = new View(this);
+            lavBar.setBackgroundColor(0xFFB4BEFE);
+            kiraRow.addView(lavBar, new LinearLayout.LayoutParams(dp(3), LinearLayout.LayoutParams.MATCH_PARENT));
+            kiraRow.addView(msg,   new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
             wrap.addView(header);
-            wrap.addView(msg);
+            wrap.addView(kiraRow);
         }
 
         chatContainer.addView(wrap);
+        // Spring in from left (Layer 2)
+        wrap.setTranslationX(-dp(40));
+        wrap.setAlpha(0f);
+        wrap.animate()
+            .translationX(0f).alpha(1f)
+            .setDuration(320)
+            .setInterpolator(new android.view.animation.OvershootInterpolator(1.4f))
+            .start();
+        // Scroll + burst
+        chatScroll.post(() -> chatScroll.fullScroll(android.widget.ScrollView.FOCUS_DOWN));
+        onKiraReplied();
     }
 
     /**
@@ -987,20 +1121,14 @@ public class MainActivity extends Activity
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER) return;
-        float ax = event.values[0]; // tilt left/right
+        float ax = event.values[0]; // tilt left/right  (–10 to +10)
         float ay = event.values[1]; // tilt forward/back
         // Push to Rust for EMA smoothing
         RustBridge.updateTilt(ax, ay);
-        // Read smoothed parallax back and update GalaxyView
-        if (galaxyView == null) return;
-        try {
-            String j = RustBridge.getStarParallax();
-            if (j == null) return;
-            // Parse {"px":0.12,"py":-0.05,...}
-            float px = parseJsonFloat(j, "px");
-            float py = parseJsonFloat(j, "py");
-            galaxyView.setParallax(px, py);
-        } catch (Exception ignored) {}
+        // Pass normalised tilt directly to GalaxyView (–1 to +1 range)
+        if (galaxyView != null) {
+            galaxyView.setParallax(ax / 10f, ay / 10f);
+        }
     }
 
     @Override
@@ -1018,9 +1146,60 @@ public class MainActivity extends Activity
     }
 
     private void seedGalaxyFromRust() {
+        // GalaxyView seeds deterministically — no action needed
+    }
+
+    // ── Galaxy animation polling (every 500ms) ─────────────────────────────
+    private final android.os.Handler animHandler = new android.os.Handler(
+        android.os.Looper.getMainLooper());
+    private final Runnable animPollRunnable = new Runnable() {
+        @Override public void run() {
+            pollGalaxyAnim();
+            animHandler.postDelayed(this, 500);
+        }
+    };
+
+    private void pollGalaxyAnim() {
         if (galaxyView == null) return;
-        // GalaxyView self-seeds with deterministic RNG - Rust state not needed
-        // Future: pass Rust-generated star positions here
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build();
+                okhttp3.Response resp = client.newCall(
+                    new okhttp3.Request.Builder()
+                        .url("http://localhost:7070/theme/anim").get().build()).execute();
+                if (resp.body() == null) return;
+                String j = resp.body().string();
+                float phase    = parseJsonFloat(j, "phase");
+                float bpm      = parseJsonFloat(j, "bpm");
+                float activity = parseJsonFloat(j, "activity");
+                boolean thinking = j.contains(""thinking":true");
+                uiHandler.post(() -> galaxyView.setAnimState(phase, bpm, activity, thinking));
+            } catch (Exception ignored) {}
+        }).start();
+    }
+
+    /** Called by KiraAI when a response is fully received — triggers burst */
+    public void onKiraReplied() {
+        if (galaxyView != null) {
+            galaxyView.triggerBurst();
+        }
+        // Stop header border pulse
+        View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
+        if (hb != null) {
+            Object p = hb.getTag(R.id.tag2);
+            if (p instanceof android.animation.ObjectAnimator)
+                ((android.animation.ObjectAnimator) p).cancel();
+            hb.setBackgroundColor(0x44B4BEFE);
+        }
+        hideTypingIndicator();
+        // Signal Rust: done thinking → vortex OFF
+        new Thread(() -> { try { new okhttp3.OkHttpClient().newCall(
+            new okhttp3.Request.Builder().url("http://localhost:7070/theme/thinking")
+                .post(okhttp3.RequestBody.create("{\"active\":false}",
+                    okhttp3.MediaType.parse("application/json"))).build()).execute();
+        } catch (Exception ignored) {} }).start();
     }
 
     private void showProviderPicker() {
@@ -1388,14 +1567,24 @@ public class MainActivity extends Activity
 
         // ── Nav bar ─────────────────────────────────────────────────────────
         View nav = findViewById(R.id.bottomNav);
-        if (nav != null) nav.setBackgroundColor(isDarkTheme ? D_NAV : L_NAV);
+        if (nav != null) {
+            // Neural Nav Bar: Catppuccin Mantle floating island
+            android.graphics.drawable.GradientDrawable navBg =
+                new android.graphics.drawable.GradientDrawable();
+            navBg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            navBg.setCornerRadius(dp(24));
+            navBg.setColor(isDarkTheme ? 0xF0181825 : 0xF0E6E9EF); // Mantle / Crust light
+            navBg.setStroke(1, isDarkTheme ? 0x4DB4BEFE : 0x4D7C84BF); // Lavender top edge
+            nav.setBackground(navBg);
+            nav.setElevation(dp(8));
+        }
         // Re-colour nav icons to correct active/inactive state
         for (int i = 0; i < 4; i++) {
             boolean on = i == currentTab;
             if (navIcons != null && navIcons[i] != null)
-                navIcons[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
+                navIcons[i].setTextColor(on ? 0xFFB4BEFE : (isDarkTheme ? 0xFF6C7086 : 0xFF888899));
             if (navTexts != null && navTexts[i] != null)
-                navTexts[i].setTextColor(on ? 0xFFDC143C : (isDarkTheme ? 0xFF444460 : 0xFF888899));
+                navTexts[i].setTextColor(on ? 0xFFB4BEFE : (isDarkTheme ? 0xFF6C7086 : 0xFF888899));
         }
 
         // ── Fragment backgrounds ────────────────────────────────────────────
@@ -1750,6 +1939,92 @@ public class MainActivity extends Activity
             case "open_url":          return "open https://news.ycombinator.com";
             case "send_email":        return "send email to test@example.com subject hello";
             default: return "what can you do?";
+        }
+    }
+
+    // ── Layer 2: Subtitle crossfade cycle ───────────────────────────────────
+    private final android.os.Handler subtitleHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable subtitleRunnable;
+    private int subtitleIdx = 0;
+
+    private void startSubtitleCycle(String[] labels) {
+        subtitleIdx = 0;
+        subtitleHandler.removeCallbacks(subtitleRunnable);
+        subtitleRunnable = new Runnable() {
+            @Override public void run() {
+                if (headerSubtitle == null) return;
+                // Fade out → change → fade in
+                headerSubtitle.animate().alpha(0f).setDuration(150)
+                    .withEndAction(() -> {
+                        subtitleIdx = (subtitleIdx + 1) % labels.length;
+                        headerSubtitle.setText(labels[subtitleIdx]);
+                        headerSubtitle.animate().alpha(1f).setDuration(150).start();
+                    }).start();
+                subtitleHandler.postDelayed(this, 1800);
+            }
+        };
+        headerSubtitle.setText(labels[0]);
+        subtitleHandler.postDelayed(subtitleRunnable, 1800);
+    }
+
+    private void stopSubtitleCycle() {
+        subtitleHandler.removeCallbacks(subtitleRunnable);
+    }
+
+    // ── Layer 2: Animated typing indicator (three sine-wave dots) ────────
+    private LinearLayout typingIndicator;
+    private android.os.Handler typingHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+
+    private void showTypingIndicator() {
+        if (typingIndicator != null) { chatContainer.removeView(typingIndicator); }
+        typingIndicator = new LinearLayout(this);
+        typingIndicator.setOrientation(LinearLayout.HORIZONTAL);
+        typingIndicator.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        typingIndicator.setPadding(dp(16), dp(8), dp(16), dp(8));
+        typingIndicator.setTag("typing_indicator");
+        // 3 Lavender dots with staggered sine-wave bounce
+        for (int i = 0; i < 3; i++) {
+            View dot = new View(this);
+            dot.setBackgroundColor(0xFFB4BEFE);  // Lavender
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(6), dp(6));
+            lp.setMargins(dp(3), 0, dp(3), 0);
+            dot.setLayoutParams(lp);
+            typingIndicator.addView(dot);
+            // Stagger: 0ms, 120ms, 240ms
+            final int delay = i * 120;
+            uiHandler.postDelayed(() -> animateDot(dot), delay);
+        }
+        typingIndicator.setAlpha(0f);
+        chatContainer.addView(typingIndicator);
+        typingIndicator.animate().alpha(1f).setDuration(100).start();
+        scrollToBottom();
+    }
+
+    private void animateDot(View dot) {
+        dot.animate()
+            .translationY(-dp(4))
+            .setDuration(300)
+            .setInterpolator(new android.view.animation.OvershootInterpolator(1.5f))
+            .withEndAction(() -> dot.animate()
+                .translationY(0)
+                .setDuration(300)
+                .withEndAction(() -> {
+                    // Repeat if still visible
+                    if (typingIndicator != null && typingIndicator.getParent() != null) {
+                        uiHandler.postDelayed(() -> animateDot(dot), 200);
+                    }
+                }).start())
+            .start();
+    }
+
+    private void hideTypingIndicator() {
+        if (typingIndicator != null) {
+            final LinearLayout ti = typingIndicator;
+            typingIndicator = null;
+            ti.animate().alpha(0f).setDuration(150)
+                .withEndAction(() -> chatContainer.removeView(ti)).start();
         }
     }
 
@@ -2299,6 +2574,12 @@ public class MainActivity extends Activity
     @Override protected void onResume() {
         super.onResume();
         if (currentTab == 3) updateShizukuStatus();
+    }
+
+    @Override protected void onStop() {
+        super.onStop();
+        animHandler.removeCallbacks(animPollRunnable);
+        if (sensorManager != null) sensorManager.unregisterListener(this);
     }
 
     @Override protected void onDestroy() {

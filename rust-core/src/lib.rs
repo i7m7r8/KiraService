@@ -629,6 +629,11 @@ struct ThemeConfig {
     corner_radius_md:  u32,   // Medium component radius (card, button) dp
     corner_radius_lg:  u32,   // Large component radius (bottom sheet) dp
     corner_radius_xl:  u32,   // Extra large (dialog, nav drawer) dp
+    // ── Live animation state (polled by UI at 500ms) ─────────────────────────
+    animation_phase:   f32,   // 0.0–1.0, cycles with uptime (3s period)
+    pulse_bpm:         u32,   // 60=idle, 90=processing, 120=agent running
+    activity_level:    f32,   // 0.0–1.0, based on tool_calls in last 60s
+    is_thinking:       bool,  // Kira is currently processing a request
 }
 impl Default for ThemeConfig {
     fn default() -> Self {
@@ -668,6 +673,10 @@ impl Default for ThemeConfig {
             corner_radius_md: 16,
             corner_radius_lg: 24,
             corner_radius_xl: 28,
+            animation_phase:  0.0,
+            pulse_bpm:        60,
+            activity_level:   0.0,
+            is_thinking:      false,
         }
     }
 }
@@ -749,6 +758,11 @@ impl ThemeConfig {
             star_parallax_y:  0.0,
             theme_name:       String::from("material"),
             is_dark:          true,
+            // ── Animation state defaults ──────────────────────────────────
+            animation_phase:  0.0,
+            pulse_bpm:        60,
+            activity_level:   0.0,
+            is_thinking:      false,
         }
     }
 
@@ -800,6 +814,11 @@ impl ThemeConfig {
             star_parallax_y:  0.0,
             theme_name:       String::from("material_light"),
             is_dark:          false,
+            // ── Animation state defaults ──────────────────────────────────
+            animation_phase:  0.0,
+            pulse_bpm:        60,
+            activity_level:   0.0,
+            is_thinking:      false,
         }
     }
 
@@ -847,12 +866,17 @@ impl ThemeConfig {
             star_parallax_y:  0.0,
             theme_name:       String::from("catppuccin_mocha"),
             is_dark:          true,
+            // ── Animation state defaults ──────────────────────────────────
+            animation_phase:  0.0,
+            pulse_bpm:        60,
+            activity_level:   0.0,
+            is_thinking:      false,
         }
     }
 
     fn to_json(&self) -> String {
         format!(
-            r#"{{"name":"{}","accent":{},"bg":{},"card":{},"muted":{},"surface":{},"on_surface":{},"on_accent":{},"surface_var":{},"outline":{},"error":{},"is_dark":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6},"secondary":{},"on_secondary":{},"tertiary":{},"on_tertiary":{},"surface2":{},"surface3":{},"surface5":{},"outline_var":{},"success":{},"warning":{},"scrim":{},"ripple":{},"corner_sm":{},"corner_md":{},"corner_lg":{},"corner_xl":{}}}"#,
+            r#"{{"name":"{}","accent":{},"bg":{},"card":{},"muted":{},"surface":{},"on_surface":{},"on_accent":{},"surface_var":{},"outline":{},"error":{},"is_dark":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6},"secondary":{},"on_secondary":{},"tertiary":{},"on_tertiary":{},"surface2":{},"surface3":{},"surface5":{},"outline_var":{},"success":{},"warning":{},"scrim":{},"ripple":{},"corner_sm":{},"corner_md":{},"corner_lg":{},"corner_xl":{},"animation_phase":{:.6},"pulse_bpm":{},"activity_level":{:.6},"is_thinking":{}}}"#,
             self.theme_name,
             self.accent_color, self.bg_color, self.card_color, self.muted_color,
             self.surface_color, self.on_surface_color, self.on_accent_color,
@@ -866,7 +890,9 @@ impl ThemeConfig {
             self.success_color, self.warning_color,
             self.scrim_color, self.ripple_color,
             self.corner_radius_sm, self.corner_radius_md,
-            self.corner_radius_lg, self.corner_radius_xl
+            self.corner_radius_lg, self.corner_radius_xl,
+            self.animation_phase, self.pulse_bpm,
+            self.activity_level, self.is_thinking
         )
     }
 }
@@ -2985,7 +3011,42 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET",  "/setup")             => { let s=STATE.lock().unwrap(); format!(r#"{{"page":{},"done":{},"user_name":"{}","model":"{}","base_url":"{}","selected_provider":"{}","custom_url":"{}","quote_index":{}}}"#, s.setup.current_page,s.setup.done,esc(&s.setup.user_name),esc(&s.setup.model),esc(&s.setup.base_url),esc(&s.setup.selected_provider_id),esc(&s.setup.custom_url),s.setup.quote_index) }
         ("POST", "/setup/page")        => { if let Some(page)=extract_json_num(body,"page") { STATE.lock().unwrap().setup.current_page=page as u8; } r#"{"ok":true}"#.to_string() }
         ("POST", "/setup/complete")    => { let mut s=STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; r#"{"ok":true}"#.to_string() }
-        ("GET",  "/theme")             => { let s=STATE.lock().unwrap(); s.theme.to_json() }
+        ("GET",  "/theme")             => {
+            // Update animation state before returning
+            let mut s = STATE.lock().unwrap();
+            let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
+            let phase_secs = (uptime_ms % 3000) as f32 / 3000.0; // 3s cycle
+            s.theme.animation_phase = phase_secs;
+            // BPM: 60 idle, 90 when recent requests, 120 when agent active
+            let recent = s.tool_call_count;
+            s.theme.pulse_bpm = if s.theme.is_thinking { 120 }
+                else if recent > 0 { 90 } else { 60 };
+            // activity_level: clamp tool calls per minute to 0-1
+            let tools_recent = s.macro_run_log.iter()
+                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000)
+                .count();
+            s.theme.activity_level = (tools_recent as f32 / 10.0).min(1.0);
+            s.theme.to_json()
+        }
+        ("GET",  "/theme/anim")         => {
+            let mut s = STATE.lock().unwrap();
+            let uptime_ms = now_ms().saturating_sub(s.uptime_start);
+            let phase = (uptime_ms % 3000) as f32 / 3000.0;
+            s.theme.animation_phase = phase;
+            let tools_recent = s.macro_run_log.iter()
+                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000)
+                .count();
+            format!(r#"{{"phase":{:.6},"bpm":{},"activity":{:.6},"thinking":{}}}"#,
+                phase, s.theme.pulse_bpm,
+                (tools_recent as f32 / 10.0).min(1.0),
+                s.theme.is_thinking)
+        }
+        // POST /theme/thinking {"active":true}  — set thinking state
+        ("POST", "/theme/thinking")     => {
+            let active = body.contains(""active":true");
+            STATE.lock().unwrap().theme.is_thinking = active;
+            r#"{"ok":true}"#.to_string()
+        }
         ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
         ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap(); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
         ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }

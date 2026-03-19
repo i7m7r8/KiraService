@@ -14,7 +14,7 @@
 //   - Macro import/export JSON
 //   - All v8/v38 features preserved
 
-#![allow(non_snake_case, dead_code, clippy::upper_case_acronyms)]
+#![allow(non_snake_case, dead_code, unused_mut, clippy::upper_case_acronyms)]
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
@@ -727,6 +727,8 @@ struct KiraState {
 
     // Stats
     uptime_start:      u128,
+    // HTTP auth secret (empty = localhost-only open access)
+    http_secret:       String,
     request_count:     u64,
     tool_call_count:   u64,
 
@@ -2363,6 +2365,7 @@ Context: {}",
             s.macro_run_log.len(), check_rate_limit(&s)
         );
         CString::new(json).unwrap_or_default().into_raw()
+    }
 
     // ── v43: OTA Engine JNI ───────────────────────────────────────────────────
 
@@ -2439,7 +2442,9 @@ Context: {}",
         s.ota.download_bytes = bytes_done as u64;
         s.ota.download_total = bytes_total as u64;
         s.ota.download_pct   = if bytes_total > 0 {
-            ((bytes_done * 100) / bytes_total).min(100) as u8
+            // Use u128 to prevent overflow on large files (bytes_done * 100)
+            let pct = (bytes_done as u128 * 100) / bytes_total as u128;
+            pct.min(100) as u8
         } else { 0 };
         s.ota.phase = OtaPhase::Downloading;
     }
@@ -2453,6 +2458,15 @@ Context: {}",
         sha256: *const c_char,
     ) -> *mut c_char {
         let (path, sha) = (cs(path), cs(sha256));
+        // SECURITY: Validate APK path — must end with .apk, no path traversal
+        let path_ok = path.ends_with(".apk")
+            && !path.contains("..")
+            && !path.contains("//")
+            && (path.contains("/cache/") || path.contains("/data/"));
+        if !path_ok {
+            return CString::new(r#"{"ok":false,"error":"invalid_apk_path"}"#)
+                .unwrap_or_default().into_raw();
+        }
         let mut s = STATE.lock().unwrap();
         s.ota.apk_local_path = path.clone();
         let expected = s.ota.apk_sha256.clone();
@@ -2535,6 +2549,15 @@ fn run_http(port: u16) {
     for stream in listener.incoming().flatten() { thread::spawn(|| handle_http(stream)); }
 }
 
+/// Lock STATE recovering from poison — if a thread panicked while holding the
+/// lock, we recover the state rather than panicking the HTTP thread too.
+macro_rules! state_lock {
+    () => { match STATE.lock() {
+        Ok(g)  => g,
+        Err(e) => e.into_inner(), // recover poisoned mutex
+    }}
+}
+
 fn handle_http(mut stream: TcpStream) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut buf = [0u8; 65536];
@@ -2544,16 +2567,80 @@ fn handle_http(mut stream: TcpStream) {
     let parts: Vec<&str> = first.split_whitespace().collect();
     if parts.len() < 2 { return; }
     let body = req.find("\r\n\r\n").map(|i| req[i+4..].trim().to_string()).unwrap_or_default();
-    let resp = route_http(parts[0], parts[1], &body);
+    let resp = route_http_with_raw(parts[0], parts[1], &body, &req.to_string());
     let http = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nX-Kira-Engine: rust-v9\r\n\r\n{}", resp.len(), resp);
     let _ = stream.write_all(http.as_bytes());
     STATE.lock().unwrap().request_count += 1;
+}
+
+fn get_http_header<'a>(req: &'a str, name: &str) -> Option<&'a str> {
+    let needle = format!("
+{}:", name.to_lowercase());
+    let lreq   = req.to_lowercase();
+    let pos    = lreq.find(&needle)?;
+    let after  = &req[pos + needle.len()..];
+    let end    = after.find("
+").unwrap_or(after.len());
+    Some(after[..end].trim())
+}
+
+fn requires_auth(path: &str) -> bool {
+    matches!(path,
+        "/config" | "/soul" | "/credentials/get" |
+        "/policy" | "/policy/allow" | "/policy/deny" | "/ota/set_version"
+    )
+}
+
+/// Constant-time comparison to prevent timing attacks on the token.
+fn check_auth(token: Option<&str>) -> bool {
+    let secret = {
+        let s = match STATE.lock() { Ok(g) => g, Err(e) => e.into_inner() };
+        s.http_secret.clone()
+    };
+    if secret.is_empty() { return true; }   // no secret set = localhost open
+    match token {
+        None    => false,
+        Some(t) => {
+            let tb = t.as_bytes();
+            let sb = secret.as_bytes();
+            if tb.len() != sb.len() { return false; }
+            // fold XOR — result is 0 only if every byte matches
+            tb.iter().zip(sb.iter()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+        }
+    }
+}
+
+/// Entry point called by handle_http — wraps route_http with auth check.
+fn route_http_with_raw(method: &str, path: &str, body: &str, raw_req: &str) -> String {
+    let path_clean = path.split('?').next().unwrap_or(path);
+    if requires_auth(path_clean) {
+        let token = get_http_header(raw_req, "x-kira-token");
+        if !check_auth(token) {
+            return r#"{"error":"unauthorized","code":401}"#.to_string();
+        }
+    }
+    route_http(method, path, body)
 }
 
 fn route_http(method: &str, path: &str, body: &str) -> String {
     let path_clean = path.split('?').next().unwrap_or(path);
     match (method, path_clean) {
         // Health & stats
+        // Auth management (localhost only — sets the shared secret)
+        ("POST", "/auth/set_secret") => {
+            let secret = extract_json_str(body, "secret").unwrap_or_default();
+            if secret.len() >= 16 {
+                STATE.lock().unwrap().http_secret = secret;
+                r#"{"ok":true}"#.to_string()
+            } else {
+                r#"{"error":"secret must be at least 16 characters"}"#.to_string()
+            }
+        }
+        ("DELETE", "/auth/secret") => {
+            STATE.lock().unwrap().http_secret = String::new();
+            r#"{"ok":true,"warning":"auth disabled — all endpoints open"}"#.to_string()
+        }
+
         ("GET", "/health") | ("GET", "/status") => {
             let s = STATE.lock().unwrap();
             format!(r#"{{"status":"ok","version":"9.0","uptime_ms":{},"requests":{},"tool_calls":{},"battery":{},"charging":{},"notifications":{},"skills":{},"triggers":{},"memory_entries":{},"total_tokens":{},"sessions":{},"setup_done":{},"macros":{},"active_profile":"{}","variables":{}}}"#,
@@ -2857,7 +2944,7 @@ fn run_macro_engine() {
         apply_context_zones(&mut s);
         // Check composite triggers
         let composites: Vec<CompositeTrigger> = s.composite_triggers.iter().cloned().collect();
-        for mut ct in composites {
+        for ct in composites {
             if check_composite_trigger(&s, &ct) {
                 let target = ct.target_macro.clone();
                 if battery_allows_run(&s, &target) {
@@ -3022,6 +3109,8 @@ fn add_cron(body: &str) {
 }
 
 fn fire_notif_triggers(s: &mut KiraState, pkg: &str, title: &str, text: &str) {
+    // Enforce cap on fired_triggers to prevent unbounded growth
+    if s.fired_triggers.len() > 1000 { s.fired_triggers.pop_front(); }
     let combined=format!("{} {} {}", pkg, title, text).to_lowercase();
     let tt: Vec<Trigger>=s.triggers.iter().filter(|t| (t.trigger_type=="keyword_notif"||t.trigger_type=="app_notif") && !t.fired).cloned().collect();
     for t in tt {
@@ -5701,8 +5790,35 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
 }
 
 // Crypto
-fn derive_key(name: &str) -> Vec<u8> { let mut key=vec![0u8;32]; for (i,b) in name.bytes().enumerate() { key[i%32]^=b.wrapping_add((i as u8).wrapping_mul(7)); } key }
-fn xor_crypt(data: &[u8], key: &[u8]) -> Vec<u8> { if key.is_empty() { return data.to_vec(); } data.iter().enumerate().map(|(i,&b)| b^key[i%key.len()]).collect() }
+// SECURITY: Credential key derivation — 1024 rounds of byte mixing.
+// This is obfuscation (in-memory protection), NOT cryptographic encryption.
+// For real encryption-at-rest, use Android Keystore via JNI.
+fn derive_key(name: &str) -> Vec<u8> {
+    let mut key = [0u8; 32];
+    for (i, b) in name.bytes().enumerate() {
+        key[i % 32] = key[i % 32].wrapping_add(b).wrapping_add(i as u8);
+    }
+    // Stretch: 1024 mixing rounds
+    for round in 0u32..1024 {
+        let rb = (round & 0xFF) as u8;
+        for i in 0..32usize {
+            key[i] = key[i]
+                .wrapping_add(key[(i + 1) % 32])
+                .wrapping_add(rb)
+                .rotate_left(((i % 7) + 1) as u32);
+        }
+    }
+    key.to_vec()
+}
+fn xor_crypt(data: &[u8], key: &[u8]) -> Vec<u8> {
+    if key.is_empty() { return data.to_vec(); }
+    let klen = key.len();
+    data.iter().enumerate().map(|(i, &b)| {
+        let k1 = key[i % klen];
+        let k2 = key[(i.wrapping_add(klen / 2 + 1)) % klen];
+        b ^ k1 ^ k2.rotate_left(((i % 5) + 1) as u32)
+    }).collect()
+}
 
 // Utilities
 fn now_ms() -> u128 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() }

@@ -534,11 +534,16 @@ public class KiraOtaUpdater {
         public void onReceive(Context ctx, Intent intent) {
             String action = intent.getAction();
 
-            // Notification action: user tapped "Install"
+            // SECURITY: Notification action: user tapped "Install"
+            // Validate URL is a GitHub releases URL before downloading
             if ("com.kira.ota.DOWNLOAD".equals(action)) {
                 String tag = intent.getStringExtra("tag");
                 String url = intent.getStringExtra("url");
-                if (url != null) new KiraOtaUpdater(ctx).startDownload(url, tag);
+                if (url != null && isValidGithubReleaseUrl(url)) {
+                    new KiraOtaUpdater(ctx).startDownload(url, tag);
+                } else {
+                    Log.w("KiraOTA", "Blocked invalid download URL: " + url);
+                }
                 return;
             }
             // Notification action: user tapped "Skip"
@@ -588,6 +593,14 @@ public class KiraOtaUpdater {
                         if (apk.exists()) new KiraOtaUpdater(ctx).installViaIntent(apk, tag);
                     }
             }
+        }
+
+        /** SECURITY: Only allow GitHub release download URLs */
+        private static boolean isValidGithubReleaseUrl(String url) {
+            if (url == null || url.isEmpty()) return false;
+            return url.startsWith("https://github.com/") ||
+                   url.startsWith("https://objects.githubusercontent.com/") ||
+                   url.startsWith("https://releases.github.com/");
         }
     }
 }

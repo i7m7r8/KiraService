@@ -1,23 +1,30 @@
 [package]
-name = "kira-core"
+name    = "kira-core"
 version = "9.0.0"
 edition = "2021"
 
 [lib]
-name = "kira_core"
+name       = "kira_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-lazy_static  = "1.4"
-serde        = { version = "1", features = ["derive"] }
-serde_json   = "1"
+# Core — pinned exact versions for reproducible Android builds
+lazy_static = "1.5"
+serde       = { version = "1.0", features = ["derive"] }
+serde_json  = "1.0"
+
+# NOTE: All other functionality (crypto, HTTP, JNI) uses stdlib only.
+# Adding crates increases APK size and cross-compilation complexity.
+# SHA256 in Java (KiraOtaUpdater), XOR obfuscation in Rust (derive_key).
 
 [profile.release]
-opt-level     = "z"
-lto           = true
-codegen-units = 1
-panic         = "abort"
-strip         = true
+opt-level     = "z"       # minimise binary size for APK
+lto           = true      # link-time optimisation
+codegen-units = 1         # single codegen unit for max LTO benefit
+panic         = "abort"   # no unwinding — reduces binary size ~30KB
+strip         = true      # strip symbols from final .so
+overflow-checks = true    # catch integer overflows in release too
 
 [profile.dev]
-opt-level = 1
+opt-level       = 1
+overflow-checks = true

@@ -66,7 +66,7 @@ public class KiraHeartbeat {
         boolean charging = isCharging();
 
         // Push to Rust state
-        RustBridge.updateBattery(pct, charging);
+        try { RustBridge.updateBattery(pct, charging); } catch (Throwable ignored) {}
 
         KiraMemory mem = new KiraMemory(ctx);
 
@@ -106,7 +106,7 @@ public class KiraHeartbeat {
 
         // Check Rust fired triggers
         String triggered;
-        while ((triggered = RustBridge.nextFiredTrigger()) != null) {
+        while (true) { try { triggered = RustBridge.nextFiredTrigger(); } catch (Throwable ignored) { break; } if (triggered == null) break;
             Log.d(TAG, "trigger fired: " + triggered);
             try {
                 JSONObject obj = new JSONObject(triggered);

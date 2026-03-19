@@ -66,13 +66,13 @@ public class KiraWatcher {
     private void doCheck() throws Exception {
         // Push battery to Rust
         int pct = getBatteryPct();
-        if (pct > 0) RustBridge.updateBattery(pct, isCharging());
+        if (pct > 0) try { RustBridge.updateBattery(pct, isCharging()); } catch (Throwable ignored) {}
 
         // Track foreground app changes (ZeroClaw)
         String pkg = ShizukuShell.exec("dumpsys activity recents | grep 'Recent #0' | grep -o 'A=[^ ]*' | cut -d= -f2 | cut -d/ -f1 2>/dev/null");
         pkg = pkg.trim();
         if (!pkg.isEmpty() && !pkg.equals(lastPkg)) {
-            RustBridge.updateScreenPackage(pkg);
+            try { RustBridge.updateScreenPackage(pkg); } catch (Throwable ignored) {}
             lastPkg = pkg;
             Log.d(TAG, "foreground app: " + pkg);
         }

@@ -962,11 +962,11 @@ public class MainActivity extends Activity
         float ax = event.values[0]; // tilt left/right
         float ay = event.values[1]; // tilt forward/back
         // Push to Rust for EMA smoothing
-        RustBridge.updateTilt(ax, ay);
+        try { RustBridge.updateTilt(ax, ay); } catch (Throwable ignored) {}
         // Read smoothed parallax back and update GalaxyView
         if (galaxyView == null) return;
         try {
-            String j = RustBridge.getStarParallax();
+            String j; try { j = RustBridge.getStarParallax(); } catch (Throwable e) { return; }
             if (j == null) return;
             // Parse {"px":0.12,"py":-0.05,...}
             float px = parseJsonFloat(j, "px");

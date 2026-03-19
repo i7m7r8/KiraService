@@ -40,7 +40,7 @@ public class KiraAccessibilityService extends AccessibilityService {
         handler = new Handler(Looper.getMainLooper());
 
         // Start Rust HTTP server on port 7070
-        RustBridge.startServer(7070);
+        try { RustBridge.startServer(7070); } catch (Throwable ignored) {}
 
         // Init AI
         ai = new KiraAI(this);
@@ -80,7 +80,7 @@ public class KiraAccessibilityService extends AccessibilityService {
             if (data == null) data = new org.json.JSONObject();
 
             String result = dispatchRustCmd(endpoint, data);
-            RustBridge.pushResult(id, result);
+            try { RustBridge.pushResult(id, result); } catch (Throwable ignored) {}
         } catch (Exception e) {
             try {
                 org.json.JSONObject obj = new org.json.JSONObject(cmdJson);
@@ -291,7 +291,7 @@ public class KiraAccessibilityService extends AccessibilityService {
             String entry = "[" + pkg + "] " + title + (text.isEmpty() ? "" : ": " + text);
             recentNotifications.add(entry);
             if (recentNotifications.size() > 100) recentNotifications.remove(0);
-            RustBridge.pushNotification(pkg, title, text);
+            try { RustBridge.pushNotification(pkg, title, text); } catch (Throwable ignored) {}
         }
     }
 

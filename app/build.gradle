@@ -1,7 +1,8 @@
 plugins { id 'com.android.application' }
 
-// Safe versionCode: minutes since epoch capped to fit int, no overflow when *10
-def buildVersionCode = (int) Math.min((System.currentTimeMillis() - 1704067200000L) / 60000L, 200000000L)
+// Safe versionCode: minutes since Jan 2024, capped at 200M to prevent *10 overflow
+def _raw = (System.currentTimeMillis() - 1704067200000L) / 60000L
+def buildVersionCode = (int)(_raw > 200000000L ? 200000000L : _raw)
 
 android {
     compileSdk 34

@@ -95,7 +95,7 @@ public class KiraAgent {
 
         String plan = ai.simpleChat(planPrompt);
         cb.onPlan(plan);
-        RustBridge.logTaskStep(taskId, 0, "PLAN: " + goal, plan, true);
+        try { RustBridge.logTaskStep(taskId, 0, "PLAN: " + goal, plan, true); } catch (Throwable ignored) {}
         memory.storeConversation("AGENT PLAN: " + goal, plan);
 
         // Parse plan into steps
@@ -172,7 +172,7 @@ public class KiraAgent {
             }
 
             cb.onStep(stepNum, toolName + ": " + description, result);
-            RustBridge.logTaskStep(taskId, stepNum, toolName + ": " + description, result, success);
+            try { RustBridge.logTaskStep(taskId, stepNum, toolName + ": " + description, result, success); } catch (Throwable ignored) {}
 
             // REFLECTOR: Check if step succeeded and if we should continue
             if (!success && stepNum > 1) {
@@ -196,7 +196,7 @@ public class KiraAgent {
         String summary = ai.simpleChat(summaryPrompt);
         memory.storeConversation("AGENT TASK: " + goal, summary);
         cb.onDone(summary);
-        RustBridge.logTaskStep(taskId, stepNum + 1, "COMPLETE", summary, true);
+        try { RustBridge.logTaskStep(taskId, stepNum + 1, "COMPLETE", summary, true); } catch (Throwable ignored) {}
     }
 
     private String getScreenSummary() {

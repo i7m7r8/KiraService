@@ -67,7 +67,7 @@ public class KiraNotificationService extends NotificationListenerService {
             if (title.isEmpty() && text.isEmpty()) return;
 
             Log.d(TAG, "notif: " + pkg + " | " + title + " | " + text.substring(0, Math.min(50, text.length())));
-            RustBridge.pushNotification(pkg, title, text);
+            try { RustBridge.pushNotification(pkg, title, text); } catch (Throwable ignored) {}
 
             // Also fire EventBus for in-app subscribers
             KiraEventBus.post(new KiraEventBus.NotifReceived(pkg, title, text));

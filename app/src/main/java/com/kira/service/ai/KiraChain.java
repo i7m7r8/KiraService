@@ -135,11 +135,11 @@ public class KiraChain {
             history.append("Observation: ").append(observation).append("\n\n");
 
             // Log step to Rust
-            com.kira.service.RustBridge.logTaskStep(
+            try { com.kira.service.RustBridge.logTaskStep(
                 "chain_" + System.currentTimeMillis(), iteration,
                 action.trim() + ": " + actionInput.trim(),
                 observation, !observation.startsWith("Error")
-            );
+            ); } catch (Throwable ignored) {}
 
             // Small pause
             try { Thread.sleep(300); } catch (Exception ignored) {}

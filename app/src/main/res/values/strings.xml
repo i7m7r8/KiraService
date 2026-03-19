@@ -4,7 +4,7 @@
     <string name="accessibility_description">Gives Kira AI full phone control including screen reading, tapping, typing, and notifications.</string>
 
     <!-- ── Material 3 Dark Theme (default) ──────────────────────────────── -->
-    <style name="AppTheme" parent="Theme.MaterialComponents.NoActionBar">
+    <style name="AppTheme" parent="Theme.MaterialComponents.NoActionBar.Bridge">
         <!-- Surface colours -->
         <item name="android:windowBackground">#FF111318</item>
         <item name="colorSurface">#FF1C1F26</item>
@@ -38,7 +38,7 @@
     </style>
 
     <!-- ── Material 3 Setup Theme ─────────────────────────────────────────── -->
-    <style name="SetupTheme" parent="Theme.MaterialComponents.NoActionBar">
+    <style name="SetupTheme" parent="Theme.MaterialComponents.NoActionBar.Bridge">
         <item name="android:windowBackground">#FF111318</item>
         <item name="colorSurface">#FF1C1F26</item>
         <item name="colorPrimary">#FFBB86FC</item>

@@ -87,10 +87,10 @@ public class KiraOtaUpdater {
             long code = android.os.Build.VERSION.SDK_INT >= 28
                 ? pi.getLongVersionCode()
                 : (long) pi.versionCode;
-            RustBridge.otaSetCurrentVersion(pi.versionName, code);
-            // Set repo from config
+            try { RustBridge.otaSetCurrentVersion(pi.versionName, code); } catch (Throwable ignored) {}
             KiraConfig cfg = KiraConfig.load(ctx);
-            RustBridge.otaSetRepo(cfg.otaRepo.isEmpty() ? "i7m7r8/KiraService" : cfg.otaRepo);
+            String repo = (cfg.otaRepo != null && !cfg.otaRepo.isEmpty()) ? cfg.otaRepo : "i7m7r8/KiraService";
+            try { RustBridge.otaSetRepo(repo); } catch (Throwable ignored) {}
             Log.d(TAG, "OTA init: v" + pi.versionName + " (" + code + ")");
         } catch (Exception e) {
             Log.w(TAG, "OTA init failed: " + e.getMessage());
@@ -168,18 +168,24 @@ public class KiraOtaUpdater {
                 }
 
                 // Feed to Rust — Rust decides action
-                String action = RustBridge.otaOnRelease(
-                    tag, apkUrl, body, date, "", apkBytes
-                );
-
-                if (action == null || action.trim().isEmpty()) action = "{}";
+                String action = "{}";
+                try {
+                    String rustResult = RustBridge.otaOnRelease(
+                        tag, apkUrl, body != null ? body : "", date, "", apkBytes
+                    );
+                    if (rustResult != null && !rustResult.trim().isEmpty()) {
+                        action = rustResult;
+                    }
+                } catch (Throwable rustEx) {
+                    Log.w(TAG, "OTA: Rust call failed: " + rustEx);
+                }
                 JSONObject decision;
                 try { decision = new JSONObject(action); }
                 catch (Exception ex) {
                     Log.w(TAG, "OTA: bad JSON from Rust: " + action);
                     decision = new JSONObject();
                 }
-                String act = decision.optString("action", "up_to_date");
+                String act = decision.optString("action", "prompt_user");
 
                 Log.d(TAG, "Rust OTA decision: " + act + " for " + tag);
 

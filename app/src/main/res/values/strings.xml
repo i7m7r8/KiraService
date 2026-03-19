@@ -66,7 +66,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">64dp</item>
         <item name="android:orientation">horizontal</item>
-        <item name="android:background">#CC1C1F26</item>
+        <item name="android:background">#CC1E1E2E</item>
         <item name="android:paddingStart">16dp</item>
         <item name="android:paddingEnd">12dp</item>
         <item name="android:layout_marginBottom">1dp</item>
@@ -96,7 +96,7 @@
     <style name="SettingsLabel">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">#FFE6E1E5</item>
+        <item name="android:textColor">#FFCDD6F4</item>
         <item name="android:textSize">14sp</item>
     </style>
 
@@ -104,7 +104,7 @@
     <style name="SettingsHint">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textColor">#FF938F99</item>
+        <item name="android:textColor">#FF9399B2</item>
         <item name="android:textSize">11sp</item>
         <item name="android:fontFamily">monospace</item>
     </style>

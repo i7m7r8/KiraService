@@ -42,42 +42,9 @@ import java.util.List;
 public class MainActivity extends Activity
         implements SensorEventListener {
 
-    // ── Material 3 Theme palette ─────────────────────────────────────────────
-    // Dark theme (Material You / M3 dark baseline)
-    private static final int D_BG          = 0xFF111318;
-    private static final int D_SURFACE     = 0xFF1C1F26;
-    private static final int D_SURFACE2    = 0xFF2A2D35;
-    private static final int D_BORDER      = 0xFF49454F;
-    private static final int D_TEXT        = 0xFFE6E1E5;
-    private static final int D_TEXT2       = 0xFFCAC4D0;
-    private static final int D_TEXT3       = 0xFF938F99;
-    private static final int D_NAV         = 0xFF1C1F26;
-    private static final int D_INPUT_BG    = 0xFF2A2D35;
-    private static final int D_USER_BUBBLE = 0xFF2A2440;
-    private static final int D_KIRA_BUBBLE = 0xFF1C1F26;
-    private static final int D_TOOL_BG     = 0xFF1A2A1A;
-    private static final int D_ERROR_BG    = 0xFF2D1B1E;
-    private static final int D_CODE_BG     = 0xFF1A1D24;
-    private static final int D_CODE_HDR    = 0xFF22252E;
-    // Light theme (Material You / M3 light baseline)
-    private static final int L_BG          = 0xFFFEF7FF;
-    private static final int L_SURFACE     = 0xFFFFFFFF;
-    private static final int L_SURFACE2    = 0xFFF3EDF7;
-    private static final int L_BORDER      = 0xFFCAC4D0;
-    private static final int L_TEXT        = 0xFF1C1B1F;
-    private static final int L_TEXT2       = 0xFF49454F;
-    private static final int L_TEXT3       = 0xFF79747E;
-    private static final int L_NAV         = 0xFFF3EDF7;
-    private static final int L_INPUT_BG    = 0xFFECE6F0;
-    private static final int L_USER_BUBBLE = 0xFFEADDFF;
-    private static final int L_KIRA_BUBBLE = 0xFFFFFFFF;
-    private static final int L_TOOL_BG     = 0xFFDCF8E0;
-    private static final int L_ERROR_BG    = 0xFFFFF0F0;
-    private static final int L_CODE_BG     = 0xFFF3EDF7;
-    private static final int L_CODE_HDR    = 0xFFEADDFF;
-    // Shared accent — Material 3 primary purple
-    private static final int ACCENT        = 0xFFBB86FC;
-    private static final int ACCENT_DIM    = 0xFF3700B3;
+    // ── Theme palette driven entirely by Rust getTheme() ────────────────────
+    // All colors are loaded dynamically in loadThemeTokens() from Rust JSON.
+    // Default fallback: Catppuccin Mocha
 
         private static final int SHIZUKU_CODE    = 1001;
     private static final int PERMISSION_CODE = 1002;
@@ -393,10 +360,10 @@ public class MainActivity extends Activity
             }));
         View rowAutoApprove = settingsFragment.findViewById(R.id.rowAutoApprove);
         TextView autoTv = settingsFragment.findViewById(R.id.autoApproveToggle);
-        if (autoTv != null) { autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFFDC143C:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF1A0008:0xFF222222); }
+        if (autoTv != null) { autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?T_ACCENT:T_TEXT2); autoTv.setBackgroundColor(cfg.agentAutoApprove?T_SURFACE_VAR:T_SURFACE5); }
         if (rowAutoApprove != null && autoTv != null) rowAutoApprove.setOnClickListener(v -> {
             cfg.agentAutoApprove = !cfg.agentAutoApprove; cfg.save(MainActivity.this);
-            autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?0xFFDC143C:0xFF666666); autoTv.setBackgroundColor(cfg.agentAutoApprove?0xFF1A0008:0xFF222222);
+            autoTv.setText(cfg.agentAutoApprove?"ON":"OFF"); autoTv.setTextColor(cfg.agentAutoApprove?T_ACCENT:T_TEXT2); autoTv.setBackgroundColor(cfg.agentAutoApprove?T_SURFACE_VAR:T_SURFACE5);
         });
         View rowHeartbeat = settingsFragment.findViewById(R.id.rowHeartbeat);
         if (rowHeartbeat != null) rowHeartbeat.setOnClickListener(v ->
@@ -476,12 +443,12 @@ public class MainActivity extends Activity
         settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
-            int activeColor = 0xFFDC143C;
-            int idleColor   = 0xFF222233;
+            int activeColor = T_ACCENT;
+            int idleColor   = T_TEXT2;
             navIcons[i].setTextColor(on ? activeColor : idleColor);
             navTexts[i].setTextColor(on ? activeColor : idleColor);
             // Active tab: subtle crimson underline via background
-            navItems[i].setBackgroundColor(on ? 0x15DC143C : 0x00000000);
+            navItems[i].setBackgroundColor(on ? 0x15B4BEFE : 0x00000000);
         }
         if (tab == 2) refreshHistory();
         if (tab == 3) updateSettingsUI();
@@ -656,7 +623,7 @@ public class MainActivity extends Activity
         wrap.setLayoutParams(wp);
 
         TextView label = makeLabel("KIRA");
-        label.setTextColor(0xFFDC143C);
+        label.setTextColor(T_ACCENT);
         label.setPadding(0, 0, 0, dp(3));
 
         TextView msg = new TextView(this);
@@ -707,7 +674,7 @@ public class MainActivity extends Activity
         header.setPadding(0, 0, 0, dp(3));
 
         TextView label = makeLabel("KIRA");
-        label.setTextColor(0xFFDC143C);
+        label.setTextColor(T_ACCENT);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, WRAP, 1));
 
         TextView copyBtn = makeActionBtn("copy");
@@ -797,7 +764,7 @@ public class MainActivity extends Activity
                 final String finalCode = code.trim();
                 TextView codeCopyBtn = new TextView(this);
                 codeCopyBtn.setText("Copy");
-                codeCopyBtn.setTextColor(0xFFDC143C);
+                codeCopyBtn.setTextColor(T_ACCENT);
                 codeCopyBtn.setTextSize(11);
                 codeCopyBtn.setOnClickListener(v -> {
                     copyText(finalCode);
@@ -1069,7 +1036,7 @@ public class MainActivity extends Activity
 
         // Accent bar
         android.view.View bar = new android.view.View(this);
-        bar.setBackgroundColor(0xFFDC143C);
+        bar.setBackgroundColor(T_ACCENT);
         bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(bar);
 
@@ -1109,12 +1076,12 @@ public class MainActivity extends Activity
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setPadding(dp(16), dp(12), dp(16), dp(12));
             boolean isActive = displayNames[i].endsWith("  \u2713");
-            row.setBackgroundColor(isActive ? (isDarkTheme ? 0x22DC143C : 0x11DC143C) : 0x00000000);
+            row.setBackgroundColor(isActive ? (isDarkTheme ? 0x22B4BEFE : 0x11B4BEFE) : 0x00000000);
             row.setClickable(true); row.setFocusable(true);
 
             android.widget.TextView nameTV = new android.widget.TextView(this);
             nameTV.setText(displayNames[i]);
-            nameTV.setTextColor(isActive ? 0xFFDC143C : (isDarkTheme ? 0xFFccccdd : 0xFF222233));
+            nameTV.setTextColor(isActive ? T_ACCENT : (isDarkTheme ? T_TEXT : T_TEXT2));
             nameTV.setTextSize(13);
             nameTV.setTypeface(android.graphics.Typeface.MONOSPACE);
             nameTV.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
@@ -1122,7 +1089,7 @@ public class MainActivity extends Activity
             row.addView(nameTV);
             if (isActive) {
                 android.widget.TextView chk = new android.widget.TextView(this);
-                chk.setText("\u2713"); chk.setTextColor(0xFFDC143C); chk.setTextSize(14);
+                chk.setText("\u2713"); chk.setTextColor(T_ACCENT); chk.setTextSize(14);
                 row.addView(chk);
             }
             row.setOnClickListener(v -> {
@@ -1501,7 +1468,7 @@ public class MainActivity extends Activity
 
         // Top accent
         android.view.View bar = new android.view.View(this);
-        bar.setBackgroundColor(0xFFDC143C);
+        bar.setBackgroundColor(T_ACCENT);
         bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(bar);
 
@@ -1516,7 +1483,7 @@ public class MainActivity extends Activity
         titleTv.setTextSize(14); titleTv.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         titleTv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(0, WRAP, 1));
         android.widget.TextView kBadge = new android.widget.TextView(this);
-        kBadge.setText("K"); kBadge.setTextColor(0x33DC143C); kBadge.setTextSize(20);
+        kBadge.setText("K"); kBadge.setTextColor(0x33B4BEFE); kBadge.setTextSize(20);
         kBadge.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
         titleRow.addView(titleTv); titleRow.addView(kBadge);
         card.addView(titleRow);
@@ -1610,7 +1577,7 @@ public class MainActivity extends Activity
 
         // Accent bar
         android.view.View bar = new android.view.View(this);
-        bar.setBackgroundColor(0xFFDC143C);
+        bar.setBackgroundColor(T_ACCENT);
         bar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(bar);
 
@@ -1676,7 +1643,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView posBtn = new android.widget.TextView(this);
         posBtn.setText(posLabel);
-        posBtn.setTextColor(0xFFDC143C);
+        posBtn.setTextColor(T_ACCENT);
         posBtn.setTextSize(11);
         posBtn.setTypeface(null, android.graphics.Typeface.BOLD);
         posBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
@@ -1909,7 +1876,7 @@ public class MainActivity extends Activity
 
                 // Resend -- puts user message in input and sends
                 TextView resendBtn = makeActionBtn("? resend");
-                resendBtn.setTextColor(0xFFDC143C);
+                resendBtn.setTextColor(T_ACCENT);
                 resendBtn.setOnClickListener(v -> {
                     showTab(0);
                     inputField.setText(user);
@@ -2060,7 +2027,7 @@ public class MainActivity extends Activity
         String title; int color; String icon; int bg;
         if (permOk) {
             title = "Shizuku \u2713  god mode active";
-            color = 0xFFDC143C; icon = "\u2713"; bg = 0xFF080f08;
+            color = T_ACCENT; icon = "\u2713"; bg = 0xFF080f08;
         } else if (binderUp) {
             title = "Shizuku running  \u2014  tap to grant permission";
             color = 0xFFffaa00; icon = "!"; bg = 0xFF0f0c00;
@@ -2095,11 +2062,11 @@ public class MainActivity extends Activity
         if (floatingActive) {
             FloatingWindowService.start(this);
             floatingToggle.setText("ON");
-            floatingToggle.setTextColor(0xFFDC143C);
+            floatingToggle.setTextColor(T_ACCENT);
         } else {
             FloatingWindowService.stop(this);
             floatingToggle.setText("OFF");
-            floatingToggle.setTextColor(0xFF666666);
+            floatingToggle.setTextColor(T_TEXT2);
         }
     }
 
@@ -2139,7 +2106,7 @@ public class MainActivity extends Activity
 
         // Top accent bar (crimson line)
         android.view.View accentBar = new android.view.View(this);
-        accentBar.setBackgroundColor(0xFFDC143C);
+        accentBar.setBackgroundColor(T_ACCENT);
         accentBar.setLayoutParams(new android.widget.LinearLayout.LayoutParams(MATCH, dp(2)));
         card.addView(accentBar);
 
@@ -2221,7 +2188,7 @@ public class MainActivity extends Activity
 
         android.widget.TextView saveBtn = new android.widget.TextView(this);
         saveBtn.setText("SAVE");
-        saveBtn.setTextColor(0xFFDC143C);
+        saveBtn.setTextColor(T_ACCENT);
         saveBtn.setTextSize(12);
         saveBtn.setTypeface(android.graphics.Typeface.MONOSPACE);
         saveBtn.setTypeface(null, android.graphics.Typeface.BOLD);

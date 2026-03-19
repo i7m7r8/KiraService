@@ -38,7 +38,7 @@ import java.util.Random;
 
 /**
  * KiraService v38 \u2014 Setup wizard.
- * Neon crimson UI + animated star field (tilts with accelerometer) +
+ * Catppuccin Mocha UI + animated star field (tilts with accelerometer) +
  * custom AI provider support.
  */
 public class SetupActivity extends Activity implements SensorEventListener {
@@ -58,15 +58,20 @@ public class SetupActivity extends Activity implements SensorEventListener {
         "Build something worthy of the future you imagine.",
     };
 
-    // Neon crimson palette
-    private static final int C_BG         = 0xFF050508;
-    private static final int C_CARD       = 0xFF0e0e18;
-    private static final int C_ACCENT     = 0xFFDC143C;
-    private static final int C_ACCENT2    = 0xFFFF2D55;
-    private static final int C_ACCENT_DIM = 0xFF2A0010;
-    private static final int C_TEXT       = 0xFFEEEEF5;
-    private static final int C_MUTED      = 0xFF666680;
-    private static final int C_HINT       = 0xFF2a2a40;
+    // Catppuccin Mocha palette
+    private static final int C_BG         = 0xFF11111B; // Crust
+    private static final int C_CARD       = 0xFF1E1E2E; // Base
+    private static final int C_SURFACE    = 0xFF181825; // Mantle
+    private static final int C_SURFACE2   = 0xFF313244; // Surface0
+    private static final int C_ACCENT     = 0xFFB4BEFE; // Lavender
+    private static final int C_ACCENT2    = 0xFFCBA6F7; // Mauve
+    private static final int C_ACCENT_DIM = 0xFF2A2A3E; // muted lavender bg
+    private static final int C_TEXT       = 0xFFCDD6F4; // Text
+    private static final int C_MUTED      = 0xFF9399B2; // Overlay2
+    private static final int C_HINT       = 0xFF45475A; // Surface1
+    private static final int C_SUCCESS    = 0xFFA6E3A1; // Green
+    private static final int C_ERROR      = 0xFFF38BA8; // Pink
+    private static final int C_PEACH      = 0xFFFAB387; // Peach
 
     private StarFieldView starField;
     private FrameLayout pageContainer;
@@ -160,7 +165,12 @@ public class SetupActivity extends Activity implements SensorEventListener {
         showPage(0, true);
 
         nextBtn.setOnClickListener(v -> advance());
-        skipBtn.setOnClickListener(v -> finish());
+        skipBtn.setOnClickListener(v -> {
+            cfg.setupDone = true;
+            cfg.save(this);
+            startActivity(new Intent(this, MainActivity.class));
+            finish();
+        });
         handler.postDelayed(this::cycleQuote, 4000);
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -208,7 +218,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         StarFieldView(Context ctx) {
             super(ctx);
             Random rnd = new Random(7);
-            int[] palette = {0xFFDDDDEE, 0xFFDDDDEE, 0xFFDDDDEE, 0xFFDC143C, 0xFFFF2D55, 0xFFCC8899};
+            int[] palette = {0xFFCDD6F4, 0xFFB4BEFE, 0xFFCBA6F7, 0xFF89DCEB, 0xFF74C7EC, 0xFF9399B2};
             for (int i = 0; i < N; i++) {
                 x[i] = rnd.nextFloat(); y[i] = rnd.nextFloat();
                 sz[i] = 0.7f + rnd.nextFloat() * 2.2f;

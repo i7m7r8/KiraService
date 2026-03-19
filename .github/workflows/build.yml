@@ -159,8 +159,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.TAG }}
-          name: "Kira Agent v${{ steps.ver.outputs.VER }}"
-          prerelease: false
+          name: "Kira Agent v${{ steps.ver.outputs.VER }} (pre-release)"
+          prerelease: true
           body: |
             ## Kira Agent v${{ steps.ver.outputs.VER }} — Initial Release
             **Released:** ${{ steps.ver.outputs.TS }}

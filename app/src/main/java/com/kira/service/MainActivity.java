@@ -516,7 +516,7 @@ public class MainActivity extends Activity
         conversation.add(userTurn);
         addUserBubble(userTurn);
 
-        headerSubtitle.setText("thinking...");
+        if (headerSubtitle != null) headerSubtitle.setText("thinking...");
         if (sendBtn != null) sendBtn.setEnabled(false);
 
         // Thinking placeholder
@@ -588,9 +588,7 @@ public class MainActivity extends Activity
         editBtn.setTextColor(T_TEXT2);
         editBtn.setTextSize(10);
         editBtn.setOnClickListener(v -> {
-            inputField.setText(turn.text);
-            inputField.setSelection(turn.text.length());
-            inputField.requestFocus();
+            if (inputField != null) { inputField.setText(turn.text); inputField.setSelection(turn.text.length()); inputField.requestFocus(); }
             // Remove all turns from this turn onward (Claude-style branching)
             int idx = conversation.indexOf(turn);
             if (idx >= 0) {
@@ -689,7 +687,7 @@ public class MainActivity extends Activity
         copyBtn.setOnClickListener(v -> copyText(turn.text));
 
         TextView resendBtn = makeActionBtn("? resend");
-        resendBtn.setOnClickListener(v -> { inputField.setText(turn.text); inputField.setSelection(turn.text.length()); });
+        resendBtn.setOnClickListener(v -> { if (inputField!=null){inputField.setText(turn.text); inputField.setSelection(turn.text.length()); });
 
         header.addView(label);
         header.addView(copyBtn);
@@ -863,7 +861,7 @@ public class MainActivity extends Activity
         ConvTurn userTurn = new ConvTurn("user", "/chain " + goal);
         conversation.add(userTurn);
         addUserBubble(userTurn);
-        headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
+        if (headerSubtitle != null) headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
         if (sendBtn != null) sendBtn.setEnabled(false);
         addSystemNotice("\uD83E\uDDE0 ReAct mode: reason + act loop");
 
@@ -883,12 +881,12 @@ public class MainActivity extends Activity
                     conversation.add(t2);
                     addKiraBubble(t2);
                     if (sendBtn != null) sendBtn.setEnabled(true);
-                    headerSubtitle.setText("done.");
+                    if (headerSubtitle != null) headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
             }
             @Override public void onError(String e) {
-                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); sendBtn.setEnabled(true); headerSubtitle.setText("chain error"); });
+                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); if (sendBtn != null) sendBtn.setEnabled(true); headerSubtitle.setText("chain error"); });
             }
         });
     }
@@ -897,7 +895,7 @@ public class MainActivity extends Activity
         ConvTurn userTurn = new ConvTurn("user", "/agent " + goal);
         conversation.add(userTurn);
         addUserBubble(userTurn);
-        headerSubtitle.setText("agent running...");
+        if (headerSubtitle != null) headerSubtitle.setText("agent running...");
         if (sendBtn != null) sendBtn.setEnabled(false);
 
         addSystemNotice("Agent mode: planning task...");
@@ -915,7 +913,7 @@ public class MainActivity extends Activity
                     conversation.add(turn);
                     addKiraBubble(turn);
                     if (sendBtn != null) sendBtn.setEnabled(true);
-                    headerSubtitle.setText("done.");
+                    if (headerSubtitle != null) headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
             }
@@ -923,7 +921,7 @@ public class MainActivity extends Activity
                 uiHandler.post(() -> {
                     addErrorBubble(new ConvTurn("error", error));
                     if (sendBtn != null) sendBtn.setEnabled(true);
-                    headerSubtitle.setText("agent error");
+                    if (headerSubtitle != null) headerSubtitle.setText("agent error");
                 });
             }
         });
@@ -958,7 +956,7 @@ public class MainActivity extends Activity
             // Parse {"px":0.12,"py":-0.05,...}
             float px = parseJsonFloat(j, "px");
             float py = parseJsonFloat(j, "py");
-            galaxyView.setParallax(px, py);
+            if (galaxyView != null) galaxyView.setParallax(px, py);
         } catch (Exception ignored) {}
     }
 
@@ -1752,14 +1750,15 @@ public class MainActivity extends Activity
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
             p.setMargins(0, 0, dp(8), 0);
             chip.setLayoutParams(p);
-            chip.setOnClickListener(v -> { inputField.setText(item[1]); sendMessage(); });
-            suggestionsRow.addView(chip);
+            chip.setOnClickListener(v -> { if (inputField != null) inputField.setText(item[1]); sendMessage(); });
+            if (suggestionsRow != null) suggestionsRow.addView(chip);
         }
     }
 
     // -- Tools list ------------------------------------------------------------
 
     private void buildToolsList() {
+        if (toolsFragment == null) return;
         LinearLayout list = toolsFragment.findViewById(R.id.toolsList);
         Object[][] tools = {
             // Tap row = paste example. Long-press = send immediately.
@@ -1803,8 +1802,8 @@ public class MainActivity extends Activity
                 showTab(0);
                 if (inputField != null) {
                     inputField.setText(toolEx);
-                    inputField.setSelection(toolEx.length());
-                    inputField.requestFocus();
+                    if (inputField!=null){inputField.setSelection(toolEx.length());
+                    inputField.requestFocus();}
                 }
             });
             row.setOnLongClickListener(v -> {
@@ -1842,10 +1841,10 @@ public class MainActivity extends Activity
             KiraMemory mem = new KiraMemory(this);
             JSONArray arr = mem.loadHistory();
             if (arr.length() == 0) {
-                historyCount.setText("No conversations yet");
+                if (historyCount != null) historyCount.setText("No conversations yet");
                 return;
             }
-            historyCount.setText(arr.length() + " conversations");
+            if (historyCount != null) historyCount.setText(arr.length() + " conversations");
 
             for (int i = arr.length() - 1; i >= 0; i--) {
                 JSONObject entry = arr.getJSONObject(i);
@@ -1888,7 +1887,7 @@ public class MainActivity extends Activity
                 resendBtn.setTextColor(T_ACCENT);
                 resendBtn.setOnClickListener(v -> {
                     showTab(0);
-                    inputField.setText(user);
+                    if (inputField!=null) inputField.setText(user);
                     sendMessage();
                 });
 
@@ -1896,8 +1895,7 @@ public class MainActivity extends Activity
                 TextView continueBtn = makeActionBtn("continue");
                 continueBtn.setOnClickListener(v -> {
                     showTab(0);
-                    inputField.setText(user);
-                    inputField.setSelection(user.length());
+                    if (inputField!=null){inputField.setText(user); inputField.setSelection(user.length());}
                 });
 
                 headerRow.addView(timeTv);
@@ -1924,10 +1922,10 @@ public class MainActivity extends Activity
                 card.addView(headerRow);
                 card.addView(userTv);
                 card.addView(kiraTv);
-                historyList.addView(card);
+                if (historyList != null) historyList.addView(card);
             }
         } catch (Exception e) {
-            historyCount.setText("error loading history");
+            if (historyCount != null) historyCount.setText("error loading history");
         }
     }
 
@@ -1937,7 +1935,7 @@ public class MainActivity extends Activity
         showKiraDialogMulti(time, preview,
             new String[]{"RESEND", "COPY", "CLOSE"},
             new Runnable[]{
-                () -> { showTab(0); inputField.setText(user); sendMessage(); },
+                () -> { showTab(0); if (inputField != null) inputField.setText(user); sendMessage(); },
                 () -> copyText(kira),
                 null
             });
@@ -1950,13 +1948,13 @@ public class MainActivity extends Activity
         if (apiKeyHint == null) return;
         apiKeyHint.setText(cfg.apiKey.isEmpty() ? "tap to set" :
             "\u25CF\u25CF\u25CF\u25CF" + cfg.apiKey.substring(Math.max(0, cfg.apiKey.length()-4)));
-        modelHint.setText(cfg.model.isEmpty() ? "not set" : cfg.model);
+        if (modelHint != null) modelHint.setText(cfg.model.isEmpty() ? "not set" : cfg.model);
         String urlDisplay = cfg.baseUrl.isEmpty() ? "not set" :
             cfg.baseUrl.replace("https://","").replace("http://","");
         if (urlDisplay.length() > 36) urlDisplay = urlDisplay.substring(0, 33) + "\u2026";
-        baseUrlHint.setText(urlDisplay);
-        tgTokenHint.setText(cfg.tgToken.isEmpty() ? "not configured" : "\u2713 configured");
-        tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
+        if (baseUrlHint != null) baseUrlHint.setText(urlDisplay);
+        if (tgTokenHint != null) tgTokenHint.setText(cfg.tgToken.isEmpty() ? "not configured" : "\u2713 configured");
+        if (tgIdHint != null) tgIdHint.setText(cfg.tgAllowed == 0 ? "0 = anyone" : String.valueOf(cfg.tgAllowed));
         if (visionHint != null) visionHint.setText(cfg.visionModel.isEmpty() ? "not set" : cfg.visionModel);
         if (providerHint != null) {
             String pu = cfg.baseUrl;
@@ -1979,7 +1977,7 @@ public class MainActivity extends Activity
             else if (pu.contains("novita.ai"))          label = "Novita AI";
             else if (!pu.isEmpty())                     label = "custom: " + urlDisplay;
             else                                        label = "not set";
-            providerHint.setText(label);
+            if (providerHint != null) providerHint.setText(label);
         }
         updateShizukuStatus();
     }
@@ -2003,11 +2001,11 @@ public class MainActivity extends Activity
             try {
                 KiraMemory mem = new KiraMemory(this);
                 String all = mem.listAll();
-                memoryContent.setText(all.isEmpty() ? "(no facts stored yet)" : all);
-            } catch (Exception e) { memoryContent.setText("error reading memory"); }
-            memoryContent.setVisibility(View.VISIBLE);
+                if (memoryContent != null) memoryContent.setText(all.isEmpty() ? "(no facts stored yet)" : all);
+            } catch (Exception e) { if (memoryContent != null) memoryContent.setText("error reading memory"); }
+            if (memoryContent != null) memoryContent.setVisibility(View.VISIBLE);
         } else {
-            memoryContent.setVisibility(View.GONE);
+            if (memoryContent != null) memoryContent.setVisibility(View.GONE);
         }
     }
 
@@ -2047,10 +2045,8 @@ public class MainActivity extends Activity
             title = "Shizuku not installed  \u2014  tap to get it";
             color = 0xFF555566; icon = "\u2193"; bg = 0xFF0a0a14;
         }
-        shizukuStatusTitle.setText(title);
-        shizukuStatusTitle.setTextColor(color);
-        shizukuStatusIcon.setText(icon);
-        shizukuStatusIcon.setTextColor(color);
+        if (shizukuStatusTitle != null) { shizukuStatusTitle.setText(title); shizukuStatusTitle.setTextColor(color); }
+        if (shizukuStatusIcon != null) { shizukuStatusIcon.setText(icon); shizukuStatusIcon.setTextColor(color); }
         if (shizukuStatus != null) shizukuStatus.setBackgroundColor(bg);
         // Sync to Rust state
         try { RustBridge.updateShizukuStatus(binderUp, permOk, ""); } catch (Exception ignored) {}
@@ -2070,12 +2066,10 @@ public class MainActivity extends Activity
         floatingActive = !floatingActive;
         if (floatingActive) {
             FloatingWindowService.start(this);
-            floatingToggle.setText("ON");
-            floatingToggle.setTextColor(T_ACCENT);
+            if (floatingToggle != null) { floatingToggle.setText("ON"); floatingToggle.setTextColor(T_ACCENT); }
         } else {
             FloatingWindowService.stop(this);
-            floatingToggle.setText("OFF");
-            floatingToggle.setTextColor(T_TEXT2);
+            if (floatingToggle != null) { floatingToggle.setText("OFF"); floatingToggle.setTextColor(T_TEXT2); }
         }
     }
 

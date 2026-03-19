@@ -1,25 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Catppuccin Terminal — Chat tab -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#00000000">
 
-    <!-- Header — Mantle -->
+    <!-- Header: Mantle bar with K badge -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="52dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
         android:background="#FF181825">
 
+        <!-- Lavender K square -->
         <TextView
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
             android:text="K"
-            android:textSize="17sp"
+            android:textSize="15sp"
             android:textStyle="bold"
             android:textColor="#FF1E1E2E"
             android:gravity="center"
@@ -30,12 +32,12 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingStart="11dp">
+            android:paddingStart="10dp">
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Kira"
-                android:textSize="16sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
                 android:textColor="#FFCDD6F4"/>
             <TextView
@@ -44,28 +46,31 @@
                 android:layout_height="wrap_content"
                 android:text="ready"
                 android:textSize="10sp"
-                android:textColor="#FF6C7086"
+                android:textColor="#FF9399B2"
                 android:fontFamily="monospace"/>
         </LinearLayout>
 
+        <!-- Online dot: Green -->
         <View
             android:id="@+id/statusDot"
-            android:layout_width="7dp"
-            android:layout_height="7dp"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
             android:background="#FFA6E3A1"/>
     </LinearLayout>
 
+    <!-- Lavender accent line -->
     <View android:layout_width="match_parent" android:layout_height="1dp"
-        android:background="#33B4BEFE"/>
+        android:background="#44B4BEFE"/>
 
+    <!-- Chat scroll -->
     <ScrollView
         android:id="@+id/chatScroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="8dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="10dp"
         android:clipToPadding="false"
         android:scrollbars="none">
         <LinearLayout
@@ -76,6 +81,7 @@
             android:paddingBottom="8dp"/>
     </ScrollView>
 
+    <!-- Quick-action chips -->
     <HorizontalScrollView
         android:id="@+id/suggestionsScroll"
         android:layout_width="match_parent"
@@ -83,8 +89,8 @@
         android:scrollbars="none"
         android:paddingStart="10dp"
         android:paddingEnd="10dp"
-        android:paddingTop="3dp"
-        android:paddingBottom="3dp">
+        android:paddingTop="4dp"
+        android:paddingBottom="2dp">
         <LinearLayout
             android:id="@+id/suggestionsRow"
             android:layout_width="wrap_content"
@@ -92,7 +98,7 @@
             android:orientation="horizontal"/>
     </HorizontalScrollView>
 
-    <!-- Input bar — Mantle -->
+    <!-- Input bar: Mantle bg, Surface0 field -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -100,8 +106,8 @@
         android:background="#FF181825"
         android:paddingStart="10dp"
         android:paddingEnd="10dp"
-        android:paddingTop="7dp"
-        android:paddingBottom="7dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
         android:gravity="center_vertical">
 
         <EditText
@@ -109,19 +115,20 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="ask kira…"
+            android:hint="ask kira anything…"
             android:textColor="#FFCDD6F4"
             android:textColorHint="#FF45475A"
             android:textSize="14sp"
             android:background="#FF313244"
-            android:paddingStart="13dp"
-            android:paddingEnd="13dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:imeOptions="actionSend"
             android:inputType="textMultiLine|textCapSentences"
             android:maxLines="4"/>
 
+        <!-- Lavender send button -->
         <TextView
             android:id="@+id/sendBtn"
             android:layout_width="42dp"

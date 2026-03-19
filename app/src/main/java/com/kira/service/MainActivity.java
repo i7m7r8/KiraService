@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -76,6 +77,23 @@ public class MainActivity extends Activity
     // Accent: Catppuccin Lavender
     private static final int ACCENT        = 0xFFB4BEFE; // Lavender
     private static final int ACCENT_DIM    = 0xFF2A2A40;
+
+    // ── Live theme tokens from Rust getTheme() — updated in applyTheme() ─────
+    private int T_BG           = D_BG;
+    private int T_SURFACE      = D_SURFACE;
+    private int T_SURFACE2     = D_SURFACE2;
+    private int T_SURFACE_VAR  = D_INPUT_BG;
+    private int T_SURFACE5     = D_BORDER;
+    private int T_TEXT         = D_TEXT;
+    private int T_TEXT2        = D_TEXT2;
+    private int T_TEXT3        = D_TEXT3;
+    private int T_ACCENT       = ACCENT;
+    private int T_ON_ACCENT    = D_BG;
+    private int T_SECONDARY    = 0xFFCBA6F7;
+    private int T_TERTIARY     = 0xFFFAB387;
+    private int T_SUCCESS      = 0xFFA6E3A1;
+    private int T_ERROR        = 0xFFF38BA8;
+    private int T_OUTLINE      = D_BORDER;
 
         private static final int SHIZUKU_CODE    = 1001;
     private static final int PERMISSION_CODE = 1002;
@@ -1325,7 +1343,34 @@ public class MainActivity extends Activity
         otaUpdater.scheduleChecks();
     }
 
+    /** Load Catppuccin Mocha tokens from Rust — updates T_ fields */
+    private void loadThemeTokens() {
+        try {
+            String json = RustBridge.getTheme();
+            if (json == null || json.isEmpty()) return;
+            org.json.JSONObject t = new org.json.JSONObject(json);
+            T_BG          = (int) t.optLong("bg",         T_BG);
+            T_SURFACE     = (int) t.optLong("surface",    T_SURFACE);
+            T_SURFACE2    = (int) t.optLong("surface2",   T_SURFACE2);
+            T_SURFACE_VAR = (int) t.optLong("surface_var",T_SURFACE_VAR);
+            T_SURFACE5    = (int) t.optLong("surface5",   T_SURFACE5);
+            T_TEXT        = (int) t.optLong("on_surface", T_TEXT);
+            T_TEXT2       = (int) t.optLong("muted",      T_TEXT2);
+            T_TEXT3       = (int) t.optLong("muted",      T_TEXT3);
+            T_ACCENT      = (int) t.optLong("accent",     T_ACCENT);
+            T_ON_ACCENT   = (int) t.optLong("on_accent",  T_ON_ACCENT);
+            T_SECONDARY   = (int) t.optLong("secondary",  T_SECONDARY);
+            T_TERTIARY    = (int) t.optLong("tertiary",   T_TERTIARY);
+            T_SUCCESS     = (int) t.optLong("success",    T_SUCCESS);
+            T_ERROR       = (int) t.optLong("error",      T_ERROR);
+            T_OUTLINE     = (int) t.optLong("outline",    T_OUTLINE);
+        } catch (Throwable e) {
+            Log.w("KiraTheme", "loadThemeTokens: " + e.getMessage());
+        }
+    }
+
     private void applyTheme() {
+        loadThemeTokens();
         // ── System chrome ───────────────────────────────────────────────────
         getWindow().setStatusBarColor(isDarkTheme ? D_BG : L_BG);
         getWindow().setNavigationBarColor(isDarkTheme ? D_NAV : L_NAV);

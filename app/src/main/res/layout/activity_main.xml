@@ -1,26 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Catppuccin Mocha Terminal — main shell -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#FF1E1E2E">
 
-    <!-- Content area -->
+    <!-- Star field -->
+    <com.kira.service.ui.GalaxyView
+        android:id="@+id/galaxyView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
+    <!-- Content tabs -->
     <FrameLayout
         android:id="@+id/contentFrame"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingBottom="72dp"/>
+        android:paddingBottom="68dp"/>
 
-    <!-- Bottom nav — Catppuccin Mantle -->
+    <!-- Bottom nav — Mantle surface, lavender active indicator -->
     <LinearLayout
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
-        android:layout_height="72dp"
+        android:layout_height="68dp"
         android:layout_gravity="bottom"
         android:orientation="horizontal"
         android:background="#FF181825"
-        android:paddingTop="6dp"
-        android:paddingBottom="10dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="8dp"
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
         android:elevation="8dp">
@@ -31,11 +38,12 @@
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navHomeIcon"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="⬡" android:textSize="22sp" android:textColor="#FFB4BEFE"/>
+                android:text="⬡" android:textSize="20sp" android:textColor="#FFB4BEFE"
+                android:gravity="center"/>
             <TextView android:id="@+id/navHomeText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:text="KIRA" android:textSize="8sp" android:textColor="#FFB4BEFE"
-                android:fontFamily="monospace" android:letterSpacing="0.12"/>
+                android:fontFamily="monospace" android:letterSpacing="0.1"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navAbilities"
@@ -44,11 +52,12 @@
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navAbilitiesIcon"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="⚡" android:textSize="22sp" android:textColor="#FF45475A"/>
+                android:text="⚡" android:textSize="20sp" android:textColor="#FF45475A"
+                android:gravity="center"/>
             <TextView android:id="@+id/navAbilitiesText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:text="TOOLS" android:textSize="8sp" android:textColor="#FF45475A"
-                android:fontFamily="monospace" android:letterSpacing="0.12"/>
+                android:fontFamily="monospace" android:letterSpacing="0.1"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navHistory"
@@ -57,11 +66,12 @@
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navHistoryIcon"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="◫" android:textSize="22sp" android:textColor="#FF45475A"/>
+                android:text="◫" android:textSize="20sp" android:textColor="#FF45475A"
+                android:gravity="center"/>
             <TextView android:id="@+id/navHistoryText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:text="LOG" android:textSize="8sp" android:textColor="#FF45475A"
-                android:fontFamily="monospace" android:letterSpacing="0.12"/>
+                android:fontFamily="monospace" android:letterSpacing="0.1"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/navSettings"
@@ -70,11 +80,12 @@
             android:gravity="center" android:clickable="true" android:focusable="true">
             <TextView android:id="@+id/navSettingsIcon"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="⊞" android:textSize="22sp" android:textColor="#FF45475A"/>
+                android:text="⊞" android:textSize="20sp" android:textColor="#FF45475A"
+                android:gravity="center"/>
             <TextView android:id="@+id/navSettingsText"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:text="SYS" android:textSize="8sp" android:textColor="#FF45475A"
-                android:fontFamily="monospace" android:letterSpacing="0.12"/>
+                android:fontFamily="monospace" android:letterSpacing="0.1"/>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

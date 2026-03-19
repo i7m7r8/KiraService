@@ -4,13 +4,7 @@
     android:layout_height="match_parent"
     android:background="#FF1E1E2E">
 
-    <!-- Static star background -->
-    <com.kira.service.ui.GalaxyView
-        android:id="@+id/galaxyView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
-
-    <!-- Content -->
+    <!-- Content area -->
     <FrameLayout
         android:id="@+id/contentFrame"
         android:layout_width="match_parent"
@@ -24,7 +18,7 @@
         android:layout_height="72dp"
         android:layout_gravity="bottom"
         android:orientation="horizontal"
-        android:background="#EE181825"
+        android:background="#FF181825"
         android:paddingTop="6dp"
         android:paddingBottom="10dp"
         android:paddingStart="4dp"

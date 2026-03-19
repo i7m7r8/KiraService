@@ -128,12 +128,7 @@ public class MainActivity extends Activity
             finish();
             return;
         }
-        try { setContentView(R.layout.activity_main); }
-        catch (Exception e) {
-            android.util.Log.e("KiraMain", "setContentView crash: " + e, e);
-            android.widget.Toast.makeText(this, "Layout error: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
-            finish(); return;
-        }
+        setContentView(R.layout.activity_main);
         uiHandler = new Handler(Looper.getMainLooper());
         cfg = KiraConfig.load(this);
         // Auto theme: follow system setting

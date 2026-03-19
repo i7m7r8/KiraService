@@ -2476,7 +2476,7 @@ Context: {}",
             s.ota.phase = OtaPhase::Downloaded;
             let method = if use_shizuku { "shizuku" } else { "package_installer" };
             s.ota.install_method = method.to_string();
-            let cmd = format!("pm install -r -t "{}"", esc(&path));
+            let cmd = format!("pm install -r -t \"{}\"", esc(&path));
             CString::new(format!(
                 r#"{{"ok":true,"path":"{}","method":"{}","shizuku":{},"cmd":"{}","verified":{}}}"#,
                 esc(&path), method, use_shizuku, esc(&cmd), ok
@@ -2550,6 +2550,7 @@ fn run_http(port: u16) {
 
 /// Lock STATE recovering from poison — if a thread panicked while holding the
 /// lock, we recover the state rather than panicking the HTTP thread too.
+#[allow(unused_macros)]
 macro_rules! state_lock {
     () => { match STATE.lock() {
         Ok(g)  => g,
@@ -5089,14 +5090,14 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("GET", "/auto/list") => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.macros.iter().map(|m| {
-                let tsum = m.triggers.first().map(|t| format!("{}", t.kind)).unwrap_or_default();
+                let tsum = m.triggers.first().map(|t| t.kind.to_str().to_string()).unwrap_or_default();
                 let asum = m.actions.first()
-                    .map(|a| a.params.get("message").cloned().unwrap_or_else(|| a.action_type.clone()))
+                    .map(|a| a.params.get("message").cloned().unwrap_or_else(|| a.kind.to_str().to_string()))
                     .unwrap_or_default();
                 format!(r#"{{"id":"{}","name":"{}","enabled":{},"runs":{},"trigger":"{}","action":"{}","tags":[{}]}}"#,
                     esc(&m.id), esc(&m.name), m.enabled, m.run_count,
                     esc(&tsum), esc(&asum[..asum.len().min(60)]),
-                    m.tags.iter().map(|t| format!(""{}"",esc(t))).collect::<Vec<_>>().join(","))
+                    m.tags.iter().map(|t| format!("\"{}\"",esc(t))).collect::<Vec<_>>().join(","))
             }).collect();
             Some(format!(r#"{{"ok":true,"count":{},"automations":[{}]}}"#, items.len(), items.join(",")))
         }
@@ -5123,11 +5124,212 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             Some(format!(r#"{{"ok":true,"removed":{}}}"#, before - s.macros.len()))
         }
 
+        // OpenClaw v3: Advanced automation features
+
+        // GET /auto/templates
+        ("GET", "/auto/templates") => {
+            let templates = vec![
+                ("morning_routine",    "Morning routine",      "time_daily",    "07:00"),
+                ("low_battery_alert",  "Low battery alert",    "battery_low",   "20"),
+                ("youtube_opened",     "Log YouTube usage",    "app_opened",    "com.google.android.youtube"),
+                ("screen_off_silence", "Silence on screen off","screen_off",    ""),
+                ("wifi_greeter",       "WiFi connected",       "wifi_changed",  "connected"),
+                ("morning_briefing",   "Morning briefing",     "time_daily",    "06:30"),
+                ("night_mode",         "Night mode at 22:00",  "time_daily",    "22:00"),
+                ("shake_screenshot",   "Shake to screenshot",  "shake",         ""),
+                ("sms_reader",         "Read incoming SMS",    "sms_received",  ""),
+                ("call_logger",        "Log missed calls",     "call_missed",   ""),
+                ("bt_audio",           "BT connected",         "bt_connected",  ""),
+                ("charge_done",        "Charge complete",      "battery_low",   "95"),
+            ];
+            let items: Vec<String> = templates.iter().map(|(id, name, tkind, tval)|
+                format!(r#"{{"id":"{}","name":"{}","trigger_kind":"{}","trigger_val":"{}"}}"#,
+                    id, name, tkind, tval)
+            ).collect();
+            Some(format!(r#"{{"ok":true,"count":{},"templates":[{}]}}"#,
+                items.len(), items.join(",")))
+        }
+
+        // POST /auto/from_template {"template_id":"morning_routine","action":"...","time":"07:30"}
+        ("POST", "/auto/from_template") => {
+            let tpl_id      = extract_json_str(body, "template_id").unwrap_or_default();
+            let custom_act  = extract_json_str(body, "action").unwrap_or_default();
+            let time_ov     = extract_json_str(body, "time").unwrap_or_default();
+            let macro_id    = extract_json_str(body, "id").unwrap_or_else(|| format!("tpl_{}", gen_id()));
+
+            let (tkind, tval, default_act) = match tpl_id.as_str() {
+                "morning_routine"    => ("time_daily",   "07:00",  "good morning, give me today summary"),
+                "low_battery_alert"  => ("battery_low",  "20",     "my battery is low, please charge"),
+                "youtube_opened"     => ("app_opened",   "com.google.android.youtube", "log YouTube session started"),
+                "screen_off_silence" => ("screen_off",   "",       "mute volume"),
+                "wifi_greeter"       => ("wifi_changed", "connected","WiFi connected, checking updates"),
+                "morning_briefing"   => ("time_daily",   "06:30",  "give me today morning briefing"),
+                "night_mode"         => ("time_daily",   "22:00",  "set screen brightness to minimum"),
+                "shake_screenshot"   => ("shake",        "",       "take a screenshot"),
+                "sms_reader"         => ("sms_received", "",       "read the latest SMS message aloud"),
+                "call_logger"        => ("call_missed",  "",       "log missed call received"),
+                "bt_audio"           => ("bt_connected", "",       "bluetooth audio device connected"),
+                "charge_done"        => ("battery_low",  "95",     "battery fully charged"),
+                _                   => ("manual",        "",       "run automation"),
+            };
+
+            let tval_final = if !time_ov.is_empty() { time_ov.as_str() } else { tval };
+            let act_final  = if !custom_act.is_empty() { custom_act.as_str() } else { default_act };
+
+            let m = parse_macro_from_json(&format!(
+                concat!(r#"{{"id":"{}","name":"[{}] {}","enabled":true,"tags":["template","{}"],"#,
+                        r#""triggers":[{{"kind":"{}","config":{{"value":"{}"}}}}],"#,
+                        r#""conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#),
+                esc(&macro_id), esc(&tpl_id), esc(act_final),
+                esc(&tpl_id), esc(tkind), esc(tval_final), esc(act_final)
+            ));
+            let mid  = m.id.clone();
+            let mname= m.name.clone();
+            STATE.lock().unwrap().macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","trigger":"{}","val":"{}"}}"#,
+                esc(&mid), esc(&mname), esc(tkind), esc(tval_final)))
+        }
+
+        // POST /auto/scene {"name":"work mode","actions":["mute notifications","open calendar"]}
+        ("POST", "/auto/scene") => {
+            let name    = extract_json_str(body, "name").unwrap_or_default();
+            let scene_id= extract_json_str(body, "id")
+                .unwrap_or_else(|| format!("scene_{}", name.to_lowercase().replace(' ', "_")));
+            if name.is_empty() { return Some(r#"{"error":"need name"}"#.to_string()); }
+            // Extract actions array content
+            let acts: Vec<String> = {
+                let key = "\"actions\":[";
+                if let Some(start) = body.find(key) {
+                    let after = &body[start + key.len()..];
+                    if let Some(end) = after.find(']') {
+                        after[..end].split(',')
+                            .map(|s| s.trim().trim_matches('"').to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    } else { vec![] }
+                } else { vec![] }
+            };
+            let combined = acts.join(", then ");
+            let m = parse_macro_from_json(&format!(
+                concat!(r#"{{"id":"{}","name":"scene: {}","enabled":true,"tags":["scene"],"#,
+                        r#""triggers":[{{"kind":"manual","config":{{}}}}],"#,
+                        r#""conditions":[],"actions":[{{"type":"kira_chat","params":{{"message":"{}"}}}}]}}"#),
+                esc(&scene_id), esc(&name), esc(&combined)
+            ));
+            let mid = m.id.clone();
+            STATE.lock().unwrap().macros.push(m);
+            Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","steps":{}}}"#,
+                esc(&mid), esc(&name), acts.len()))
+        }
+
+        // POST /auto/run_now {"id":"macro_id"} — trigger immediately
+        ("POST", "/auto/run_now") => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            if id.is_empty() { return Some(r#"{"error":"need id"}"#.to_string()); }
+            let mut s = STATE.lock().unwrap();
+            if let Some(m) = s.macros.iter().find(|m| m.id == id).cloned() {
+                let name = m.name.clone();
+                let (steps, _ok) = execute_macro_actions(&mut s, &id, &m.actions);
+                Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","steps":{}}}"#,
+                    esc(&id), esc(&name), steps))
+            } else {
+                Some(format!(r#"{{"error":"'{}' not found"}}"#, esc(&id)))
+            }
+        }
+
+        // POST /auto/pause {"id":"macro_id","resume_after_minutes":30}
+        ("POST", "/auto/pause") => {
+            let id      = extract_json_str(body, "id").unwrap_or_default();
+            let minutes = extract_json_num(body, "resume_after_minutes").unwrap_or(60.0) as u64;
+            if id.is_empty() { return Some(r#"{"error":"need id"}"#.to_string()); }
+            let resume_ms = now_ms() + (minutes as u128) * 60_000;
+            let mut s = STATE.lock().unwrap();
+            if let Some(m) = s.macros.iter_mut().find(|m| m.id == id) {
+                m.enabled = false;
+                let resume_trigger = Trigger {
+                    id:           format!("resume_{}", id),
+                    trigger_type: "time".to_string(),
+                    value:        resume_ms.to_string(),
+                    action:       format!("enable_macro:{}", id),
+                    fired:        false,
+                    repeat:       false,
+                };
+                s.triggers.push(resume_trigger);
+                Some(format!(r#"{{"ok":true,"id":"{}","paused_minutes":{}}}"#,
+                    esc(&id), minutes))
+            } else {
+                Some(format!(r#"{{"error":"'{}' not found"}}"#, esc(&id)))
+            }
+        }
+
+        // GET /auto/history — last 50 runs
+        ("GET", "/auto/history") => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.macro_run_log.iter().rev().take(50)
+                .map(|r| format!(
+                    r#"{{"id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"ms":{},"ts":{}}}"#,
+                    esc(&r.macro_id), esc(&r.macro_name), esc(&r.trigger),
+                    r.success, r.steps_run, r.duration_ms, r.ts))
+                .collect();
+            Some(format!(r#"{{"ok":true,"count":{},"history":[{}]}}"#,
+                items.len(), items.join(",")))
+        }
+
+        // GET /auto/stats
+        ("GET", "/auto/stats") => {
+            let s = STATE.lock().unwrap();
+            let enabled  = s.macros.iter().filter(|m| m.enabled).count();
+            let total_runs: u32 = s.macros.iter().map(|m| m.run_count).sum();
+            let success  = s.macro_run_log.iter().filter(|r| r.success).count();
+            let failed   = s.macro_run_log.iter().filter(|r| !r.success).count();
+            Some(format!(
+                r#"{{"total":{},"enabled":{},"disabled":{},"total_runs":{},"success":{},"failed":{}}}"#,
+                s.macros.len(), enabled, s.macros.len()-enabled,
+                total_runs, success, failed))
+        }
+
+        // POST /auto/clone {"id":"src","new_id":"dst","new_name":"Copy of ..."}
+        ("POST", "/auto/clone") => {
+            let src     = extract_json_str(body, "id").unwrap_or_default();
+            let new_id  = extract_json_str(body, "new_id").unwrap_or_else(|| format!("clone_{}", gen_id()));
+            let new_nm  = extract_json_str(body, "new_name").unwrap_or_default();
+            let mut s   = STATE.lock().unwrap();
+            if let Some(original) = s.macros.iter().find(|m| m.id == src).cloned() {
+                let mut c    = original.clone();
+                c.id         = new_id.clone();
+                c.name       = if new_nm.is_empty() { format!("{} (copy)", original.name) } else { new_nm };
+                c.run_count  = 0;
+                let cname    = c.name.clone();
+                s.macros.push(c);
+                Some(format!(r#"{{"ok":true,"id":"{}","name":"{}"}}"#, esc(&new_id), esc(&cname)))
+            } else {
+                Some(format!(r#"{{"error":"'{}' not found"}}"#, esc(&src)))
+            }
+        }
+
+        // POST /auto/batch_enable {"ids":["a","b"],"enabled":true}
+        ("POST", "/auto/batch_enable") => {
+            let enabled = !body.contains("\"enabled\":false");
+            let ids_raw = body.find("\"ids\":[")
+                .map(|i| { let after = &body[i+7..]; after[..after.find(']').unwrap_or(0)].to_string() })
+                .unwrap_or_default();
+            let ids: Vec<&str> = ids_raw.split(',')
+                .map(|s| s.trim().trim_matches('"'))
+                .filter(|s| !s.is_empty())
+                .collect();
+            let mut s = STATE.lock().unwrap();
+            let mut count = 0usize;
+            for m in s.macros.iter_mut() {
+                if ids.contains(&m.id.as_str()) { m.enabled = enabled; count += 1; }
+            }
+            Some(format!(r#"{{"ok":true,"updated":{}}}"#, count))
+        }
+
         _ => None,
     }
 }
 
-// \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
+// / \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // Roboru / E-Robot / Automate Engine
 // Inspired by: LlamaLab Automate (flowchart), E-Robot (170+ events, 150+ actions),
 // Robot Framework (keyword-driven RPA), UiPath (intelligent automation)

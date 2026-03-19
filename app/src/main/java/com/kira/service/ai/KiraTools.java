@@ -116,6 +116,14 @@ public class KiraTools {
 
                 // App management
                 case "open_app":      return openApp(args.getString("package"));
+                case "vlm_agent":     { // Roubao/Open-AutoGLM: VLM-guided task
+                    String goal = args.optString("goal", args.optString("task",""));
+                    int maxSteps = args.optInt("max_steps", 20);
+                    try {
+                        String result = com.kira.service.RustBridge.startAgentTask(goal, maxSteps);
+                        return "Agent task started: " + result;
+                    } catch (Exception e) { return "Agent error: " + e.getMessage(); }
+                }
                 case "find_app":      return findApp(args.getString("query"));
                 case "list_apps":     return listApps(args.optBoolean("system", false));
                 case "force_stop":    return ShizukuShell.exec("am force-stop " + args.getString("package"));
@@ -822,6 +830,7 @@ public class KiraTools {
         return "SCREEN: read_screen, tap_screen, tap_text, swipe_screen, scroll_screen, type_text, "
             + "press_back, press_home, press_recents, lock_screen, clipboard_get, clipboard_set, get_notifications\n"
             + "APPS: open_app, find_app, list_apps, force_stop, install_apk, uninstall\n"
+                     + "AGENT: vlm_agent {goal, max_steps} - AI vision agent, flow {id}, keyword {name}\n"
             + "SYSTEM: battery_info, device_info, set_volume, set_brightness, torch, wifi_on, mobile_data, "
             + "airplane_mode, reboot, sleep_screen, get_wifi_info, scan_wifi\n"
             + "SHELL: sh_run, sh_tap, sh_swipe, sh_key, sh_type, sh_screenshot, sh_dump_ui, grant_perm, "

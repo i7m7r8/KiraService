@@ -274,4 +274,30 @@ public class RustBridge {
     /** Run a pipeline by ID. Returns {ok, steps, errors:[]} */
     public static native String runPipeline(String id);
 
+
+    // ── Roubao / Open-AutoGLM VLM Phone Agent ────────────────────────────────
+
+    /**
+     * Start a VLM-guided phone agent task (Open-AutoGLM pattern).
+     * Returns: {"ok":true,"task_id":"..."}
+     * Java must poll nextMacroAction() for "vlm_plan" and "vlm_observe" actions,
+     * call the AI with the prompt, then call setAgentPlan() or processVlmStep().
+     */
+    public static native String startAgentTask(String goal, int maxSteps);
+
+    /** Feed VLM action response back to Rust. Returns {"ok":true,"done":bool} */
+    public static native String processVlmStep(String taskId, String vlmResponseJson);
+
+    /** Record screen observation from VLM screenshot analysis */
+    public static native void recordScreenObservation(String taskId, int step, String vlmDescription);
+
+    /** Set AI-generated plan. planSteps: "step1||step2||step3" (pipe-separated) */
+    public static native void setAgentPlan(String taskId, String planSteps);
+
+    /** Get the VLM prompt for the current step. Java passes this to AI. */
+    public static native String getAgentPrompt(String taskId);
+
+    /** Get all phone agent tasks as JSON array */
+    public static native String getAgentTasks();
+
 }

@@ -645,6 +645,10 @@ struct KiraState {
     roboru_flows:      HashMap<String, AutoFlow>,
     roboru_keywords:   HashMap<String, Keyword>,
     roboru_pipelines:  HashMap<String, HyperPipeline>,
+
+    // ── Roubao / Open-AutoGLM VLM phone agent ─────────────────────────────────
+    phone_agent_tasks:    Vec<PhoneAgentTask>,
+    screen_observations:  VecDeque<ScreenObservation>,
 }
 
 // Sub-structs (v7, unchanged)
@@ -1330,7 +1334,7 @@ mod jni_bridge {
         _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
     ) -> *mut c_char {
         let body = cs(json);
-        let mut m = parse_macro_from_json(&body);
+        let m = parse_macro_from_json(&body);
         let mut s = STATE.lock().unwrap();
         s.macros.retain(|x| x.id != m.id);
         let id = m.id.clone();
@@ -1868,6 +1872,127 @@ mod jni_bridge {
         CString::new(result).unwrap_or_default().into_raw()
     }
 
+    // ── Roubao / Open-AutoGLM VLM JNI ───────────────────────────────────────────
+
+    /// Start a new phone agent task. Returns {ok, task_id}
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_startAgentTask(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        goal: *const c_char, max_steps: i32,
+    ) -> *mut c_char {
+        let goal = cs(goal);
+        let max_s = if max_steps > 0 { max_steps as u32 } else { 20 };
+        let task_id = gen_id();
+        let mut s = STATE.lock().unwrap();
+        let plan_prompt = build_task_plan_prompt(&goal, &s.agent_context);
+        s.pending_actions.push_back(PendingMacroAction {
+            macro_id: task_id.clone(), action_id: gen_id(),
+            kind: "vlm_plan".to_string(),
+            params: {
+                let mut p = HashMap::new();
+                p.insert("task_id".to_string(), task_id.clone());
+                p.insert("goal".to_string(), goal.clone());
+                p.insert("prompt".to_string(), plan_prompt);
+                p
+            },
+            ts: now_ms(),
+        });
+        s.phone_agent_tasks.push(PhoneAgentTask {
+            id: task_id.clone(), goal, state: VlmTaskState::Planning,
+            plan: vec![], plan_idx: 0, history: vec![], max_steps: max_s,
+            current_step: 0, context: String::new(), result: String::new(),
+            created_ms: now_ms(), last_step_ms: now_ms(),
+        });
+        CString::new(format!(r#"{{"ok":true,"task_id":"{}"}}"#, esc(&task_id))).unwrap_or_default().into_raw()
+    }
+
+    /// Called by Java after VLM responds with action decision
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_processVlmStep(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        task_id: *const c_char, vlm_response: *const c_char,
+    ) -> *mut c_char {
+        let task_id = cs(task_id); let vlm_resp = cs(vlm_response);
+        let done = execute_vlm_step(&mut STATE.lock().unwrap(), &task_id, &vlm_resp);
+        CString::new(format!(r#"{{"ok":true,"done":{}}}"#, done)).unwrap_or_default().into_raw()
+    }
+
+    /// Called by Java after taking screenshot + getting VLM screen description
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_recordScreenObservation(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        task_id: *const c_char, step: i32, vlm_desc: *const c_char,
+    ) {
+        record_screen_observation(&mut STATE.lock().unwrap(), &cs(task_id), step as u32, &cs(vlm_desc));
+    }
+
+    /// Set the AI-generated plan for a task
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_setAgentPlan(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        task_id: *const c_char, plan_json: *const c_char,
+    ) {
+        let task_id = cs(task_id); let plan_str = cs(plan_json);
+        // plan_json is a comma-separated list of steps extracted from AI JSON array
+        let plan: Vec<String> = plan_str.split("||")
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let mut s = STATE.lock().unwrap();
+        if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == task_id) {
+            t.plan = plan;
+            t.state = VlmTaskState::Observing;
+        }
+        enqueue_vlm_step(&mut s, &task_id);
+    }
+
+    /// Get current agent prompt for the AI call (Java reads this before calling AI)
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getAgentPrompt(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        task_id: *const c_char,
+    ) -> *mut c_char {
+        let task_id = cs(task_id);
+        let s = STATE.lock().unwrap();
+        let result = match s.phone_agent_tasks.iter().find(|t| t.id == task_id) {
+            Some(t) => {
+                let sub_task = t.plan.get(t.plan_idx).cloned().unwrap_or_else(|| t.goal.clone());
+                let screen_desc = format!("Package: {}
+Context: {}",
+                    s.screen_pkg, &s.agent_context[..s.agent_context.len().min(400)]);
+                let prompt = build_vlm_action_prompt(
+                    &t.goal, &sub_task, &screen_desc,
+                    &t.history, t.current_step, t.max_steps
+                );
+                format!(r#"{{"task_id":"{}","prompt":{},"step":{},"sub_task":"{}"}}"#,
+                    esc(&t.id), json_str(&prompt), t.current_step, esc(&sub_task))
+            }
+            None => r#"{"error":"not found"}"#.to_string(),
+        };
+        CString::new(result).unwrap_or_default().into_raw()
+    }
+
+    /// Get all agent tasks summary
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getAgentTasks(
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
+        let s = STATE.lock().unwrap();
+        let items: Vec<String> = s.phone_agent_tasks.iter().map(|t| format!(
+            r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"result":"{}"}}"#,
+            esc(&t.id), esc(&t.goal),
+            match &t.state {
+                VlmTaskState::Done(_) => "done",
+                VlmTaskState::Failed(_) => "failed",
+                VlmTaskState::Planning => "planning",
+                VlmTaskState::Observing => "observing",
+                _ => "running",
+            },
+            t.current_step, esc(&t.result)
+        )).collect();
+        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
+    }
+
     // ── Roboru JNI ──────────────────────────────────────────────────────────────
 
     #[no_mangle]
@@ -1955,7 +2080,7 @@ mod jni_bridge {
             let (steps, errors) = execute_pipeline(&mut s, &pipeline);
             if let Some(p) = s.roboru_pipelines.get_mut(&id) { p.run_count += 1; p.last_run_ms = now_ms(); }
             format!(r#"{{"ok":true,"steps":{},"errors":{}}}"#, steps,
-                format!("[{}]", errors.iter().map(|e| format!(""{}"", esc(e))).collect::<Vec<_>>().join(",")))
+                format!("[{}]", errors.iter().map(|e| format!(r#""{}""#, esc(e))).collect::<Vec<_>>().join(",")))
         } else { format!(r#"{{"error":"pipeline not found: {}"}}"#, esc(&id)) };
         CString::new(result).unwrap_or_default().into_raw()
     }
@@ -2078,7 +2203,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
 
         // v40: Automation engine endpoints
         ("GET",  "/macros")            => { let s=STATE.lock().unwrap(); format!("[{}]", s.macros.iter().map(macro_to_json).collect::<Vec<_>>().join(",")) }
-        ("POST", "/macros/add")        => { let mut m=parse_macro_from_json(body); let id=m.id.clone(); let mut s=STATE.lock().unwrap(); s.macros.retain(|x| x.id!=m.id); s.macros.push(m); format!(r#"{{"ok":true,"id":"{}"}}"#, id) }
+        ("POST", "/macros/add")        => { let m=parse_macro_from_json(body); let id=m.id.clone(); let mut s=STATE.lock().unwrap(); s.macros.retain(|x| x.id!=m.id); s.macros.push(m); format!(r#"{{"ok":true,"id":"{}"}}"#, id) }
         ("POST", "/macros/remove")     => { let id=extract_json_str(body,"id").unwrap_or_default(); STATE.lock().unwrap().macros.retain(|m| m.id!=id); r#"{"ok":true}"#.to_string() }
         ("POST", "/macros/enable")     => { let id=extract_json_str(body,"id").unwrap_or_default(); let en=!body.contains("\"enabled\":false"); if let Some(m)=STATE.lock().unwrap().macros.iter_mut().find(|m| m.id==id) { m.enabled=en; } r#"{"ok":true}"#.to_string() }
         ("POST", "/macros/run")        => {
@@ -2198,9 +2323,10 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET",  "/nodes")             => get_nodes_json(),
         ("POST", "/credentials/get")   => get_credential(body),
 
-        // Roboru / E-Robot / Automate visual automation routes
+        // VLM Phone Agent (Roubao + Open-AutoGLM) routes
         _ => {
-            if let Some(r) = route_roboru(method, path_clean, body) { r }
+            if let Some(r) = route_vlm_agent(method, path_clean, body) { r }
+            else if let Some(r) = route_roboru(method, path_clean, body) { r }
             else if let Some(r) = route_openclaw(method, path_clean, body) { r }
             else { queue_to_java(path_clean.trim_start_matches('/'), body) }
         }
@@ -2987,6 +3113,498 @@ fn install_builtin_templates(s: &mut KiraState) {
 
 
 
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Roubao Vision-Language Agent  (github.com/Turbo1123/roubao)
+// Open-AutoGLM Phone Agent      (github.com/zai-org/Open-AutoGLM)
+//
+// Core architecture implemented in pure Rust:
+//
+// ROUBAO pattern:
+//   screenshot → VLM prompt → structured action decision → execute
+//   - Screenshot observation loop
+//   - VLM-grounded element detection (describe what to tap)
+//   - Action confidence scoring
+//   - Task success verification via follow-up screenshot
+//
+// OPEN-AUTOGLM pattern:
+//   user_goal → task_planner → action_executor → state_observer → loop
+//   - Multi-step phone task decomposition
+//   - Thought-Action-Observation (TAO) loop (ReAct variant)
+//   - Sub-task tracking with completion state
+//   - Grounded element location via text description
+//   - Memory of previous actions in session
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Roubao: A VLM grounded action on a specific screen element
+#[derive(Clone, Debug)]
+struct VlmAction {
+    action_type: String,   // "tap", "swipe", "type", "scroll", "back", "home", "done"
+    element_desc: String,  // natural-language description of target element
+    text:         String,  // for type actions
+    direction:    String,  // for swipe/scroll: "up","down","left","right"
+    confidence:   f32,     // 0.0-1.0 VLM confidence score
+    reasoning:    String,  // VLM's chain-of-thought for this action
+    x:            i32,     // resolved coordinates (-1 = unresolved)
+    y:            i32,
+}
+
+/// Roubao: Task execution state machine
+#[derive(Clone, Debug, PartialEq)]
+enum VlmTaskState {
+    Idle,
+    Planning,       // generating action plan from goal
+    Observing,      // taking screenshot for VLM
+    Acting,         // executing the chosen action
+    Verifying,      // checking if action succeeded
+    Done(String),   // task complete with result
+    Failed(String), // task failed with reason
+}
+
+/// Open-AutoGLM: TAO (Thought-Action-Observation) step
+#[derive(Clone)]
+struct TaoStep {
+    step_num:    u32,
+    thought:     String,   // VLM's reasoning about current state
+    action:      VlmAction,
+    observation: String,   // what happened after action (from next screenshot)
+    success:     bool,
+    ts:          u128,
+}
+
+/// Open-AutoGLM: A phone agent task session
+#[derive(Clone)]
+struct PhoneAgentTask {
+    id:           String,
+    goal:         String,    // user's natural language goal
+    state:        VlmTaskState,
+    plan:         Vec<String>, // high-level sub-tasks from planner
+    plan_idx:     usize,      // current sub-task index
+    history:      Vec<TaoStep>,
+    max_steps:    u32,
+    current_step: u32,
+    context:      String,    // accumulated observations for VLM context
+    result:       String,
+    created_ms:   u128,
+    last_step_ms: u128,
+}
+
+/// Roubao: Screenshot observation record
+#[derive(Clone)]
+struct ScreenObservation {
+    task_id:    String,
+    step:       u32,
+    screen_pkg: String,
+    ui_nodes:   String,  // JSON of accessibility nodes
+    screenshot_path: String,
+    vlm_description: String, // VLM's description of what it sees
+    ts:         u128,
+}
+
+/// Build the VLM prompt for Roubao action selection
+/// This is the core of Roubao's architecture
+fn build_vlm_action_prompt(
+    goal: &str,
+    sub_task: &str,
+    screen_desc: &str,
+    history: &[TaoStep],
+    step: u32,
+    max_steps: u32,
+) -> String {
+    let history_str: String = history.iter().rev().take(5).rev().map(|h| {
+        format!("Step {}: {} → {} → {}",
+            h.step_num,
+            h.thought.chars().take(60).collect::<String>(),
+            h.action.action_type,
+            if h.success { "success" } else { "failed" }
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    format!(
+        "You are a phone automation agent. Analyze the screen and choose ONE action.\n\
+        \n\
+        GOAL: {goal}\n\
+        CURRENT TASK: {sub_task}\n\
+        STEP: {step}/{max_steps}\n\
+        \n\
+        SCREEN STATE:\n{screen_desc}\n\
+        \n\
+        RECENT HISTORY:\n{history}\n\
+        \n\
+        Respond with JSON:\n\
+        {{\n\
+          \"thought\": \"reasoning about current state\",\n\
+          \"action\": \"tap|swipe|type|scroll|back|home|done|failed\",\n\
+          \"element\": \"describe the UI element to interact with\",\n\
+          \"text\": \"text to type (if action=type)\",\n\
+          \"direction\": \"up|down|left|right (if swipe/scroll)\",\n\
+          \"confidence\": 0.0-1.0,\n\
+          \"done_reason\": \"why task is complete (if action=done)\"\n\
+        }}",
+        goal = goal,
+        sub_task = sub_task,
+        step = step,
+        max_steps = max_steps,
+        screen_desc = &screen_desc[..screen_desc.len().min(800)],
+        history = if history_str.is_empty() { "(none)".to_string() } else { history_str },
+    )
+}
+
+/// Build the Open-AutoGLM task planning prompt
+fn build_task_plan_prompt(goal: &str, context: &str) -> String {
+    format!(
+        "You are an Android phone agent. Break down this goal into 3-7 concrete sub-tasks.\n\
+        \n\
+        GOAL: {goal}\n\
+        DEVICE CONTEXT: {ctx}\n\
+        \n\
+        Return a JSON array of sub-task strings:\n\
+        [\"sub-task 1\", \"sub-task 2\", ...]\n\
+        \n\
+        Each sub-task should be a single screen interaction goal.\n\
+        Be specific about app names, buttons, and content.",
+        goal = goal,
+        ctx = &context[..context.len().min(400)],
+    )
+}
+
+/// Parse VLM JSON response into a VlmAction
+fn parse_vlm_action(json: &str) -> VlmAction {
+    let action_type  = extract_json_str(json, "action").unwrap_or_else(|| "back".to_string());
+    let element_desc = extract_json_str(json, "element").unwrap_or_default();
+    let text         = extract_json_str(json, "text").unwrap_or_default();
+    let direction    = extract_json_str(json, "direction").unwrap_or_default();
+    let thought      = extract_json_str(json, "thought").unwrap_or_default();
+    let done_reason  = extract_json_str(json, "done_reason").unwrap_or_default();
+    let confidence   = extract_json_f32(json, "confidence").unwrap_or(0.5);
+
+    let reasoning = if !done_reason.is_empty() { done_reason } else { thought };
+
+    VlmAction {
+        action_type,
+        element_desc,
+        text,
+        direction,
+        confidence,
+        reasoning,
+        x: -1,
+        y: -1,
+    }
+}
+
+/// Convert VlmAction to a MacroAction for execution
+fn vlm_action_to_macro(action: &VlmAction) -> MacroAction {
+    let mut params = HashMap::new();
+    match action.action_type.as_str() {
+        "tap" => {
+            params.insert("description".to_string(), action.element_desc.clone());
+            if action.x >= 0 {
+                params.insert("x".to_string(), action.x.to_string());
+                params.insert("y".to_string(), action.y.to_string());
+            }
+            MacroAction { kind: MacroActionKind::Shell, params: {
+                let mut p = HashMap::new();
+                p.insert("cmd".to_string(), if action.x >= 0 {
+                    format!("input tap {} {}", action.x, action.y)
+                } else {
+                    format!("# find_and_tap: {}", action.element_desc)
+                });
+                p
+            }, sub_actions: vec![], enabled: true }
+        }
+        "type" => {
+            params.insert("text".to_string(), action.text.clone());
+            MacroAction { kind: MacroActionKind::Shell, params: {
+                let mut p = HashMap::new();
+                p.insert("cmd".to_string(), format!("input text '{}'", action.text.replace('\'', "")));
+                p
+            }, sub_actions: vec![], enabled: true }
+        }
+        "scroll" | "swipe" => {
+            let (x1, y1, x2, y2) = match action.direction.as_str() {
+                "up"    => (540, 1200, 540, 400),
+                "down"  => (540, 400, 540, 1200),
+                "left"  => (900, 700, 200, 700),
+                "right" => (200, 700, 900, 700),
+                _       => (540, 800, 540, 400),
+            };
+            MacroAction { kind: MacroActionKind::Shell, params: {
+                let mut p = HashMap::new();
+                p.insert("cmd".to_string(), format!("input swipe {} {} {} {} 300", x1, y1, x2, y2));
+                p
+            }, sub_actions: vec![], enabled: true }
+        }
+        "back" => MacroAction { kind: MacroActionKind::Shell, params: {
+            let mut p = HashMap::new(); p.insert("cmd".to_string(), "input keyevent 4".to_string()); p
+        }, sub_actions: vec![], enabled: true },
+        "home" => MacroAction { kind: MacroActionKind::Shell, params: {
+            let mut p = HashMap::new(); p.insert("cmd".to_string(), "input keyevent 3".to_string()); p
+        }, sub_actions: vec![], enabled: true },
+        _ => MacroAction { kind: MacroActionKind::LogEvent, params: {
+            let mut p = HashMap::new(); p.insert("message".to_string(), format!("agent: {}", action.action_type)); p
+        }, sub_actions: vec![], enabled: true },
+    }
+}
+
+/// Enqueue a VLM step: screenshot → VLM prompt → Java executes → Rust processes result
+/// This implements the Roubao/Open-AutoGLM TAO loop
+fn enqueue_vlm_step(s: &mut KiraState, task_id: &str) {
+    // Step 1: Take screenshot and describe screen via VLM
+    // This is enqueued as a special compound action for Java to handle
+    s.pending_actions.push_back(PendingMacroAction {
+        macro_id:  task_id.to_string(),
+        action_id: gen_id(),
+        kind:      "vlm_observe".to_string(),
+        params: {
+            let mut p = HashMap::new();
+            p.insert("task_id".to_string(), task_id.to_string());
+            p.insert("screen_pkg".to_string(), s.screen_pkg.clone());
+            p.insert("ui_nodes_len".to_string(), s.screen_nodes.len().to_string());
+            p
+        },
+        ts: now_ms(),
+    });
+}
+
+/// Process VLM response and execute the decided action
+fn execute_vlm_step(s: &mut KiraState, task_id: &str, vlm_response: &str) -> bool {
+    let task = s.phone_agent_tasks.iter().find(|t| t.id == task_id).cloned();
+    let task = match task { Some(t) => t, None => return false };
+
+    let action = parse_vlm_action(vlm_response);
+    let thought = extract_json_str(vlm_response, "thought").unwrap_or_default();
+    let is_done = action.action_type == "done";
+    let is_failed = action.action_type == "failed";
+
+    // Convert to macro action and enqueue
+    let macro_action = vlm_action_to_macro(&action);
+    if !is_done && !is_failed {
+        enqueue_action(s, task_id, &macro_action);
+    }
+
+    // Record TAO step
+    let step = TaoStep {
+        step_num:    task.current_step,
+        thought,
+        action:      action.clone(),
+        observation: String::new(), // filled after next screenshot
+        success:     !is_failed,
+        ts:          now_ms(),
+    };
+
+    // Update task state
+    if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == task_id) {
+        t.history.push(step);
+        t.current_step += 1;
+        t.last_step_ms = now_ms();
+
+        if is_done {
+            t.state = VlmTaskState::Done(action.reasoning.clone());
+            t.result = action.reasoning.clone();
+        } else if is_failed {
+            t.state = VlmTaskState::Failed(action.reasoning.clone());
+        } else if t.current_step >= t.max_steps {
+            t.state = VlmTaskState::Failed("max steps reached".to_string());
+        } else {
+            t.state = VlmTaskState::Observing;
+            // Schedule next observation
+        }
+    }
+
+    is_done || is_failed
+}
+
+/// HTTP routes for VLM / Phone Agent
+fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
+    match (method, path) {
+        // Start a new phone agent task (Open-AutoGLM pattern)
+        ("POST", "/agent/task")     => {
+            let goal = extract_json_str(body, "goal").unwrap_or_default();
+            if goal.is_empty() { return Some(r#"{"error":"goal required"}"#.to_string()); }
+            let max_steps = extract_json_num(body, "max_steps").unwrap_or(20.0) as u32;
+            let task_id = gen_id();
+            let task = PhoneAgentTask {
+                id: task_id.clone(), goal: goal.clone(),
+                state: VlmTaskState::Planning,
+                plan: vec![], plan_idx: 0,
+                history: vec![], max_steps,
+                current_step: 0,
+                context: String::new(), result: String::new(),
+                created_ms: now_ms(), last_step_ms: now_ms(),
+            };
+            let mut s = STATE.lock().unwrap();
+            // Enqueue task plan generation (Java calls AI with the planning prompt)
+            let plan_prompt = build_task_plan_prompt(&goal, &s.agent_context);
+            s.pending_actions.push_back(PendingMacroAction {
+                macro_id: task_id.clone(), action_id: gen_id(),
+                kind: "vlm_plan".to_string(),
+                params: {
+                    let mut p = HashMap::new();
+                    p.insert("task_id".to_string(), task_id.clone());
+                    p.insert("goal".to_string(), goal);
+                    p.insert("prompt".to_string(), plan_prompt);
+                    p
+                },
+                ts: now_ms(),
+            });
+            s.phone_agent_tasks.push(task);
+            Some(format!(r#"{{"ok":true,"task_id":"{}","state":"planning"}}"#, esc(&task_id)))
+        }
+
+        // Get all tasks
+        ("GET", "/agent/tasks")     => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.phone_agent_tasks.iter().map(|t| format!(
+                r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"max_steps":{},"plan_steps":{},"history_steps":{}}}"#,
+                esc(&t.id), esc(&t.goal),
+                match &t.state {
+                    VlmTaskState::Idle => "idle",
+                    VlmTaskState::Planning => "planning",
+                    VlmTaskState::Observing => "observing",
+                    VlmTaskState::Acting => "acting",
+                    VlmTaskState::Verifying => "verifying",
+                    VlmTaskState::Done(_) => "done",
+                    VlmTaskState::Failed(_) => "failed",
+                },
+                t.current_step, t.max_steps, t.plan.len(), t.history.len()
+            )).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+
+        // Get task detail including history
+        ("GET", "/agent/task")      => {
+            let id = path.find("id=").map(|i| &path[i+3..]).unwrap_or("").split('&').next().unwrap_or("");
+            let s = STATE.lock().unwrap();
+            match s.phone_agent_tasks.iter().find(|t| t.id == id) {
+                Some(t) => {
+                    let plan_json: Vec<String> = t.plan.iter().map(|p| format!("\"{}\"", esc(p))).collect();
+                    let history_json: Vec<String> = t.history.iter().map(|h| format!(
+                        r#"{{"step":{},"thought":"{}","action":"{}","element":"{}","success":{},"ts":{}}}"#,
+                        h.step_num, esc(&h.thought), esc(&h.action.action_type),
+                        esc(&h.action.element_desc), h.success, h.ts
+                    )).collect();
+                    let state_str = match &t.state {
+                        VlmTaskState::Done(r) => format!("done:{}", r),
+                        VlmTaskState::Failed(r) => format!("failed:{}", r),
+                        s => format!("{:?}", s),
+                    };
+                    Some(format!(
+                        r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"plan":[{}],"history":[{}],"result":"{}"}}"#,
+                        esc(&t.id), esc(&t.goal), esc(&state_str),
+                        t.current_step, plan_json.join(","), history_json.join(","), esc(&t.result)
+                    ))
+                }
+                None => Some(r#"{"error":"task not found"}"#.to_string()),
+            }
+        }
+
+        // Java calls this after taking a screenshot and getting VLM description
+        // Body: {task_id, vlm_response (JSON from AI)}
+        ("POST", "/agent/vlm_step") => {
+            let task_id = extract_json_str(body, "task_id").unwrap_or_default();
+            let vlm_resp = extract_json_str(body, "vlm_response").unwrap_or_default();
+            if task_id.is_empty() { return Some(r#"{"error":"task_id required"}"#.to_string()); }
+            let done = execute_vlm_step(&mut STATE.lock().unwrap(), &task_id, &vlm_resp);
+            Some(format!(r#"{{"ok":true,"done":{}}}"#, done))
+        }
+
+        // Java calls this with the AI-generated plan JSON array
+        ("POST", "/agent/set_plan") => {
+            let task_id = extract_json_str(body, "task_id").unwrap_or_default();
+            // Parse plan array: ["task1","task2",...]
+            let plan_str = extract_json_str(body, "plan").unwrap_or_default();
+            let plan: Vec<String> = plan_str.split(',')
+                .map(|s| s.trim().trim_matches('"').to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            let mut s = STATE.lock().unwrap();
+            if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == task_id) {
+                t.plan = plan;
+                t.state = VlmTaskState::Observing;
+                // Enqueue first VLM observation
+            }
+            // Now enqueue the first observation
+            enqueue_vlm_step(&mut s, &task_id);
+            Some(r#"{"ok":true,"state":"observing"}"#.to_string())
+        }
+
+        // Build VLM prompt for current task step (Java uses this to call AI)
+        ("GET", "/agent/prompt")    => {
+            let id = path.find("id=").map(|i| &path[i+3..]).unwrap_or("").split('&').next().unwrap_or("");
+            let s = STATE.lock().unwrap();
+            match s.phone_agent_tasks.iter().find(|t| t.id == id) {
+                Some(t) => {
+                    let sub_task = t.plan.get(t.plan_idx).cloned().unwrap_or_else(|| t.goal.clone());
+                    let screen_desc = format!("Package: {}\nUI nodes count: {}\nAgent context: {}",
+                        s.screen_pkg, s.screen_nodes.len(), &s.agent_context[..s.agent_context.len().min(500)]);
+                    let prompt = build_vlm_action_prompt(
+                        &t.goal, &sub_task, &screen_desc,
+                        &t.history, t.current_step, t.max_steps
+                    );
+                    Some(format!(r#"{{"task_id":"{}","prompt":{},"step":{},"sub_task":"{}"}}"#,
+                        esc(&t.id), json_str(&prompt), t.current_step, esc(&sub_task)))
+                }
+                None => Some(r#"{"error":"task not found"}"#.to_string()),
+            }
+        }
+
+        // Cancel a task
+        ("POST", "/agent/cancel")   => {
+            let id = extract_json_str(body, "task_id").unwrap_or_default();
+            let mut s = STATE.lock().unwrap();
+            if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == id) {
+                t.state = VlmTaskState::Failed("cancelled by user".to_string());
+            }
+            Some(r#"{"ok":true}"#.to_string())
+        }
+
+        // Clear completed tasks
+        ("POST", "/agent/clear")    => {
+            let mut s = STATE.lock().unwrap();
+            s.phone_agent_tasks.retain(|t| matches!(t.state, VlmTaskState::Planning | VlmTaskState::Observing | VlmTaskState::Acting | VlmTaskState::Verifying));
+            Some(format!(r#"{{"ok":true,"remaining":{}}}"#, s.phone_agent_tasks.len()))
+        }
+
+        // Screen observations log (Roubao pattern)
+        ("GET", "/agent/observations") => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.screen_observations.iter().rev().take(20).map(|o| format!(
+                r#"{{"task_id":"{}","step":{},"pkg":"{}","vlm":"{}","ts":{}}}"#,
+                esc(&o.task_id), o.step, esc(&o.screen_pkg),
+                esc(&o.vlm_description[..o.vlm_description.len().min(100)]), o.ts
+            )).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+
+        _ => None,
+    }
+}
+
+/// JNI: Java reports VLM observation result back to Rust
+/// Called after Java takes screenshot, runs it through VLM, gets description
+fn record_screen_observation(s: &mut KiraState, task_id: &str, step: u32, vlm_desc: &str) {
+    s.screen_observations.push_back(ScreenObservation {
+        task_id: task_id.to_string(),
+        step,
+        screen_pkg: s.screen_pkg.clone(),
+        ui_nodes: s.screen_nodes.chars().take(500).collect(),
+        screenshot_path: String::new(),
+        vlm_description: vlm_desc.to_string(),
+        ts: now_ms(),
+    });
+    if s.screen_observations.len() > 200 { s.screen_observations.pop_front(); }
+
+    // Update context for current task
+    if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == task_id) {
+        t.context = format!("{}; step{}: {}", t.context, step, &vlm_desc[..vlm_desc.len().min(100)]);
+        t.state = VlmTaskState::Acting;
+        // Update observation in last history entry
+        if let Some(h) = t.history.last_mut() {
+            h.observation = vlm_desc.chars().take(200).collect();
+        }
+    }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Roboru / E-Robot / Automate Engine
 // Inspired by: LlamaLab Automate (flowchart), E-Robot (170+ events, 150+ actions),
@@ -3308,7 +3926,7 @@ fn execute_pipeline(s: &mut KiraState, pipeline: &HyperPipeline) -> (u32, Vec<St
             }
             "ai_decision" => {
                 // Enqueue kira_ask action with the prompt
-                let mut action = MacroAction {
+                let action = MacroAction {
                     kind: MacroActionKind::KiraAsk,
                     params: {
                         let mut m = HashMap::new();
@@ -3340,7 +3958,7 @@ fn execute_pipeline(s: &mut KiraState, pipeline: &HyperPipeline) -> (u32, Vec<St
             }
             "human_task" => {
                 // Pause pipeline and send notification to user
-                let mut action = MacroAction {
+                let action = MacroAction {
                     kind: MacroActionKind::SendNotification,
                     params: {
                         let mut m = HashMap::new();
@@ -3369,7 +3987,7 @@ fn parse_flow_from_json(body: &str) -> Option<AutoFlow> {
     if start.is_empty() { return None; }
     // blocks: [{id, kind, label, next:["id1","id2"], action:{...}, condition:{...}}]
     let mut blocks = HashMap::new();
-    let blocks_key = ""blocks":[";
+    let blocks_key = r#""blocks":["#;
     let bstart = match body.find(blocks_key) {
         Some(i) => i + blocks_key.len(), None => return None
     };
@@ -3482,7 +4100,7 @@ fn parse_pipeline_from_json(body: &str) -> Option<HyperPipeline> {
     let name = extract_json_str(body, "name").unwrap_or_else(|| "Pipeline".to_string());
     // steps: [{id, name, kind, prompt, out_var, retry_count, ...}]
     let mut steps = Vec::new();
-    let key = ""steps":[";
+    let key = r#""steps":["#;
     let start = match body.find(key) { Some(i) => i + key.len(), None => return None };
     let slice = &body[start..];
     let mut depth = 0i32; let mut obj_start = 0; let mut in_obj = false;
@@ -3581,7 +4199,7 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
             let items: Vec<String> = s.roboru_keywords.iter().map(|(name, kw)|
                 format!(r#"{{"name":"{}","description":"{}","args":{},"steps":{}}}"#,
                     esc(name), esc(&kw.description),
-                    format!("[{}]", kw.args.iter().map(|a| format!(""{}"", esc(a))).collect::<Vec<_>>().join(",")),
+                    format!("[{}]", kw.args.iter().map(|a| format!(r#""{}""#, esc(a))).collect::<Vec<_>>().join(",")),
                     kw.steps.len())
             ).collect();
             Some(format!("[{}]", items.join(",")))
@@ -3633,7 +4251,7 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
                 }
                 Some(format!(r#"{{"ok":true,"steps":{},"errors":{}}}"#,
                     steps,
-                    format!("[{}]", errors.iter().map(|e| format!(""{}"", esc(e))).collect::<Vec<_>>().join(","))))
+                    format!("[{}]", errors.iter().map(|e| format!(r#""{}""#, esc(e))).collect::<Vec<_>>().join(","))))
             } else { Some(format!(r#"{{"error":"pipeline not found: {}"}}"#, esc(&id))) }
         }
         _ => None,

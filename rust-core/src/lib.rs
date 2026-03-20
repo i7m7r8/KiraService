@@ -3062,14 +3062,50 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             s.theme.activity_level = (tools_recent as f32 / 10.0).min(1.0);
             s.theme.to_json()
         }
-        ("GET",  "/theme/anim")         => {
+        // GET /layer0 — full Layer 0 star field animation state
+        // Polled by GalaxyView every 500ms to drive the living canvas.
+        // Returns: phase(0-1, 3s period), bpm, activity(0-1), thinking,
+        //          hue_shift(-12 to +12 degrees, sine-driven),
+        //          vortex_intensity(0-1), burst(true once then reset)
+        ("GET",  "/layer0") => {
+            let mut s = STATE.lock().unwrap();
+            let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
+            // 3-second heartbeat phase (0.0 → 1.0 → 0.0 → ...)
+            let phase      = (uptime_ms % 3_000) as f32 / 3_000.0;
+            s.theme.animation_phase = phase;
+            // Chromatic hue shift: ±12° sine wave on 3s period
+            let hue_shift  = (phase * 2.0 * std::f32::consts::PI).sin() * 12.0;
+            // Activity: tool calls in last 60s, normalised 0-1
+            let tools_60s  = s.macro_run_log.iter()
+                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000).count();
+            let activity   = (tools_60s as f32 / 10.0_f32).min(1.0_f32);
+            s.theme.activity_level = activity;
+            // BPM: 120 thinking, 90 active, 60 idle
+            let bpm = if s.theme.is_thinking { 120u32 }
+                      else if s.request_count > 0 && activity > 0.05 { 90 }
+                      else { 60 };
+            s.theme.pulse_bpm = bpm;
+            // Vortex: ramps up when thinking, decays when idle
+            // Java applies this as the rate of star inward drift
+            let vortex = if s.theme.is_thinking { 1.0f32 }
+                         else { (activity * 0.6).min(0.8) };
+            // Burst flag: consumed once by Java, then auto-cleared
+            let burst = s.theme.is_thinking; // Java triggers burst on thinking→false transition
+            format!(
+                r#"{{"phase":{:.6},"bpm":{},"activity":{:.6},"thinking":{},"hue_shift":{:.4},"vortex":{:.4},"burst":{}}}"#,
+                phase, bpm, activity, s.theme.is_thinking,
+                hue_shift, vortex, burst
+            )
+        }
+
+        // Legacy alias for older Java pollers
+        ("GET",  "/theme/anim") => {
             let mut s = STATE.lock().unwrap();
             let uptime_ms = now_ms().saturating_sub(s.uptime_start);
-            let phase = (uptime_ms % 3000) as f32 / 3000.0;
+            let phase = (uptime_ms % 3_000) as f32 / 3_000.0;
             s.theme.animation_phase = phase;
             let tools_recent = s.macro_run_log.iter()
-                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000)
-                .count();
+                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000).count();
             format!(r#"{{"phase":{:.6},"bpm":{},"activity":{:.6},"thinking":{}}}"#,
                 phase, s.theme.pulse_bpm,
                 (tools_recent as f32 / 10.0).min(1.0),
@@ -3399,7 +3435,33 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             format!(r#"{{"theme":"catppuccin_mocha","swatches":[{}]}}"#, items.join(","))
         }
 
-                ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
+                // GET /layer1 — Neural Nav Bar state for Java
+        // Returns Catppuccin colour tokens + keyboard state hint
+        // Java NeuralNavBar polls this to stay in sync with Rust theme
+        ("GET",  "/layer1") => {
+            let s = STATE.lock().unwrap();
+            let uptime_ms = now_ms().saturating_sub(s.uptime_start);
+            // Nav bar pulse: subtle border alpha oscillation on heartbeat
+            let phase = (uptime_ms % 3_000) as f32 / 3_000.0;
+            let border_alpha = 0.30 + (phase * 2.0 * std::f32::consts::PI as f32).sin().abs() * 0.08;
+            format!(
+                r#"{{"mantle":{},"lavender":{},"overlay0":{},"border_alpha":{:.4},"active_tab_sp":26,"inactive_tab_sp":22,"aura_radius_dp":32,"island_height_dp":72,"island_corner_dp":24,"elevation_dp":8}}"#,
+                0xFF181825u32,  // Catppuccin Mantle
+                0xFFB4BEFEu32,  // Catppuccin Lavender
+                0xFF6C7086u32,  // Catppuccin Overlay0 (inactive)
+                border_alpha
+            )
+        }
+
+        // POST /layer0/burst — called by Java when Kira finishes replying
+        // Sets a one-shot burst flag that /layer0 will return as burst:true
+        ("POST", "/layer0/burst") => {
+            // We use is_thinking flip as the burst signal — Java detects thinking→false
+            STATE.lock().unwrap().theme.is_thinking = false;
+            r#"{"ok":true}"#.to_string()
+        }
+
+        ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
         ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap(); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
         ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }
         ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap(); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }

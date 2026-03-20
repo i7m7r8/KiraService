@@ -1268,22 +1268,19 @@ public class MainActivity extends Activity
                     .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build();
                 okhttp3.Response resp = client.newCall(
                     new okhttp3.Request.Builder()
-                        .url("http://localhost:7070/theme/anim").get().build()).execute();
+                        .url("http://localhost:7070/layer0").get().build()).execute();
                 if (resp.body() == null) return;
                 String j = resp.body().string();
-                float phase    = parseJsonFloat(j, "phase");
-                float bpm      = parseJsonFloat(j, "bpm");
+                float hueShift = parseJsonFloat(j, "hue_shift");
+                float vortex   = parseJsonFloat(j, "vortex");
                 float activity = parseJsonFloat(j, "activity");
                 boolean thinking = j.contains("\"thinking\":true");
                 uiHandler.post(() -> {
-                    galaxyView.setAnimState(phase, bpm, activity, thinking);
-                    // L8: header border intensity from activity_level
+                    galaxyView.setAnimState(hueShift, vortex, activity, thinking);
                     View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
                     if (hb != null && !thinking) {
-                        int baseAlpha  = 0x44; // 27%
-                        int extraAlpha = (int)(activity * 0x22); // up to 13% more
-                        int finalColor = ((baseAlpha + extraAlpha) << 24) | 0x00B4BEFE;
-                        hb.setBackgroundColor(finalColor);
+                        int alpha = 0x44 + (int)(activity * 0x22);
+                        hb.setBackgroundColor((alpha << 24) | 0x00B4BEFE);
                     }
                 });
             } catch (Exception ignored) {}
@@ -1303,11 +1300,15 @@ public class MainActivity extends Activity
             hb.setBackgroundColor(0x44B4BEFE);
         }
         hideTypingIndicator();
-        // Signal Rust: done thinking → vortex OFF
-        new Thread(() -> { try { new okhttp3.OkHttpClient().newCall(
-            new okhttp3.Request.Builder().url("http://localhost:7070/theme/thinking")
-                .post(okhttp3.RequestBody.create("{\"active\":false}",
-                    okhttp3.MediaType.parse("application/json"))).build()).execute();
+        // Signal Rust: burst + stop thinking
+        new Thread(() -> { try {
+            new okhttp3.OkHttpClient().newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070/layer0/burst")
+                    .post(okhttp3.RequestBody.create(new byte[0], null)).build()).execute();
+            new okhttp3.OkHttpClient().newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070/theme/thinking")
+                    .post(okhttp3.RequestBody.create("{\"active\":false}",
+                        okhttp3.MediaType.parse("application/json"))).build()).execute();
         } catch (Exception ignored) {} }).start();
     }
 

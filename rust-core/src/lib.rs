@@ -2825,8 +2825,7 @@ Context: {}",
         } else {
             let err = format!("sha256_mismatch");
             s.ota.phase = OtaPhase::Failed(err.clone());
-            { let _s = format!(r#"{{"ok":false,"error":"{}"}}"#, esc(&err)))
-                ; unsafe { jni_str(env, &_jni_s) }
+            unsafe { jni_str(env, &format!(r#"{{"ok":false,"error":"{}"}}"#, esc(&err))) }
         }
     }
 

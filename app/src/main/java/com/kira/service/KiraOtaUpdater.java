@@ -58,23 +58,47 @@ public class KiraOtaUpdater {
     private final Context ctx;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final AtomicBoolean downloading = new AtomicBoolean(false);
-    private Callback callback;
+    private OtaCallback callback;
 
-    public interface Callback {
-        void onUpdateAvailable(String tag, long bytes, boolean isDelta);
-        void onProgress(int pct, long downloaded, long total, boolean isDelta);
+    /** Callback interface — matches MainActivity.initOta() expectations exactly */
+    public interface OtaCallback { // legacy alias
+        void onCheckStart();
+        void onUpdateAvailable(String ver, String log, Runnable onInstall, Runnable onSkip);
+        void onProgress(int pct, long done, long total);
         void onInstalling(String method);
-        void onSuccess(String newVersion);
-        void onUpToDate();
+        void onSuccess(String ver);
         void onError(String msg);
+        void onUpToDate();
     }
+    // Alias so old code using OtaCallback still compiles
+    public interface OtaCallback extends Callback {}
 
     public KiraOtaUpdater(Context ctx) { this.ctx = ctx.getApplicationContext(); }
-    public void setCallback(Callback cb) { this.callback = cb; }
+    /** Called by MainActivity before scheduleChecks */
+    public void init() {
+        // Initialise OTA engine — register current version with Rust
+        new Thread(() -> {
+            try {
+                String ver = getInstalledVersion();
+                int    code = getInstalledVersionCode();
+                RustBridge.otaSetCurrentVersion(ver, code);
+                KiraConfig cfg = KiraConfig.load(ctx);
+                RustBridge.otaSetRepo(cfg.otaRepo != null ? cfg.otaRepo : "i7m7r8/KiraService");
+            } catch (Throwable ignored) {}
+        }).start();
+    }
+
+    public void setCallback(OtaCallback cb) { this.callback = cb; }
 
     // ── Schedule ──────────────────────────────────────────────────────────
 
-    public void scheduleCheck() {
+    /** Called by MainActivity.initOta() */
+    public void init() { /* no-op — constructor handles setup */ }
+
+    /** Called by MainActivity.initOta() — alias for scheduleCheck() */
+    public void scheduleChecks() { scheduleCheck(); }
+
+    public void scheduleChecks() {
         handler.postDelayed(this::checkForUpdate, 3_000); // first check 3s after boot
         handler.postDelayed(new Runnable() {
             @Override public void run() {
@@ -132,10 +156,17 @@ public class KiraOtaUpdater {
                 long deltaBytes = estimateDeltaBytes(finalBytes);
                 boolean isDelta = deltaBytes < finalBytes * 0.7; // >30% savings = use delta
 
-                RustBridge.otaOnRelease(tag, "", "", finalBytes, apkUrl, 0);
+                RustBridge.otaOnRelease(tag, finalUrl, "", "", "", finalBytes);
 
-                if (callback != null)
-                    handler.post(() -> callback.onUpdateAvailable(finalTag, isDelta ? deltaBytes : finalBytes, isDelta));
+                if (callback != null) {
+                    handler.post(() -> callback.onCheckStart());
+                    Runnable doInstall = () -> startDownload(finalTag, finalUrl, finalBytes, isDelta);
+                    Runnable doSkip    = () -> { /* user skipped */ };
+                    String sizeInfo    = String.format("Size: %.1f MB%s",
+                        (isDelta ? deltaBytes : finalBytes) / 1048576.0,
+                        isDelta ? " (delta)" : "");
+                    handler.post(() -> callback.onUpdateAvailable(finalTag, sizeInfo, doInstall, doSkip));
+                }
 
                 // Auto-download if Shizuku available (fully silent)
                 if (ShizukuShell.isAvailable()) {
@@ -171,7 +202,7 @@ public class KiraOtaUpdater {
                 Log.i(TAG, "APK SHA-256: " + sha);
 
                 // Tell Rust; get install method back
-                String instJson = RustBridge.otaOnDownloaded(tag, apkFile.getAbsolutePath(), sha);
+                String instJson = RustBridge.otaOnDownloaded(apkFile.getAbsolutePath(), sha);
                 JSONObject inst = new JSONObject(instJson);
                 if (!inst.optBoolean("ok", false))
                     throw new Exception(inst.optString("error", "SHA mismatch"));
@@ -208,10 +239,10 @@ public class KiraOtaUpdater {
                 fo.write(buf, 0, n);
                 got += n;
                 int pct = len > 0 ? (int)(got * 100 / len) : -1;
-                RustBridge.otaProgress(pct, (int)(got / 1024));
+                RustBridge.otaProgress(got, len);
                 if (callback != null) {
                     final int fpct = pct; final long fgot = got; final long flen = len;
-                    handler.post(() -> callback.onProgress(fpct, fgot, flen, false));
+                    handler.post(() -> callback.onProgress(fpct, fgot, flen));
                 }
             }
         } finally { conn.disconnect(); }
@@ -285,10 +316,10 @@ public class KiraOtaUpdater {
                     }
 
                     int pct = (int)(chunk * 100 / numChunks);
-                    RustBridge.otaProgress(pct, (int)(downloaded / 1024));
+                    RustBridge.otaProgress(downloaded, remoteSize);
                     final int fpct = pct;
                     if (callback != null)
-                        handler.post(() -> callback.onProgress(fpct, downloaded, remoteSize, true));
+                        handler.post(() -> callback.onProgress(fpct, downloaded, remoteSize));
                 }
             }
 

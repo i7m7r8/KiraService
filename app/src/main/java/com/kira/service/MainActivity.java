@@ -1289,8 +1289,7 @@ public class MainActivity extends Activity
 
     /** Called by KiraAI when a response is fully received — triggers burst */
     public void onKiraReplied() {
-        if (galaxyView != null) galaxyView.triggerBurst();
-        fireLightning(0); // L6: reply arc
+        fireLightning(0); // L6: reply arc — burst triggered automatically by thinking→false
         // Stop header border pulse
         View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
         if (hb != null) {

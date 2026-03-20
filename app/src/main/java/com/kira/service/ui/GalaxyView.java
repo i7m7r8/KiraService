@@ -66,6 +66,13 @@ public class GalaxyView extends View {
      * @param activity  0-1 activity level (drives pulse speed)
      * @param thinking  true = vortex on, false = if was thinking, trigger burst
      */
+    /** Called directly by MainActivity when Kira finishes replying */
+    public void triggerBurst() {
+        burstStrength = 1.0f;
+        for (int i = 0; i < TOTAL; i++) { driftX[i] = 0f; driftY[i] = 0f; }
+        postInvalidate();
+    }
+
     public void setAnimState(float hueShift, float vortex, float activity, boolean thinking) {
         // Detect thinking → false transition → trigger burst
         if (wasThinking && !thinking) {

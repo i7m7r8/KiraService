@@ -3455,7 +3455,69 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
 
         // POST /layer0/burst — called by Java when Kira finishes replying
         // Sets a one-shot burst flag that /layer0 will return as burst:true
-        ("POST", "/layer0/burst") => {
+        // ── Layer 2: Chat Interface state endpoints ───────────────────────────
+
+        // GET /layer2/header — header bar state (pulse, subtitle cycle index)
+        // Java polls at 500ms to drive header border and subtitle crossfade
+        ("GET",  "/layer2/header") => {
+            let s = STATE.lock().unwrap();
+            let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
+            let phase      = (uptime_ms % 3_000) as f32 / 3_000.0;
+            // Border alpha: 12% base, pulses to 35% when thinking
+            let border_alpha = if s.theme.is_thinking {
+                0.27 + (phase * 2.0 * std::f32::consts::PI).sin().abs() * 0.08
+            } else { 0.12f32 };
+            // Subtitle index: cycles through 4 states (ready/thinking/reasoning/composing)
+            // 0=ready, 1=thinking, 2=reasoning, 3=composing — driven by request state
+            let subtitle_idx: u32 = if !s.theme.is_thinking { 0 }
+                else { ((uptime_ms / 1_800) % 3 + 1) as u32 }; // cycle 1-3 while thinking
+            format!(
+                r#"{{"border_alpha":{:.4},"subtitle_idx":{},"thinking":{},"request_count":{}}}"#,
+                border_alpha, subtitle_idx, s.theme.is_thinking, s.request_count
+            )
+        }
+
+        // GET /layer2/bubbles — bubble styling tokens for chat UI
+        // Returns Catppuccin colour tokens for user/kira bubbles + shadow specs
+        ("GET",  "/layer2/bubbles") => {
+            r#"{"user_bg":3292050, "user_bg_alpha":255, "kira_bg":2040622, "lavender":11862782, "peach":16430983, "green_dark":2023454, "shadow_color":1144397, "shadow_alpha":102, "shadow_blur_dp":8, "shadow_y_dp":2, "spring_stiffness":300, "spring_damping":28, "spring_duration_ms":320, "translate_dp":40}"#.to_string()
+            // user_bg = 0xFF313244 (Surface0), kira_bg = 0xFF1E1E2E (Base)
+            // lavender = 0xFFB4BEFE, peach = 0xFFFAB387, green_dark = 0xFF1E2E1E
+        }
+
+        // GET /layer2/typing — typing indicator animation params
+        // Three Lavender dots, sinusoidal, each offset 120ms
+        ("GET",  "/layer2/typing") => {
+            let s = STATE.lock().unwrap();
+            let uptime_ms = now_ms().saturating_sub(s.uptime_start);
+            // Each dot phase offset by 120ms within 600ms period
+            let t = uptime_ms as f32 / 600.0 * 2.0 * std::f32::consts::PI;
+            let d0 = ((t).sin() * 4.0) as i32;           // dot 0: ±4dp
+            let d1 = ((t - 0.628).sin() * 4.0) as i32;   // dot 1: 120ms offset
+            let d2 = ((t - 1.257).sin() * 4.0) as i32;   // dot 2: 240ms offset
+            format!(
+                r#"{{"visible":{},"dot0_y":{},"dot1_y":{},"dot2_y":{},"color":{},"period_ms":600,"amplitude_dp":4}}"#,
+                s.theme.is_thinking, d0, d1, d2, 0xFFB4BEFEu32
+            )
+        }
+
+        // POST /layer2/message — record that a message was sent/received
+        // Updates request_count, last_message_ts, triggers K badge rotation signal
+        ("POST", "/layer2/message") => {
+            let role = extract_json_str(body, "role").unwrap_or_else(||"user".to_string());
+            let mut s = STATE.lock().unwrap();
+            if role == "user" {
+                s.request_count += 1;
+                s.theme.is_thinking = true;
+            } else if role == "kira" {
+                s.theme.is_thinking = false;
+                s.tool_call_count += 1;
+            }
+            format!(r#"{{"ok":true,"request_count":{},"thinking":{}}}"#,
+                s.request_count, s.theme.is_thinking)
+        }
+
+                ("POST", "/layer0/burst") => {
             // We use is_thinking flip as the burst signal — Java detects thinking→false
             STATE.lock().unwrap().theme.is_thinking = false;
             r#"{"ok":true}"#.to_string()

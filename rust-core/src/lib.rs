@@ -3043,7 +3043,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         }
         // POST /theme/thinking {"active":true}  — set thinking state
         ("POST", "/theme/thinking")     => {
-            let active = body.contains(""active":true");
+            let active = body.contains(r#""active":true"#);
             STATE.lock().unwrap().theme.is_thinking = active;
             r#"{"ok":true}"#.to_string()
         }
@@ -3086,7 +3086,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             };
             format!(
                 r#"{{"installed":{},"running":{},"permission":{},"border_color":{},"border_name":"{}","pulse_ms":1500}}"#,
-                s.shizuku.installed, s.shizuku.binder_alive,
+                s.shizuku.installed, s.shizuku.installed,
                 s.shizuku.permission_granted,
                 border_color, border_name
             )
@@ -5559,7 +5559,7 @@ fn app_name_to_pkg(name: &str) -> String {
         "nykaa"                                          => "com.nykaa.app",
         "paytm"                                          => "net.one97.paytm",
         "phonepe"                                        => "com.phonepe.app",
-        "gpay"|"google pay upi"                          => "com.google.android.apps.nbu.paisa.user",
+
         "bhim"|"bhim upi"                                => "in.org.npci.upiapp",
         "paypal"                                         => "com.paypal.android.p2pmobile",
         "cash app"                                       => "com.squareup.cash",
@@ -5720,7 +5720,7 @@ fn app_name_to_pkg(name: &str) -> String {
         "samsung notes"|"s note"                         => "com.samsung.android.app.notes",
         "samsung bixby"|"bixby"                          => "com.samsung.android.bixby.agent",
         "samsung store"|"galaxy store"                   => "com.sec.android.app.samsungapps",
-        "samsung health"                                 => "com.sec.android.app.shealth",
+
         "samsung music"                                  => "com.sec.android.app.music",
         "samsung clock"                                  => "com.sec.android.app.clockpackage",
         "dex"|"samsung dex"                              => "com.samsung.android.desktopmode.uiservice",
@@ -5766,7 +5766,7 @@ fn app_name_to_pkg(name: &str) -> String {
         "chatgpt"|"chat gpt"                             => "com.openai.chatgpt",
         "claude"                                         => "com.anthropic.claude",
         "perplexity"                                     => "ai.perplexity.app.android",
-        "gemini"                                         => "com.google.android.apps.bard",
+
         "copilot"|"microsoft copilot"                    => "com.microsoft.copilot",
         "grok"                                           => "com.x.android",
         _                                                => &n,

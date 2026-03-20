@@ -212,12 +212,20 @@ public class MainActivity extends Activity
         initViews();
         showTab(0);
 
+        // Show welcome message so user knows Kira is alive
+        uiHandler.postDelayed(() -> {
+            String welcome = cfg.userName != null && !cfg.userName.equals("User")
+                ? "Hi " + cfg.userName + "! I'm Kira. How can I help?"
+                : "Hi! I'm Kira, your AI agent. How can I help?";
+            addSystemNotice(welcome);
+        }, 500);
+
         // Register Shizuku permission result listener before requesting
         try { Shizuku.addRequestPermissionResultListener(shizukuPermListener); }
         catch (Exception ignored) {}
-        requestAllPermissions();
-        uiHandler.postDelayed(this::checkShizuku, 500);
-        uiHandler.postDelayed(this::checkAccessibility, 2000);
+        uiHandler.postDelayed(this::requestAllPermissions, 1000); // slight delay after UI draws
+        uiHandler.postDelayed(this::checkShizuku, 8000);   // 8s — let user see UI first
+        uiHandler.postDelayed(this::checkAccessibility, 10000); // 10s
 
         // Start foreground service (also starts Rust HTTP server inside it)
         KiraForegroundService.start(this);
@@ -287,14 +295,19 @@ public class MainActivity extends Activity
 
     private void checkAccessibility() {
         if (KiraAccessibilityService.instance == null) {
-            showKiraDialogMulti("Accessibility Required",
-                "Kira needs Accessibility Service to read and control your screen.\n\n" +
-                "Settings \u2192 Accessibility \u2192 Kira \u2192 Enable",
-                new String[]{"OPEN SETTINGS", "LATER"},
-                new Runnable[]{
-                    () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
-                    null
-                });
+            // Don't interrupt immediately — show after 10s so user can see the UI first
+            uiHandler.postDelayed(() -> {
+                if (KiraAccessibilityService.instance != null) return; // granted in the meantime
+                showKiraDialogMulti("Enable Screen Control",
+                    "For full autonomous control, enable Accessibility.\n\n" +
+                    "Settings → Accessibility → Kira → Enable\n\n" +
+                    "Basic chat works without it.",
+                    new String[]{"OPEN SETTINGS", "LATER"},
+                    new Runnable[]{
+                        () -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                        null
+                    });
+            }, 10_000); // 10 second delay — let user see the app first
         }
     }
 

@@ -60,7 +60,7 @@ public class KiraConfig {
             .putInt("heartbeatInterval",    heartbeatInterval)
             .putBoolean("setupDone",        setupDone)
             .putString("otaRepo",           otaRepo)
-            .apply();
+            .commit(); // synchronous — ensures setupDone persists before activity transition
         // v38: mirror to Rust state so /config + /appstats + /providers stay accurate
         try {
             com.kira.service.RustBridge.syncConfig(

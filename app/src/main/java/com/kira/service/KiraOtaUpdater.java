@@ -132,31 +132,45 @@ public class KiraOtaUpdater {
                 String apkUrl   = null;
                 long   apkBytes = 0;
 
-                // Find best APK asset: prefer release, accept debug
+                // Find best APK: arm64-v8a > universal > armeabi-v7a > any non-debug
                 JSONArray assets = rel.optJSONArray("assets");
                 if (assets != null) {
-                    // First pass: release APK
+                    // Detect device ABI
+                    String[] abis = android.os.Build.SUPPORTED_ABIS;
+                    boolean isArm64 = abis.length > 0 && abis[0].equals("arm64-v8a");
+                    boolean isArm32 = abis.length > 0 && abis[0].equals("armeabi-v7a");
+                    boolean isX86   = abis.length > 0 && abis[0].contains("x86");
+
+                    String urlArm64 = null, urlArm32 = null, urlX86 = null,
+                           urlUniversal = null, urlAny = null;
+                    long szArm64=0, szArm32=0, szX86=0, szUniversal=0, szAny=0;
+
                     for (int i = 0; i < assets.length(); i++) {
                         JSONObject a = assets.getJSONObject(i);
-                        String name = a.optString("name", "");
-                        if (name.endsWith(".apk") && !name.contains("debug")) {
-                            apkUrl   = a.optString("browser_download_url", "");
-                            apkBytes = a.optLong("size", 0);
-                            break;
+                        String name = a.optString("name", "").toLowerCase();
+                        if (!name.endsWith(".apk") || name.contains("debug")) continue;
+                        String url = a.optString("browser_download_url", "");
+                        long sz = a.optLong("size", 0);
+                        if (name.contains("arm64-v8a") || name.contains("arm64")) {
+                            urlArm64 = url; szArm64 = sz;
+                        } else if (name.contains("armeabi-v7a") || name.contains("armv7")) {
+                            urlArm32 = url; szArm32 = sz;
+                        } else if (name.contains("x86_64") || name.contains("x86")) {
+                            urlX86 = url; szX86 = sz;
+                        } else if (name.contains("universal")) {
+                            urlUniversal = url; szUniversal = sz;
+                        } else {
+                            urlAny = url; szAny = sz;
                         }
                     }
-                    // Second pass: any APK
-                    if (apkUrl == null || apkUrl.isEmpty()) {
-                        for (int i = 0; i < assets.length(); i++) {
-                            JSONObject a = assets.getJSONObject(i);
-                            String name = a.optString("name", "");
-                            if (name.endsWith(".apk")) {
-                                apkUrl   = a.optString("browser_download_url", "");
-                                apkBytes = a.optLong("size", 0);
-                                break;
-                            }
-                        }
-                    }
+
+                    // Pick best match for this device
+                    if (isArm64 && urlArm64 != null)      { apkUrl = urlArm64;     apkBytes = szArm64; }
+                    else if (isArm32 && urlArm32 != null) { apkUrl = urlArm32;     apkBytes = szArm32; }
+                    else if (isX86 && urlX86 != null)     { apkUrl = urlX86;       apkBytes = szX86; }
+                    else if (urlUniversal != null)         { apkUrl = urlUniversal; apkBytes = szUniversal; }
+                    else if (urlAny != null)               { apkUrl = urlAny;       apkBytes = szAny; }
+                    else if (urlArm64 != null)             { apkUrl = urlArm64;     apkBytes = szArm64; }
                 }
 
                 if (apkUrl == null || apkUrl.isEmpty()) {

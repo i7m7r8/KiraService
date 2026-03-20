@@ -132,8 +132,6 @@
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <!-- Not the launcher — MainActivity handles initial routing -->
-            <!-- intent-filter removed -->
-            </intent-filter>
         </activity>
         <!-- FileProvider for OTA APK install on Android 7+ -->
         <provider

@@ -50,6 +50,7 @@
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <application
+        android:name=".KiraApp"
         android:label="Kira"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/AppTheme"
@@ -153,6 +154,14 @@
                 <action android:name="com.kira.ota.SKIP"/>
             </intent-filter>
         </receiver>
+
+        <!-- Crash display activity — shown instead of system crash dialog -->
+        <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"/>
 
     </application>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>

@@ -212,13 +212,22 @@ public class MainActivity extends Activity
         initViews();
         showTab(0);
 
-        // Show welcome message so user knows Kira is alive
-        uiHandler.postDelayed(() -> {
-            String welcome = cfg.userName != null && !cfg.userName.equals("User")
-                ? "Hi " + cfg.userName + "! I'm Kira. How can I help?"
-                : "Hi! I'm Kira, your AI agent. How can I help?";
-            addSystemNotice(welcome);
-        }, 500);
+        // If launched from CrashActivity — pre-fill input with crash context
+        String crashPrompt = getIntent().getStringExtra("crash_prompt");
+        if (crashPrompt != null && inputField != null) {
+            uiHandler.postDelayed(() -> {
+                inputField.setText(crashPrompt);
+                addSystemNotice("⚠ Kira crashed. Paste the crash to ask for help.");
+            }, 600);
+        } else {
+            // Show welcome message so user knows Kira is alive
+            uiHandler.postDelayed(() -> {
+                String welcome = cfg.userName != null && !cfg.userName.equals("User")
+                    ? "Hi " + cfg.userName + "! I'm Kira. How can I help?"
+                    : "Hi! I'm Kira, your AI agent. How can I help?";
+                addSystemNotice(welcome);
+            }, 500);
+        }
 
         // Register Shizuku permission result listener before requesting
         try { Shizuku.addRequestPermissionResultListener(shizukuPermListener); }

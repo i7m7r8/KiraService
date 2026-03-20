@@ -928,6 +928,14 @@ struct ShizukuStatus {
 // Core State
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
+#[derive(Clone)]
+struct CrashEntry {
+    ts:      u128,
+    thread:  String,
+    message: String,   // first line of trace
+    trace:   String,   // full stack trace (capped at 4KB)
+}
+
 #[derive(Default)]
 struct KiraState {
     // Device
@@ -1017,6 +1025,7 @@ struct KiraState {
 
     // Stats
     uptime_start:      u128,
+    crash_log:         std::collections::VecDeque<CrashEntry>,  // last 50 crashes
     // HTTP auth secret (empty = localhost-only open access)
     http_secret:       String,
     request_count:     u64,
@@ -3121,6 +3130,58 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         }
 
         // POST /theme/flash {"dark":true}  — record theme switch for analytics
+        // ── Crash reporting endpoints ─────────────────────────────────────────
+
+        // POST /crash {"thread":"..","trace":"..","ts":1234}
+        // Called by KiraApp crash handler to persist crashes in Rust memory
+        ("POST", "/crash") => {
+            let thread  = extract_json_str(body, "thread").unwrap_or_else(||"unknown".into());
+            let trace   = extract_json_str(body, "trace").unwrap_or_default();
+            let ts_val  = extract_json_num(body, "ts").unwrap_or(0.0) as u128;
+            let ts      = if ts_val > 0 { ts_val } else { now_ms() };
+            // First line = exception class/message
+            let message = trace.lines().next().unwrap_or("").to_string();
+            // Cap trace at 4KB to avoid memory bloat
+            let trace_capped = if trace.len() > 4096 {
+                format!("{}…[truncated]", &trace[..4096])
+            } else { trace };
+            let entry = CrashEntry { ts, thread, message, trace: trace_capped };
+            let mut s = STATE.lock().unwrap();
+            s.crash_log.push_back(entry);
+            if s.crash_log.len() > 50 { s.crash_log.pop_front(); }
+            r#"{"ok":true}"#.to_string()
+        }
+
+        // GET /crash/log — returns all stored crash entries as JSON array
+        ("GET",  "/crash/log") => {
+            let s = STATE.lock().unwrap();
+            let items: Vec<String> = s.crash_log.iter().map(|c| {
+                let safe_msg   = esc(&c.message);
+                let safe_trace = esc(&c.trace);
+                let safe_thr   = esc(&c.thread);
+                format!(r#"{{"ts":{},"thread":"{}","message":"{}","trace":"{}"}}"#,
+                    c.ts, safe_thr, safe_msg, safe_trace)
+            }).collect();
+            format!(r#"{{"count":{},"crashes":[{}]}}"#, items.len(), items.join(","))
+        }
+
+        // POST /crash/clear — wipe the crash log
+        ("POST", "/crash/clear") => {
+            STATE.lock().unwrap().crash_log.clear();
+            r#"{"ok":true,"cleared":true}"#.to_string()
+        }
+
+        // GET /crash/latest — just the most recent crash (fast poll)
+        ("GET",  "/crash/latest") => {
+            let s = STATE.lock().unwrap();
+            match s.crash_log.back() {
+                Some(c) => format!(
+                    r#"{{"has_crash":true,"ts":{},"thread":"{}","message":"{}"}}"#,
+                    c.ts, esc(&c.thread), esc(&c.message)),
+                None => r#"{"has_crash":false}"#.to_string(),
+            }
+        }
+
         ("POST", "/theme/flash") => {
             let dark = body.contains("\"dark\":true");
             STATE.lock().unwrap().theme.is_dark = dark;

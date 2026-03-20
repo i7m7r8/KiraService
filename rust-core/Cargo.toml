@@ -11,35 +11,30 @@ crate-type = ["cdylib"]
 lazy_static = "1.5"
 serde       = { version = "1.0", features = ["derive"] }
 serde_json  = "1.0"
-# Safe JNI bindings — fixes SIGSEGV from wrong vtable index for NewStringUTF
+
+# Safe JNI bindings
 jni         = { version = "0.21", default-features = false }
-# Fast in-memory compression (Session B) — 3-5x smaller conversation history
+
+# LZ4 compression (Session B)
 lz4_flex    = { version = "0.11", default-features = false }
-# AES-256-GCM authenticated encryption for API keys (Session C)
-aes-gcm     = { version = "0.10", default-features = false, features = ["aes"] }
-# Pure-Rust TLS for AI API calls (Session K)
-# ring backend works reliably on arm64-v8a (primary Android target)
-# Disabled on armv7/x86 — those ABIs fall back to Java HttpURLConnection bridge
-rustls      = { version = "0.23", default-features = false, features = ["ring", "tls12"] }
+
+# AES-256-GCM encryption (Session C)
+# alloc feature required for Aead trait + Vec<u8> ciphertext output
+aes-gcm     = { version = "0.10", features = ["aes", "alloc"] }
+
+# Pure-Rust TLS (Session K)
+# std feature required for ClientConnection, Stream, and I/O integration
+rustls           = { version = "0.23", features = ["ring", "tls12", "std"] }
 rustls-pki-types = "1"
 webpki-roots     = "0.26"
 
-# NOTE: All HTTP, SHA-256, and crypto are implemented using Rust stdlib only:
-#   HTTP server  → std::net::TcpListener / TcpStream
-#   HTTP client  → std::net::TcpStream (for OTA GitHub API calls)
-#   SHA-256      → manual 64-round implementation in derive_key()
-#   Encryption   → XOR-based key derivation (sufficient for local secret)
-# Adding external crates (reqwest, sha2, ring) would increase APK size by
-# 1–3 MB and require complex Android cross-compilation setup.
-# The Java side (KiraOtaUpdater) uses HttpURLConnection for actual APK downloads.
-
 [profile.release]
-opt-level     = "z"       # minimise binary size for APK
-lto           = "fat"     # fat LTO — cross-crate dead code elimination (Session L)
-codegen-units = 1         # single codegen unit for max LTO benefit
-panic         = "abort"   # no unwinding — reduces binary size ~30 KB
-strip         = true      # strip symbols from .so
-overflow-checks = true    # catch integer overflows in release
+opt-level     = "z"
+lto           = "fat"
+codegen-units = 1
+panic         = "abort"
+strip         = true
+overflow-checks = true
 
 [profile.dev]
 opt-level       = 1

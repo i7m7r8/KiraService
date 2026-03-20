@@ -76,6 +76,19 @@ public class MainActivity extends Activity
     private static final int L_CODE_HDR    = 0xFFCCD0DA; // Surface0
     // Accent: Catppuccin Lavender
     private static final int ACCENT        = 0xFFB4BEFE; // Lavender
+
+    // ── L10: Typography 3-tier system ────────────────────────────────────────
+    // Primary:   CDD6F4 14sp regular   — main text
+    // Secondary: 9399B2 11sp monospace — values, timestamps, hints
+    // Accent:    B4BEFE 13sp bold      — labels, highlighted values
+    private static final int TYP_PRIMARY   = 0xFFCDD6F4;
+    private static final int TYP_SECONDARY = 0xFF9399B2;
+    private static final int TYP_ACCENT    = 0xFFB4BEFE;
+    private static final int TYP_PRIMARY_SP   = 14;
+    private static final int TYP_SECONDARY_SP = 11;
+    private static final int TYP_ACCENT_SP    = 13;
+    // ── L10: 8dp grid spacing ────────────────────────────────────────────────
+    private static final int GRID = 8; // all spacing = multiples of this
     private static final int ACCENT_DIM    = 0xFF2A2A40;
 
     // ── Live theme tokens from Rust getTheme() — updated in applyTheme() ─────
@@ -429,6 +442,38 @@ public class MainActivity extends Activity
         shizukuStatusIcon = settingsFragment.findViewById(R.id.shizukuIcon);
         floatingToggle    = settingsFragment.findViewById(R.id.floatingToggle);
 
+        // Layer 5: Settings row tap flash (Lavender 15% overlay, 200ms)
+        int[] settingsRows = {R.id.rowApiKey, R.id.rowModel, R.id.rowBaseUrl,
+            R.id.rowTgToken, R.id.rowTgId, R.id.rowThemeToggle, R.id.rowShizuku,
+            R.id.rowFloating, R.id.rowPersona, R.id.rowMaxSteps, R.id.rowHeartbeat,
+            R.id.rowAudit, R.id.rowHistory2, R.id.rowMemory, R.id.rowMemoryClear,
+            R.id.rowSkills, R.id.rowCheckpoints, R.id.rowRustStats, R.id.rowOta};
+        for (int rid : settingsRows) {
+            View row = settingsFragment.findViewById(rid);
+            if (row == null) continue;
+            row.setOnTouchListener((v2, ev) -> {
+                if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                    android.animation.ValueAnimator flash = android.animation.ValueAnimator
+                        .ofArgb(0x00B4BEFE, 0x26B4BEFE, 0x00B4BEFE);
+                    flash.setDuration(200);
+                    flash.addUpdateListener(a -> {
+                        int col = (int) a.getAnimatedValue();
+                        row.setForeground(new android.graphics.drawable.ColorDrawable(col));
+                    });
+                    flash.start();
+                    // Layer 5: log row tap to Rust for analytics
+                    final String rowName = getResources().getResourceEntryName(rid);
+                    new Thread(() -> { try { new okhttp3.OkHttpClient().newCall(
+                        new okhttp3.Request.Builder()
+                            .url("http://localhost:7070/settings/row_tap")
+                            .post(okhttp3.RequestBody.create(
+                                "{\"row\":\""+rowName+"\"}", okhttp3.MediaType.parse("application/json")))
+                            .build()).execute(); } catch (Exception ignored) {} }).start();
+                }
+                return false;
+            });
+        }
+
         settingsFragment.findViewById(R.id.rowApiKey).setOnClickListener(v ->
             editSetting("API Key", cfg.apiKey, false, val -> { cfg.apiKey = val; cfg.save(this); updateSettingsUI(); }));
         settingsFragment.findViewById(R.id.rowModel).setOnClickListener(v ->
@@ -765,7 +810,7 @@ public class MainActivity extends Activity
 
         TextView msg = new TextView(this);
         msg.setText(turn.text);
-        msg.setTextColor(0xFFCDD6F4);  // Catppuccin Text
+        msg.setTextColor(TYP_PRIMARY);  // L10: tier-1 text
         msg.setTextSize(14);
         // Surface0 bubble, rounded corners except bottom-right
         android.graphics.drawable.GradientDrawable userBg = new android.graphics.drawable.GradientDrawable();
@@ -879,6 +924,11 @@ public class MainActivity extends Activity
             wrap.addView(kiraRow);
         }
 
+        // L7: long-press context menu (Copy / Resend) spring from bubble center
+        wrap.setOnLongClickListener(v -> {
+            showBubbleContextMenu(wrap, turn.text);
+            return true;
+        });
         chatContainer.addView(wrap);
         // Spring in from left (Layer 2)
         wrap.setTranslationX(-dp(40));
@@ -1134,6 +1184,28 @@ public class MainActivity extends Activity
     @Override
     public void onAccuracyChanged(Sensor s, int acc) {}
 
+    private double parseJsonDouble(String json, String key) {
+        try {
+            int i = json.indexOf("\"" + key + "\":");
+            if (i < 0) return 0;
+            int s = i + key.length() + 3;
+            int e = s;
+            while (e < json.length() && "0123456789.-Ee".indexOf(json.charAt(e)) >= 0) e++;
+            return Double.parseDouble(json.substring(s, e));
+        } catch (Exception e2) { return 0; }
+    }
+
+    private String parseJsonString(String json, String key) {
+        try {
+            String needle = "\"" + key + "\":\"";
+            int i = json.indexOf(needle);
+            if (i < 0) return "";
+            int s = i + needle.length();
+            int e = json.indexOf("\"", s);
+            return e > s ? json.substring(s, e) : "";
+        } catch (Exception e2) { return ""; }
+    }
+
     private float parseJsonFloat(String json, String key) {
         try {
             int i = json.indexOf("\"" + key + "\":");
@@ -1175,16 +1247,25 @@ public class MainActivity extends Activity
                 float bpm      = parseJsonFloat(j, "bpm");
                 float activity = parseJsonFloat(j, "activity");
                 boolean thinking = j.contains(""thinking":true");
-                uiHandler.post(() -> galaxyView.setAnimState(phase, bpm, activity, thinking));
+                uiHandler.post(() -> {
+                    galaxyView.setAnimState(phase, bpm, activity, thinking);
+                    // L8: header border intensity from activity_level
+                    View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
+                    if (hb != null && !thinking) {
+                        int baseAlpha  = 0x44; // 27%
+                        int extraAlpha = (int)(activity * 0x22); // up to 13% more
+                        int finalColor = ((baseAlpha + extraAlpha) << 24) | 0x00B4BEFE;
+                        hb.setBackgroundColor(finalColor);
+                    }
+                });
             } catch (Exception ignored) {}
         }).start();
     }
 
     /** Called by KiraAI when a response is fully received — triggers burst */
     public void onKiraReplied() {
-        if (galaxyView != null) {
-            galaxyView.triggerBurst();
-        }
+        if (galaxyView != null) galaxyView.triggerBurst();
+        fireLightning(0); // L6: reply arc
         // Stop header border pulse
         View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
         if (hb != null) {
@@ -1661,12 +1742,21 @@ public class MainActivity extends Activity
             .edit().putBoolean("dark", isDarkTheme).apply();
     }
 
-    /** Toggle theme and persist */
+    /** Toggle theme with Layer 5 camera-flash transition */
     private void toggleTheme() {
-        isDarkTheme = !isDarkTheme;
-        applyTheme();
-        Toast.makeText(this, isDarkTheme ? "Dark theme" : "Light theme",
-            Toast.LENGTH_SHORT).show();
+        flashThemeTransition();  // Layer 5: flash on/off
+        uiHandler.postDelayed(() -> {
+            isDarkTheme = !isDarkTheme;
+            applyTheme();
+            // Notify Rust of new theme
+            final boolean dark = isDarkTheme;
+            new Thread(() -> { try { new okhttp3.OkHttpClient().newCall(
+                new okhttp3.Request.Builder()
+                    .url("http://localhost:7070/theme/flash")
+                    .post(okhttp3.RequestBody.create(
+                        "{\"dark\":"+dark+"}", okhttp3.MediaType.parse("application/json")))
+                    .build()).execute(); } catch (Exception ignored) {} }).start();
+        }, 80);  // slight delay so flash precedes colour swap
     }
 
     // \u2500\u2500 Multi-button dialog \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -1911,6 +2001,100 @@ public class MainActivity extends Activity
     // -- Suggestions -----------------------------------------------------------
 
     /** Maps tool name to a natural-language example the user can send */
+    // ═══════════════════════════════════════════════════════════
+    // Layer 6 — Lightning Engine
+    // Canvas overlay on root FrameLayout. Fires once per event.
+    // ═══════════════════════════════════════════════════════════
+
+    /** Draw and immediately decay a lightning event on the root overlay. */
+    private void fireLightning(int type) {
+        android.view.ViewGroup root = (android.view.ViewGroup)
+            getWindow().getDecorView().getRootView();
+
+        android.view.View bolt = new android.view.View(this) {
+            private final android.graphics.Paint lp =
+                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            private float alpha = 1f;
+            private final long born = System.currentTimeMillis();
+            private final android.graphics.Path path = new android.graphics.Path();
+            private boolean built = false;
+
+            @Override protected void onDraw(android.graphics.Canvas canvas) {
+                long age = System.currentTimeMillis() - born;
+                if (age > 250) { setVisibility(GONE); return; }
+                alpha = 1f - age / 250f;
+                int w = getWidth(), h = getHeight();
+                if (!built && w > 0) {
+                    built = true;
+                    switch (type) {
+                        case 0: { // Reply: branching arc from K badge area to center-bottom
+                            float sx = dp(44), sy = dp(52);  // K badge position
+                            float ex = w * 0.5f, ey = h * 0.65f;
+                            path.moveTo(sx, sy);
+                            // 3 jagged branches
+                            float mx1 = sx + (ex-sx)*0.33f + 20, my1 = sy + (ey-sy)*0.33f - 30;
+                            float mx2 = ex - (ex-sx)*0.33f - 20, my2 = ey - (ey-sy)*0.33f + 20;
+                            path.lineTo(mx1, my1);
+                            path.lineTo(mx1 + 30, my1 + 40); // branch 1
+                            path.moveTo(mx1, my1);
+                            path.lineTo(mx2, my2);
+                            path.lineTo(mx2 - 25, my2 + 35); // branch 2
+                            path.moveTo(mx2, my2);
+                            path.lineTo(ex, ey);
+                            lp.setStrokeWidth(dp(2));
+                            lp.setColor(0xFFB4BEFE); // Lavender
+                            break;
+                        }
+                        case 1: { // Macro: horizontal streak top 4dp
+                            path.moveTo(0, dp(2));
+                            path.lineTo(w, dp(2));
+                            lp.setStrokeWidth(dp(4));
+                            lp.setColor(0xFFFAB387); // Peach
+                            break;
+                        }
+                        case 2: { // Shizuku: 4 radial lines from status dot
+                            float cx = w - dp(22), cy = dp(26); // status dot position
+                            for (int i = 0; i < 4; i++) {
+                                double ang = i * Math.PI / 2;
+                                path.moveTo(cx, cy);
+                                path.lineTo(cx + (float)(Math.cos(ang) * dp(28)),
+                                            cy + (float)(Math.sin(ang) * dp(28)));
+                            }
+                            lp.setStrokeWidth(dp(2));
+                            lp.setColor(0xFFA6E3A1); // Green
+                            break;
+                        }
+                    }
+                    lp.setStyle(android.graphics.Paint.Style.STROKE);
+                    lp.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+                    lp.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+                }
+                lp.setAlpha((int)(alpha * 178)); // 70% max
+                canvas.drawPath(path, lp);
+                // 1-frame white flash at origin on first frame
+                if (age < 32) {
+                    android.graphics.Paint flash = new android.graphics.Paint();
+                    flash.setColor(0xFFFFFFFF);
+                    flash.setAlpha((int)(( 1f - age/32f) * 100));
+                    canvas.drawCircle(type == 0 ? dp(44) : (type == 2 ? getWidth()-dp(22) : 0),
+                                      type == 0 ? dp(52) : (type == 2 ? dp(26) : dp(2)), dp(8), flash);
+                }
+                postInvalidateDelayed(16);
+            }
+
+            private int dp(int v) {
+                return Math.round(v * getResources().getDisplayMetrics().density);
+            }
+        };
+        bolt.setLayoutParams(new android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        bolt.setClickable(false); bolt.setFocusable(false);
+        root.addView(bolt);
+        // Auto-remove after animation
+        uiHandler.postDelayed(() -> root.removeView(bolt), 300);
+    }
+
     private String buildToolExample(String tool) {
         switch (tool) {
             case "open_app":          return "open YouTube";
@@ -2028,6 +2212,142 @@ public class MainActivity extends Activity
         }
     }
 
+    // ── Layer 5: Section header underline animation ─────────────────────────
+    private void animateSectionHeaders() {
+        if (settingsFragment == null) return;
+        android.widget.ScrollView sv = settingsFragment.findViewById(R.id.settingsScroll);
+        if (sv == null) return;
+        // Find all TextViews with SectionHeader style (identified by their appearance)
+        scanForHeaders((android.view.ViewGroup) sv.getChildAt(0));
+    }
+
+    private void scanForHeaders(android.view.ViewGroup group) {
+        if (group == null) return;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child instanceof TextView) {
+                TextView tv = (TextView) child;
+                // Section headers: Lavender, 10sp, bold, monospace
+                if (tv.getTextColors().getDefaultColor() == 0xFFDC143C ||
+                    tv.getTextColors().getDefaultColor() == 0xFFB4BEFE) {
+                    // Add animated underline via ViewTreeObserver
+                    attachScrollReveal(tv);
+                }
+            } else if (child instanceof android.view.ViewGroup) {
+                scanForHeaders((android.view.ViewGroup) child);
+            }
+        }
+    }
+
+    private void attachScrollReveal(View v) {
+        v.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (!v.isShown()) return;
+            // Animate ScaleX from 0 to 1 only once
+            if (v.getScaleX() < 1f) {
+                v.setScaleX(0f);
+                v.setPivotX(0f);
+                v.animate().scaleX(1f).setDuration(400)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
+            }
+        });
+    }
+
+    // ── Layer 5: Theme toggle camera-flash effect ─────────────────────────────
+    private void flashThemeTransition() {
+        View root = getWindow().getDecorView().getRootView();
+        View flash = new View(this);
+        flash.setBackgroundColor(isDarkTheme ? 0x33000000 : 0x33FFFFFF);
+        flash.setLayoutParams(new android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        if (root instanceof android.widget.FrameLayout) {
+            android.widget.FrameLayout fl = (android.widget.FrameLayout) root;
+            fl.addView(flash);
+            flash.animate().alpha(0f).setDuration(300)
+                .withEndAction(() -> fl.removeView(flash)).start();
+        }
+    }
+
+    // ── Layer 5: CounterAnimator — animate number changes over 600ms EaseOut ──
+    private final java.util.Map<Integer, String> counterLastValues = new java.util.HashMap<>();
+
+    private void animateCounter(View parent, int viewId, String newValue) {
+        if (parent == null) return;
+        TextView tv = parent.findViewById(viewId);
+        if (tv == null) return;
+        String old = counterLastValues.get(viewId);
+        if (newValue.equals(old)) return;
+        counterLastValues.put(viewId, newValue);
+        // Fade out → update → fade in (counter feel)
+        tv.animate().alpha(0.4f).setDuration(150)
+            .withEndAction(() -> {
+                tv.setText(newValue);
+                tv.animate().alpha(1f).setDuration(300)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                    .start();
+            }).start();
+    }
+
+    // ── Layer 9 (via L5): God Mode Halo — Lavender border traces screen edge ──
+    private android.animation.ObjectAnimator haloAnimator;
+    private View haloView;
+
+    private void applyGodModeHalo(boolean visible, int color, int revolutionMs) {
+        // Halo is a fixed overlay view on the root window
+        android.view.ViewGroup root = (android.view.ViewGroup)
+            getWindow().getDecorView().getRootView();
+        if (!visible) {
+            if (haloView != null) {
+                haloView.setVisibility(View.GONE);
+                if (haloAnimator != null) haloAnimator.cancel();
+            }
+            return;
+        }
+        // Create halo view if needed
+        if (haloView == null) {
+            haloView = new View(this) {
+                private final android.graphics.Paint haloPaint =
+                    new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                private float rotation = 0f;
+
+                @Override protected void onDraw(android.graphics.Canvas canvas) {
+                    if (!visible) return;
+                    int w = getWidth(), h = getHeight();
+                    haloPaint.setColor(color);
+                    haloPaint.setStyle(android.graphics.Paint.Style.STROKE);
+                    haloPaint.setStrokeWidth(dp(2));
+                    haloPaint.setAlpha(180);
+                    android.graphics.RectF rect = new android.graphics.RectF(1, 1, w-1, h-1);
+                    // Draw rotating arc: 30dp long, orbiting the screen perimeter
+                    float perimeter = 2f * (w + h);
+                    float arcFraction = dp(30) / perimeter * 360f;
+                    canvas.drawArc(rect, rotation, arcFraction, false, haloPaint);
+                    postInvalidateDelayed(16);
+                }
+
+                private int dp(int v) {
+                    return Math.round(v * getResources().getDisplayMetrics().density);
+                }
+            };
+            haloView.setLayoutParams(new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            haloView.setClickable(false);
+            haloView.setFocusable(false);
+            root.addView(haloView);
+        }
+        haloView.setVisibility(View.VISIBLE);
+        // Rotate the arc: full revolution = revolutionMs
+        if (haloAnimator != null) haloAnimator.cancel();
+        haloAnimator = android.animation.ObjectAnimator.ofFloat(haloView, "rotation", 0f, 360f);
+        haloAnimator.setDuration(revolutionMs > 0 ? revolutionMs : 4000);
+        haloAnimator.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        haloAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
+        haloAnimator.start();
+        haloView.invalidate();
+    }
+
     private void buildSuggestions() {
         String[][] s = {
             {"\uD83D\uDCF1 Open YouTube",    "Open YouTube"},
@@ -2133,7 +2453,16 @@ public class MainActivity extends Activity
 
             info.addView(name); info.addView(desc);
             row.addView(icon); row.addView(info);
-            list.addView(row);
+            // L7: cascade stagger 30ms per row
+            final android.view.View fr = row;
+            final int tidx = list.getChildCount();
+            fr.setAlpha(0f); fr.setTranslationX(-dp(20));
+            list.addView(fr);
+            uiHandler.postDelayed(() -> fr.animate()
+                .alpha(1f).translationX(0f)
+                .setDuration(200)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start(), tidx * 30L);
         }
     }
 
@@ -2227,7 +2556,17 @@ public class MainActivity extends Activity
                 card.addView(headerRow);
                 card.addView(userTv);
                 card.addView(kiraTv);
-                historyList.addView(card);
+                // L7: cascade stagger — each card dealt 40ms later
+                final LinearLayout fc = card;
+                final int delay = (arr.length() - 1 - i) * 40;
+                fc.setAlpha(0f);
+                fc.setTranslationY(dp(16));
+                historyList.addView(fc);
+                uiHandler.postDelayed(() -> fc.animate()
+                    .alpha(1f).translationY(0f)
+                    .setDuration(260)
+                    .setInterpolator(new android.view.animation.DecelerateInterpolator(1.5f))
+                    .start(), delay);
             }
         } catch (Exception e) {
             historyCount.setText("error loading history");
@@ -2249,6 +2588,95 @@ public class MainActivity extends Activity
     // -- Settings --------------------------------------------------------------
 
     private void updateSettingsUI() {
+        // Layer 5: section header underlines animate in via ScaleX
+        animateSectionHeaders();
+        // Poll Rust /settings/health for live stats
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient cl = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build();
+                okhttp3.Response r = cl.newCall(new okhttp3.Request.Builder()
+                    .url("http://localhost:7070/settings/health").get().build()).execute();
+                if (r.body() == null) return;
+                String j = r.body().string();
+                long uptime    = (long) parseJsonDouble(j, "uptime_ms");
+                long tools     = (long) parseJsonDouble(j, "tool_calls");
+                float activity = (float) parseJsonDouble(j, "activity");
+                int bpm        = (int)  parseJsonDouble(j, "pulse_bpm");
+                int macros     = (int)  parseJsonDouble(j, "automation_count");
+                int memEntries = (int)  parseJsonDouble(j, "memory_count");
+                String model   = parseJsonString(j, "model");
+                boolean apiSet = j.contains("\"api_key_set\":true");
+                uiHandler.post(() -> {
+                    // Update rustStatsHint and rustStatsContent if present
+                    if (rustStatsHint != null) {
+                        String uptimeStr = uptime < 60000 ? (uptime/1000)+"s"
+                            : uptime < 3600000 ? (uptime/60000)+"m"
+                            : (uptime/3600000)+"h";
+                        rustStatsHint.setText("up " + uptimeStr
+                            + " · " + tools + " calls"
+                            + " · bpm " + bpm
+                            + " · act " + String.format("%.0f%%", activity*100));
+                    }
+                    if (rustStatsContent != null) {
+                        rustStatsContent.setText(
+                            "automations: " + macros
+                            + "  ·  memory: " + memEntries + " facts"
+                            + "  ·  model: " + (model.length() > 24 ? model.substring(0,24)+"…" : model)
+                            + (apiSet ? "  ·  key ✓" : "  ·  no key"));
+                    }
+                    // Layer 5: pulse rustStatsContent alpha with activity level
+                    if (rustStatsContent != null && activity > 0.1f) {
+                        rustStatsContent.animate()
+                            .alpha(0.6f + activity * 0.4f)
+                            .setDuration(400).start();
+                    }
+                });
+            } catch (Exception ignored) {}
+        }).start();
+
+        // Layer 5: poll /settings/counters for CounterAnimator values
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient cl = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build();
+                // Counters
+                okhttp3.Response rc = cl.newCall(new okhttp3.Request.Builder()
+                    .url("http://localhost:7070/settings/counters").get().build()).execute();
+                if (rc.body() != null) {
+                    String jc = rc.body().string();
+                    long uptimeS   = (long) parseJsonDouble(jc, "uptime_s");
+                    long toolCalls = (long) parseJsonDouble(jc, "tool_calls");
+                    long memFacts  = (long) parseJsonDouble(jc, "memory_facts");
+                    long macrosEn  = (long) parseJsonDouble(jc, "macros_enabled");
+                    long macroRuns = (long) parseJsonDouble(jc, "macro_runs");
+                    uiHandler.post(() -> {
+                        // CounterAnimator: animate each counter value
+                        animateCounter(settingsFragment, R.id.rustStatsHint,
+                            "up " + uptimeS + "s · " + toolCalls + " calls");
+                        if (memoryHint != null)
+                            animateCounter(settingsFragment, R.id.memoryHint,
+                                memFacts + " facts");
+                        if (rustStatsContent != null)
+                            rustStatsContent.setText(
+                                macrosEn + " automations · " + macroRuns + " total runs");
+                    });
+                }
+                // Halo state
+                okhttp3.Response rh = cl.newCall(new okhttp3.Request.Builder()
+                    .url("http://localhost:7070/settings/shizuku/halo").get().build()).execute();
+                if (rh.body() != null) {
+                    String jh = rh.body().string();
+                    boolean haloVisible = jh.contains(""visible":true");
+                    int haloColor = (int)(long) parseJsonDouble(jh, "color");
+                    int revMs     = (int) parseJsonDouble(jh, "revolution_ms");
+                    uiHandler.post(() -> applyGodModeHalo(haloVisible, haloColor, revMs));
+                }
+            } catch (Exception ignored) {}
+        }).start();
+
         cfg = com.kira.service.ai.KiraConfig.load(this);
         if (apiKeyHint == null) return;
         apiKeyHint.setText(cfg.apiKey.isEmpty() ? "tap to set" :
@@ -2355,8 +2783,48 @@ public class MainActivity extends Activity
         shizukuStatusIcon.setText(icon);
         shizukuStatusIcon.setTextColor(color);
         if (shizukuStatus != null) shizukuStatus.setBackgroundColor(bg);
+
+        // Layer 5: pulsing left-border on Shizuku card
+        View border = settingsFragment != null ? settingsFragment.findViewById(R.id.shizukuBorder) : null;
+        if (border != null) {
+            int borderColor = permOk ? 0xFFB4BEFE    // Lavender — god mode
+                            : binderUp ? 0xFFFAB387  // Peach — partial
+                            : 0xFFF38BA8;            // Pink — offline
+            border.setBackgroundColor(borderColor);
+            Object existing = border.getTag(R.id.tag3);
+            if (!(existing instanceof android.animation.ObjectAnimator) ||
+                !((android.animation.ObjectAnimator)existing).isRunning()) {
+                android.animation.ObjectAnimator pulse =
+                    android.animation.ObjectAnimator.ofFloat(border, "alpha", 1f, 0.5f, 1f);
+                pulse.setDuration(1500);
+                pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+                pulse.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+                border.setTag(R.id.tag3, pulse);
+                pulse.start();
+            }
+        }
+
         // Sync to Rust state
         try { RustBridge.updateShizukuStatus(binderUp, permOk, ""); } catch (Exception ignored) {}
+        // Layer 5: also poll /settings/shizuku for Rust-computed border color
+        new Thread(() -> {
+            try {
+                okhttp3.OkHttpClient cl2 = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(1, java.util.concurrent.TimeUnit.SECONDS).build();
+                okhttp3.Response r2 = cl2.newCall(new okhttp3.Request.Builder()
+                    .url("http://localhost:7070/settings/shizuku").get().build()).execute();
+                if (r2.body() == null) return;
+                String j2 = r2.body().string();
+                long borderColorL = (long) parseJsonDouble(j2, "border_color");
+                int rustBorderColor = (int) borderColorL;
+                uiHandler.post(() -> {
+                    View border2 = settingsFragment != null
+                        ? settingsFragment.findViewById(R.id.shizukuBorder) : null;
+                    if (border2 != null && rustBorderColor != 0)
+                        border2.setBackgroundColor(rustBorderColor);
+                });
+            } catch (Exception ignored2) {}
+        }).start();
     }
 
     private void toggleFloating() {
@@ -2574,6 +3042,80 @@ public class MainActivity extends Activity
     @Override protected void onResume() {
         super.onResume();
         if (currentTab == 3) updateShizukuStatus();
+    }
+
+    // ── L7: Bubble context menu ─────────────────────────────────────────────
+    private void showBubbleContextMenu(android.view.View anchor, String text) {
+        // Remove any existing menu
+        android.view.ViewGroup root = (android.view.ViewGroup) getWindow().getDecorView().getRootView();
+        android.view.View old = root.findViewWithTag("bubble_ctx_menu");
+        if (old != null) root.removeView(old);
+
+        // Build menu card
+        LinearLayout menu = new LinearLayout(this);
+        menu.setTag("bubble_ctx_menu");
+        menu.setOrientation(LinearLayout.HORIZONTAL);
+        android.graphics.drawable.GradientDrawable mbg = new android.graphics.drawable.GradientDrawable();
+        mbg.setColor(0xFF313244); mbg.setCornerRadius(dp(10));
+        menu.setBackground(mbg);
+        menu.setElevation(dp(12));
+        menu.setPadding(dp(4), dp(4), dp(4), dp(4));
+
+        String[][] actions = {{"Copy", "copy"}, {"Edit", "edit"}, {"Resend", "resend"}};
+        for (String[] action : actions) {
+            TextView btn = new TextView(this);
+            btn.setText(action[0]);
+            btn.setTextColor(0xFFCDD6F4);
+            btn.setTextSize(13);
+            btn.setPadding(dp(14), dp(10), dp(14), dp(10));
+            btn.setClickable(true); btn.setFocusable(true);
+            final String act = action[1];
+            btn.setOnClickListener(v2 -> {
+                root.removeView(menu);
+                if ("copy".equals(act)) copyText(text);
+                else if ("resend".equals(act) || "edit".equals(act)) {
+                    inputField.setText(text);
+                    inputField.setSelection(text.length());
+                }
+            });
+            menu.addView(btn);
+        }
+
+        // Position above the anchor view
+        int[] loc = new int[2]; anchor.getLocationInWindow(loc);
+        android.widget.FrameLayout.LayoutParams mlp =
+            new android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        mlp.leftMargin = loc[0] + dp(8);
+        mlp.topMargin  = Math.max(0, loc[1] - dp(52));
+        menu.setLayoutParams(mlp);
+
+        // Spring in from anchor center
+        menu.setScaleX(0f); menu.setScaleY(0f); menu.setAlpha(0f);
+        root.addView(menu);
+        menu.animate().scaleX(1f).scaleY(1f).alpha(1f)
+            .setDuration(200)
+            .setInterpolator(new android.view.animation.OvershootInterpolator(2f))
+            .start();
+
+        // Auto-dismiss after 4s
+        uiHandler.postDelayed(() -> {
+            if (menu.getParent() != null) {
+                menu.animate().alpha(0f).setDuration(150)
+                    .withEndAction(() -> root.removeView(menu)).start();
+            }
+        }, 4000);
+    }
+
+    /** Called by KiraWatcher/KiraHeartbeat when an automation macro fires */
+    public void onMacroFired() {
+        uiHandler.post(() -> fireLightning(1)); // L6: macro streak
+    }
+
+    /** Called when Shizuku permission is granted */
+    public void onShizukuConnected() {
+        uiHandler.post(() -> fireLightning(2)); // L6: shizuku radial burst
     }
 
     @Override protected void onStop() {

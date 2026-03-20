@@ -3047,7 +3047,273 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             STATE.lock().unwrap().theme.is_thinking = active;
             r#"{"ok":true}"#.to_string()
         }
-        ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
+
+        // ── Layer 5: Settings page Rust endpoints ─────────────────────────────
+
+        // GET /settings/health — compact health summary for settings page header
+        // Returns: {shizuku, setup, api_key_set, model, automation_count, memory_count,
+        //           uptime_ms, tool_calls, pulse_bpm, activity}
+        ("GET",  "/settings/health") => {
+            let s = STATE.lock().unwrap();
+            let uptime = now_ms().saturating_sub(s.uptime_start);
+            let tools_60s = s.macro_run_log.iter()
+                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000).count();
+            let activity = (tools_60s as f32 / 10.0_f32).min(1.0);
+            let bpm = if s.theme.is_thinking { 120 }
+                      else if s.request_count > 0 { 90 } else { 60 };
+            format!(
+                r#"{{"shizuku":{},"shizuku_permission":{},"setup_done":{},"api_key_set":{},"model":"{}","base_url":"{}","automation_count":{},"memory_count":{},"uptime_ms":{},"tool_calls":{},"request_count":{},"pulse_bpm":{},"activity":{:.3},"macros_enabled":{}}}"#,
+                s.shizuku.installed, s.shizuku.permission_granted,
+                s.config.setup_done, !s.config.api_key.is_empty(),
+                esc(&s.config.model), esc(&s.config.base_url),
+                s.macros.len(), s.memory_index.len(),
+                uptime, s.tool_call_count, s.request_count,
+                bpm, activity,
+                s.macros.iter().filter(|m| m.enabled).count()
+            )
+        }
+
+        // GET /settings/shizuku — Shizuku status with Layer 5 border color token
+        // Returns: {installed, running, permission, border_color, border_name, pulse}
+        ("GET",  "/settings/shizuku") => {
+            let s = STATE.lock().unwrap();
+            let (border_color, border_name) = if s.shizuku.permission_granted {
+                (0xFFB4BEFEu32, "lavender")   // god mode — Lavender
+            } else if s.shizuku.installed {
+                (0xFFFAB387u32, "peach")      // partial — Peach
+            } else {
+                (0xFFF38BA8u32, "pink")       // absent  — Pink
+            };
+            format!(
+                r#"{{"installed":{},"running":{},"permission":{},"border_color":{},"border_name":"{}","pulse_ms":1500}}"#,
+                s.shizuku.installed, s.shizuku.binder_alive,
+                s.shizuku.permission_granted,
+                border_color, border_name
+            )
+        }
+
+        // POST /settings/row_tap {"row":"api_key"} — log a settings row tap
+        // Used by UI to record which settings the user accesses most often
+        ("POST", "/settings/row_tap") => {
+            let row = extract_json_str(body, "row").unwrap_or_default();
+            if !row.is_empty() {
+                let mut s = STATE.lock().unwrap();
+                // Store in daily_log for usage analytics
+                let entry = format!("[settings_tap] row={} ts={}", esc(&row), now_ms());
+                s.daily_log.push_back(entry);
+                if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
+            }
+            r#"{"ok":true}"#.to_string()
+        }
+
+        // GET /settings/sections — section visibility state for header underline
+        // Returns ordered list of section names with their Lavender animate flag
+        ("GET",  "/settings/sections") => {
+            let sections = vec![
+                "IDENTITY", "AI PROVIDER", "AGENT BEHAVIOR", "TELEGRAM BOT",
+                "INTERFACE", "MEMORY", "TOOLS & AUTOMATION", "RUST ENGINE v9",
+                "SYSTEM", "ABOUT"
+            ];
+            let items: Vec<String> = sections.iter().map(|s|
+                format!(r#"{{"name":"{}","accent_color":4289003262}}"#, s)  // 0xFFB4BEFE Lavender
+            ).collect();
+            format!(r#"{{"sections":[{}]}}"#, items.join(","))
+        }
+
+        // POST /theme/flash {"dark":true}  — record theme switch for analytics
+        ("POST", "/theme/flash") => {
+            let dark = body.contains("\"dark\":true");
+            STATE.lock().unwrap().theme.is_dark = dark;
+            r#"{"ok":true}"#.to_string()
+        }
+
+        // GET /settings/automation/summary — automation engine summary for settings card
+        ("GET",  "/settings/automation/summary") => {
+            let s = STATE.lock().unwrap();
+            let enabled = s.macros.iter().filter(|m| m.enabled).count();
+            let total_runs: u64 = s.macros.iter().map(|m| m.run_count).sum();
+            let last_run_ms = s.macros.iter().map(|m| m.last_run_ms).max().unwrap_or(0);
+            let last_run_ago = if last_run_ms > 0 {
+                now_ms().saturating_sub(last_run_ms)
+            } else { 0 };
+            format!(
+                r#"{{"total":{},"enabled":{},"disabled":{},"total_runs":{},"last_run_ago_ms":{}}}"#,
+                s.macros.len(), enabled, s.macros.len().saturating_sub(enabled),
+                total_runs, last_run_ago
+            )
+        }
+
+
+        // ── Layer 5: Settings Page — Rust-backed endpoints ──────────────────────
+
+        // GET /settings/counters — live counter values for CounterAnimator
+        // Returns numbers that the UI animates from old→new over 600ms EaseOut.
+        ("GET", "/settings/counters") => {
+            let s = STATE.lock().unwrap();
+            let uptime_ms   = now_ms().saturating_sub(s.uptime_start);
+            let uptime_s    = (uptime_ms / 1000) as u64;
+            let tool_calls  = s.tool_call_count;
+            let mem_facts   = s.memory_index.len() as u64;
+            let macros_en   = s.macros.iter().filter(|m| m.enabled).count() as u64;
+            let macros_tot  = s.macros.len() as u64;
+            let macro_runs: u64 = s.macros.iter().map(|m| m.run_count).sum();
+            let sessions    = s.sessions.len() as u64;
+            let skills_en   = s.skills.values().filter(|sk| sk.enabled).count() as u64;
+            let req_count   = s.request_count;
+            let notif_count = s.notifications.len() as u64;
+            format!(
+                r#"{{"uptime_s":{},"tool_calls":{},"memory_facts":{},"macros_enabled":{},"macros_total":{},"macro_runs":{},"sessions":{},"skills_enabled":{},"requests":{},"notifications":{}}}"#,
+                uptime_s, tool_calls, mem_facts, macros_en, macros_tot,
+                macro_runs, sessions, skills_en, req_count, notif_count
+            )
+        }
+
+        // GET /settings/activity — activity stream for last 20 events
+        // Used by the settings page activity feed (Row-level visual feedback)
+        ("GET", "/settings/activity") => {
+            let s = STATE.lock().unwrap();
+            let mut items: Vec<String> = Vec::new();
+            // Last 10 macro runs
+            for r in s.macro_run_log.iter().rev().take(10) {
+                items.push(format!(
+                    r#"{{"type":"macro","name":"{}","success":{},"ts":{}}}"#,
+                    esc(&r.macro_name), r.success, r.ts));
+            }
+            // Last 5 notifications
+            for n in s.notifications.iter().rev().take(5) {
+                items.push(format!(
+                    r#"{{"type":"notif","pkg":"{}","title":"{}","ts":{}}}"#,
+                    esc(&n.pkg), esc(&n.title), n.time));
+            }
+            // Last 5 daily_log entries
+            for entry in s.daily_log.iter().rev().take(5) {
+                items.push(format!(
+                    r#"{{"type":"log","msg":"{}","ts":{}}}"#,
+                    esc(entry), now_ms()));
+            }
+            // Sort by ts descending, take 20
+            items.sort_by(|a, b| {
+                let ta = extract_json_num(a, "ts").unwrap_or(0.0);
+                let tb = extract_json_num(b, "ts").unwrap_or(0.0);
+                tb.partial_cmp(&ta).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            items.truncate(20);
+            format!(r#"{{"count":{},"items":[{}]}}"#, items.len(), items.join(","))
+        }
+
+        // GET /settings/shizuku/halo — Layer 9: God mode halo state
+        // Returns border color + animation params for the screen-edge halo
+        ("GET", "/settings/shizuku/halo") => {
+            let s = STATE.lock().unwrap();
+            let active = s.shizuku.permission_granted;
+            let partial = s.shizuku.installed && !active;
+            // God mode halo: 2dp Lavender border traces screen edge when fully active
+            // Rotation: 4s per revolution, 30dp arc length
+            let (color, width_dp, visible, revolution_ms) = if active {
+                (0xFFB4BEFEu32, 2u32, true,  4000u32)  // Lavender, full speed
+            } else if partial {
+                (0xFFFAB387u32, 1u32, true,  8000u32)  // Peach, slow
+            } else {
+                (0x00000000u32, 0u32, false, 0u32)      // invisible
+            };
+            format!(
+                r#"{{"active":{},"partial":{},"color":{},"width_dp":{},"visible":{},"revolution_ms":{},"arc_dp":30}}"#,
+                active, partial, color, width_dp, visible, revolution_ms
+            )
+        }
+
+        // POST /settings/row_interaction {"row":"api_key","action":"tap|long_press|edit"}
+        // Enhanced row analytics — tracks not just tap but interaction type
+        ("POST", "/settings/row_interaction") => {
+            let row    = extract_json_str(body, "row").unwrap_or_default();
+            let action = extract_json_str(body, "action").unwrap_or_else(|| "tap".to_string());
+            if !row.is_empty() {
+                let mut s = STATE.lock().unwrap();
+                let entry = format!("[settings_interaction] row={} action={} ts={}", 
+                    esc(&row), esc(&action), now_ms());
+                s.daily_log.push_back(entry);
+                if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
+                // Increment row-specific usage counter in variables map
+                let key = format!("_settings_tap_{}", row);
+                let count = s.variables.get(&key)
+                    .map(|v| v.value.parse::<u32>().unwrap_or(0) + 1)
+                    .unwrap_or(1);
+                s.variables.entry(key.clone()).or_insert_with(|| AutoVariable {
+                    name: key.clone(), value: "0".to_string(),
+                    var_type: "counter".to_string(),
+                    persistent: false, created_ms: now_ms(), updated_ms: now_ms(),
+                }).value = count.to_string();
+            }
+            r#"{"ok":true}"#.to_string()
+        }
+
+        // GET /settings/top_rows — most-accessed settings rows (for smart ordering)
+        ("GET", "/settings/top_rows") => {
+            let s = STATE.lock().unwrap();
+            let mut rows: Vec<(String, u32)> = s.variables.iter()
+                .filter(|(k, _)| k.starts_with("_settings_tap_"))
+                .map(|(k, v)| {
+                    let row_name = k.trim_start_matches("_settings_tap_").to_string();
+                    let count = v.value.parse::<u32>().unwrap_or(0);
+                    (row_name, count)
+                })
+                .collect();
+            rows.sort_by(|a, b| b.1.cmp(&a.1));
+            rows.truncate(5);
+            let items: Vec<String> = rows.iter()
+                .map(|(r, c)| format!(r#"{{"row":"{}","taps":{}}}"#, esc(r), c))
+                .collect();
+            format!(r#"{{"top_rows":[{}]}}"#, items.join(","))
+        }
+
+        // GET /settings/memory/stats — detailed memory stats for memory card
+        ("GET", "/settings/memory/stats") => {
+            let s = STATE.lock().unwrap();
+            let total    = s.memory_index.len();
+            let pinned   = s.memory_index.iter().filter(|e| e.access_count > 5).count();
+            let recent   = s.memory_index.iter()
+                .filter(|e| now_ms().saturating_sub(
+                    s.context_turns.iter().map(|_| now_ms()).next().unwrap_or(0)) < 86_400_000)
+                .count();
+            let top: Vec<String> = {
+                let mut entries: Vec<_> = s.memory_index.iter().collect();
+                entries.sort_by(|a, b| b.access_count.cmp(&a.access_count));
+                entries.iter().take(3)
+                    .map(|e| format!(r#"{{"key":"{}","access_count":{}}}"#,
+                        esc(&e.key), e.access_count))
+                    .collect()
+            };
+            format!(
+                r#"{{"total":{},"pinned":{},"recent_24h":{},"top_accessed":[{}]}}"#,
+                total, pinned, recent, top.join(",")
+            )
+        }
+
+        // GET /settings/theme/palette — full Catppuccin Mocha palette for settings
+        // Used by theme card to show all swatches
+        ("GET", "/settings/theme/palette") => {
+            // Catppuccin Mocha full palette
+            let swatches = vec![
+                ("Rosewater", 0xFFF5E0DC_u32), ("Flamingo",  0xFFF2CDCD_u32),
+                ("Pink",      0xFFF38BA8_u32), ("Mauve",     0xFFCBA6F7_u32),
+                ("Red",       0xFFEBA0AC_u32), ("Maroon",    0xFFEBA0AC_u32),
+                ("Peach",     0xFFFAB387_u32), ("Yellow",    0xFFF9E2AF_u32),
+                ("Green",     0xFFA6E3A1_u32), ("Teal",      0xFF94E2D5_u32),
+                ("Sky",       0xFF89DCEB_u32), ("Sapphire",  0xFF74C7EC_u32),
+                ("Blue",      0xFF89B4FA_u32), ("Lavender",  0xFFB4BEFE_u32),
+                ("Text",      0xFFCDD6F4_u32), ("Subtext1",  0xFFBAC2DE_u32),
+                ("Overlay2",  0xFF9399B2_u32), ("Overlay0",  0xFF6C7086_u32),
+                ("Surface2",  0xFF585B70_u32), ("Surface1",  0xFF45475A_u32),
+                ("Surface0",  0xFF313244_u32), ("Base",      0xFF1E1E2E_u32),
+                ("Mantle",    0xFF181825_u32), ("Crust",     0xFF11111B_u32),
+            ];
+            let items: Vec<String> = swatches.iter()
+                .map(|(name, color)| format!(r#"{{"name":"{}","color":{}}}"#, name, color))
+                .collect();
+            format!(r#"{{"theme":"catppuccin_mocha","swatches":[{}]}}"#, items.join(","))
+        }
+
+                ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
         ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap(); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
         ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }
         ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap(); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }

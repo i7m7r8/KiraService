@@ -152,7 +152,15 @@ public class SetupActivity extends Activity implements SensorEventListener {
         nextBtn.setTextSize(15);
         nextBtn.setTypeface(null, android.graphics.Typeface.BOLD);
         nextBtn.setGravity(Gravity.CENTER);
-        nextBtn.setBackgroundColor(C_ACCENT);
+        // Layer 4: ripple from exact tap point
+        android.graphics.drawable.GradientDrawable nextBg = new android.graphics.drawable.GradientDrawable();
+        nextBg.setColor(C_ACCENT);
+        nextBg.setCornerRadius(dp(12));
+        android.content.res.ColorStateList ripple =
+            android.content.res.ColorStateList.valueOf(0x33000000);
+        android.graphics.drawable.RippleDrawable nextRipple =
+            new android.graphics.drawable.RippleDrawable(ripple, nextBg, null);
+        nextBtn.setBackground(nextRipple);
         nextBtn.setClickable(true);
         nextBtn.setFocusable(true);
         nextBtn.setPadding(dp(32), 0, dp(32), 0);
@@ -287,6 +295,8 @@ public class SetupActivity extends Activity implements SensorEventListener {
         lp.setMargins(0, 0, 0, dp(20));
         logo.setLayoutParams(lp);
         root.addView(logo);
+        // Layer 4: K logo breath animation (scale 1.0→1.06→1.0, 3s)
+        logo.post(() -> startLogoBreathe(logo));
 
         TextView title = bigText("Meet Kira");
         title.setShadowLayer(dp(10), 0, 0, C_ACCENT);
@@ -415,13 +425,22 @@ public class SetupActivity extends Activity implements SensorEventListener {
             tv.setClickable(true);
             chipViews[i] = tv;
             final int fi = i;
+            // Layer 4: shimmer on idle chips (explore affordance)
+            handler.postDelayed(() -> startShimmer(tv), fi * 200L);
             tv.setOnClickListener(v -> {
+                // Stop shimmer when selected
                 for (TextView c2 : chipViews) {
+                    stopShimmer(c2);
                     c2.setBackgroundColor(C_CARD);
                     c2.setTextColor(C_MUTED);
                 }
                 tv.setBackgroundColor(C_ACCENT_DIM);
                 tv.setTextColor(C_ACCENT2);
+                // Layer 4: consumed scale animation on chip
+                tv.animate().scaleX(0.92f).scaleY(0.92f).setDuration(60)
+                    .withEndAction(() -> tv.animate().scaleX(1f).scaleY(1f)
+                        .setInterpolator(new OvershootInterpolator(2f)).setDuration(180).start())
+                    .start();
                 if (isCustom) {
                     customUrl.setVisibility(View.VISIBLE);
                     baseUrl = customUrl.getText().toString().trim();
@@ -781,6 +800,81 @@ public class SetupActivity extends Activity implements SensorEventListener {
         updateDots(); updateNextBtn();
     }
 
+    // ── Layer 4: Progress dots — active becomes 22dp oval, animated width ─────
+    private void animateDotWidth(View dot, int fromDp, int toDp) {
+        android.animation.ValueAnimator wa = android.animation.ValueAnimator.ofInt(dp(fromDp), dp(toDp));
+        wa.setDuration(200);
+        wa.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        wa.addUpdateListener(a -> {
+            LinearLayout.LayoutParams lp2 = (LinearLayout.LayoutParams) dot.getLayoutParams();
+            lp2.width = (int) a.getAnimatedValue();
+            dot.setLayoutParams(lp2);
+        });
+        wa.start();
+    }
+
+    // ── Layer 4: Input field focus → animated border (2px Surface1 → 2px Lavender) ─
+    private void animateFieldFocus(android.widget.EditText field, boolean focused) {
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xFF1A1A2E);
+        bg.setCornerRadius(dp(8));
+        bg.setStroke(dp(2), focused ? C_ACCENT : 0xFF333355);
+        field.setBackground(bg);
+        field.setPadding(dp(16), dp(14), dp(16), dp(14));
+    }
+
+    // ── Layer 4: Shimmer pass on provider chip ────────────────────────────────
+    private void startShimmer(View v) {
+        android.animation.ObjectAnimator shimmer = android.animation.ObjectAnimator
+            .ofFloat(v, "alpha", 1f, 0.6f, 1f);
+        shimmer.setDuration(1800);
+        shimmer.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        shimmer.setInterpolator(new android.view.animation.LinearInterpolator());
+        v.setTag(R.id.tag3, shimmer);
+        shimmer.start();
+    }
+
+    private void stopShimmer(View v) {
+        Object s = v.getTag(R.id.tag3);
+        if (s instanceof android.animation.ObjectAnimator)
+            ((android.animation.ObjectAnimator) s).cancel();
+        v.setAlpha(1f);
+    }
+
+    // ── Layer 4: K logo breath (scale 1.0→1.06→1.0, 3s, corona glow pulse) ──
+    private void startLogoBreathe(TextView logo) {
+        android.animation.AnimatorSet breath = new android.animation.AnimatorSet();
+        android.animation.ObjectAnimator scaleX =
+            android.animation.ObjectAnimator.ofFloat(logo, "scaleX", 1.0f, 1.06f, 1.0f);
+        android.animation.ObjectAnimator scaleY =
+            android.animation.ObjectAnimator.ofFloat(logo, "scaleY", 1.0f, 1.06f, 1.0f);
+        // Shadow radius pulsed via alpha proxy
+        android.animation.ObjectAnimator glow =
+            android.animation.ObjectAnimator.ofFloat(logo, "alpha", 0.85f, 1.0f, 0.85f);
+        scaleX.setDuration(3000); scaleX.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        scaleY.setDuration(3000); scaleY.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        glow.setDuration(3000);   glow.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        scaleX.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        scaleY.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        glow.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+        breath.playTogether(scaleX, scaleY, glow);
+        breath.start();
+        logo.setTag(R.id.tag3, breath);
+    }
+
+    // ── Layer 4: Next button label crossfade ──────────────────────────────────
+    private void crossfadeNextLabel(String newLabel) {
+        nextBtn.animate().alpha(0f).setDuration(150)
+            .withEndAction(() -> {
+                nextBtn.setText(newLabel);
+                nextBtn.animate().alpha(1f).setDuration(150).start();
+            }).start();
+    }
+
+    // ── Layer 4: Slide page transition (300ms EaseOut cubic) ─────────────────
+    // Already in advance() — enhanced with simultaneous slide
+    // (existing advance() already does translateX slide, we just tighten timing)
+
     private void buildDots() {
         dots = new View[TOTAL_PAGES];
         for (int i = 0; i < TOTAL_PAGES; i++) {
@@ -796,24 +890,38 @@ public class SetupActivity extends Activity implements SensorEventListener {
 
     private void updateDots() {
         for (int i = 0; i < dots.length; i++) {
-            dots[i].setBackgroundColor(i == currentPage ? C_ACCENT : C_HINT);
+            boolean active = i == currentPage;
+            // Animated width: 8dp circle → 22dp oval for active (Layer 4 spec)
+            int targetW = active ? 22 : 8;
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dots[i].getLayoutParams();
-            lp.width = dp(i == currentPage ? 22 : 8);
-            lp.height = dp(8);
-            dots[i].setLayoutParams(lp);
+            if (lp.width != dp(targetW)) {
+                animateDotWidth(dots[i], lp.width == dp(22) ? 22 : 8, targetW);
+            }
+            // Color: Lavender active, Surface1 inactive
+            android.graphics.drawable.GradientDrawable dotBg =
+                new android.graphics.drawable.GradientDrawable();
+            dotBg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            dotBg.setCornerRadius(dp(4));
+            dotBg.setColor(active ? C_ACCENT : C_HINT);
+            dots[i].setBackground(dotBg);
         }
     }
 
     private void updateNextBtn() {
+        String label;
         if (currentPage == TOTAL_PAGES - 1) {
-            nextBtn.setText("Launch Kira");
+            label = "Launch Kira ✓";
             skipBtn.setVisibility(View.GONE);
         } else if (currentPage == 0) {
-            nextBtn.setText("Get Started");
+            label = "Get Started";
             skipBtn.setVisibility(View.VISIBLE);
         } else {
-            nextBtn.setText("Next  \u2192");
+            label = "Next  →";
             skipBtn.setVisibility(View.VISIBLE);
+        }
+        // Layer 4: crossfade label instead of text snap
+        if (!label.equals(nextBtn.getText().toString())) {
+            crossfadeNextLabel(label);
         }
     }
 
@@ -903,9 +1011,11 @@ public class SetupActivity extends Activity implements SensorEventListener {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setColor(0xFF1A1A2E);          // dark navy \u2014 clearly distinct from page bg
         bg.setCornerRadius(dp(8));
-        bg.setStroke(dp(1), 0xFF333355); // subtle border, not glowing
+        bg.setStroke(dp(2), 0xFF333355); // Lavender on focus via animateFieldFocus
         et.setBackground(bg);
         et.setPadding(dp(16), dp(14), dp(16), dp(14));
+        // Layer 4: animated focus border Surface1 → Lavender
+        et.setOnFocusChangeListener((v, focused) -> animateFieldFocus(et, focused));
         et.setInputType(numeric
             ? InputType.TYPE_CLASS_NUMBER
             : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));

@@ -1,45 +1,45 @@
 package com.kira.service;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-
 import com.kira.service.ai.KiraAI;
-import com.kira.service.ai.KiraConfig;
-import com.kira.service.ai.KiraMemory;
-import com.kira.service.ai.KiraTools;
-
 import org.json.JSONObject;
 
 /**
- * NanoBot-style proactive screen watcher.
- * Monitors screen content for keywords/patterns and fires actions.
- * Also watches for app changes (ZeroClaw foreground app tracking).
+ * KiraWatcher — Session H: thin 5s polling wrapper.
+ * Original: 229 lines. Rewritten: ~80 lines.
+ *
+ * Java responsibility (only things requiring Android APIs):
+ *   1. Read battery level + charging state → POST /macro/tick
+ *   2. Read foreground package (via Shizuku) → POST /macro/tick
+ *   3. Read screen text (via AccessibilityService) → POST /macro/tick
+ *   4. Rust evaluates all triggers, queues fired actions
+ *   5. Drain /macro/pending_results for any intent-based actions
+ *
+ * All trigger evaluation logic now in Rust /macro/tick.
  */
 public class KiraWatcher {
-    private static final String TAG = "KiraWatcher";
+    private static final String TAG      = "KiraWatcher";
+    private static final int    INTERVAL = 5_000;
 
     private final Context ctx;
-    private final KiraAI ai;
-    private final KiraTools tools;
     private final Handler handler;
     private volatile boolean running = false;
 
-    private String lastPkg = "";
-    private String lastScreenHash = "";
-    private int checkIntervalMs = 5000; // 5 seconds
-
-    public KiraWatcher(Context ctx, KiraAI ai) {
+    public KiraWatcher(Context ctx, KiraAI unused) {
         this.ctx     = ctx.getApplicationContext();
-        this.ai      = ai;
-        this.tools   = new KiraTools(ctx);
         this.handler = new Handler(Looper.getMainLooper());
     }
 
     public void start() {
+        if (running) return;
         running = true;
-        scheduleCheck();
+        handler.postDelayed(this::tick, INTERVAL);
         Log.i(TAG, "watcher started");
     }
 
@@ -48,182 +48,129 @@ public class KiraWatcher {
         handler.removeCallbacksAndMessages(null);
     }
 
-    private void scheduleCheck() {
+    private void tick() {
         if (!running) return;
-        handler.postDelayed(this::check, checkIntervalMs);
+        new Thread(this::doTick, "kira-watcher-tick").start();
+        handler.postDelayed(this::tick, INTERVAL);
     }
 
-    private void check() {
-        if (!running) return;
-        new Thread(() -> {
-            try { doCheck(); } catch (Exception e) { Log.e(TAG, "check error", e); }
-        }).start();
-        // Poll Rust for any macro actions that fired
-        pollAndExecuteMacroActions();
-        scheduleCheck();
-    }
-
-    private void doCheck() throws Exception {
-        // Push battery to Rust
-        int pct = getBatteryPct();
-        if (pct > 0) try { RustBridge.updateBattery(pct, isCharging()); } catch (Throwable ignored) {}
-
-        // Track foreground app changes (ZeroClaw)
-        String pkg = ShizukuShell.exec("dumpsys activity recents | grep 'Recent #0' | grep -o 'A=[^ ]*' | cut -d= -f2 | cut -d/ -f1 2>/dev/null");
-        pkg = pkg.trim();
-        if (!pkg.isEmpty() && !pkg.equals(lastPkg)) {
-            try { RustBridge.updateScreenPackage(pkg); } catch (Throwable ignored) {}
-            lastPkg = pkg;
-            Log.d(TAG, "foreground app: " + pkg);
-        }
-
-        // Check watch rules from memory
-        KiraMemory mem = new KiraMemory(ctx);
-        String allMem = mem.listAll();
-        if (allMem.contains("watch_screen_")) {
-            KiraAccessibilityService svc = KiraAccessibilityService.instance;
-            if (svc != null) {
-                String screenText = svc.getScreenText();
-                String screenHash = String.valueOf(screenText.hashCode());
-                if (!screenHash.equals(lastScreenHash)) {
-                    lastScreenHash = screenHash;
-                    // Check watch rules
-                    for (String line : allMem.split("\n")) {
-                        if (!line.startsWith("watch_screen_")) continue;
-                        int colon = line.indexOf(":");
-                        if (colon < 0) continue;
-                        String rule = line.substring(colon + 1).trim();
-                        // rule format: "keyword|action"
-                        String[] parts = rule.split("\\|", 2);
-                        if (parts.length == 2) {
-                            String keyword = parts[0].trim();
-                            String action  = parts[1].trim();
-                            if (screenText.toLowerCase().contains(keyword.toLowerCase())) {
-                                Log.d(TAG, "screen watch triggered: " + keyword);
-                                mem.forget(line.substring(0, colon).trim());
-                                final String act = action;
-                                ai.chat(act, new KiraAI.Callback() {
-                                    @Override public void onThinking() {}
-                                    @Override public void onTool(String n, String r) {}
-                                    @Override public void onReply(String reply) {}
-                                    @Override public void onError(String e) {}
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /** Poll Rust for fired macro actions and execute them */
-    private void pollAndExecuteMacroActions() {
+    private void doTick() {
         try {
-            String next = RustBridge.nextMacroAction();
-            while (next != null && !next.isEmpty()) {
-                Log.d(TAG, "macro action: " + next);
-                org.json.JSONObject action = new org.json.JSONObject(next);
-                String type    = action.optString("type", "");
-                org.json.JSONObject params = action.optJSONObject("params");
-                if (params == null) params = new org.json.JSONObject();
+            // Collect device state
+            int     battery   = getBattery();
+            boolean charging  = isCharging();
+            String  pkg       = getForegroundPkg();
+            String  screenTxt = getScreenText();
+            String  screenHash= String.valueOf(screenTxt.hashCode());
 
-                switch (type) {
-                    case "kira_chat": {
-                        // Fired macro sends a message to Kira AI
-                        final String msg = params.optString("message","");
-                        if (!msg.isEmpty()) {
-                            final org.json.JSONObject p = params;
-                            handler.post(() -> {
-                                ai.chat(msg, new com.kira.service.ai.KiraAI.Callback() {
-                                    @Override public void onThinking() {}
-                                    @Override public void onTool(String n, String r) {}
-                                    @Override public void onReply(String reply) {
-                                        // Post result to Kira event bus
-                                        KiraEventBus.post(reply);
-                                    }
-                                    @Override public void onError(String e) {
-                                        Log.w(TAG, "macro chat error: " + e);
-                                    }
-                                });
-                            });
-                        }
-                        break;
-                    }
-                    case "run_tool": {
-                        // Fired macro runs a tool directly
-                        String toolName = params.optString("tool", "");
-                        if (!toolName.isEmpty()) {
-                            final String finalTool = toolName;
-                            final org.json.JSONObject finalParams = params;
-                            new Thread(() -> {
-                                try {
-                                    String result = tools.execute(finalTool, finalParams);
-                                    RustBridge.logTaskStep("macro_tool", 1, finalTool, result, true);
-                                } catch (Exception e) {
-                                    Log.w(TAG, "macro tool error: " + e.getMessage());
-                                }
-                            }).start();
-                        }
-                        break;
-                    }
-                    case "send_notification": {
-                        String title = params.optString("title","Kira");
-                        String msg2  = params.optString("message","Automation triggered");
-                        sendNotification(title, msg2);
-                        break;
-                    }
-                    default:
-                        Log.d(TAG, "unhandled macro action type: " + type);
-                }
-                next = RustBridge.nextMacroAction();
-            }
+            // POST to Rust — Rust evaluates all macro triggers
+            String body = String.format(
+                "{\"battery\":%d,\"charging\":%b,\"pkg\":\"%s\","
+                + "\"screen_hash\":\"%s\",\"screen_text\":\"%s\"}",
+                battery, charging,
+                pkg.replace("\"",""),
+                screenHash,
+                screenTxt.length() > 500
+                    ? screenTxt.substring(0,500).replace("\"","'")
+                    : screenTxt.replace("\"","'")
+            );
+            httpPost("http://localhost:7070/macro/tick", body);
+
+            // Drain any intent-based actions Rust queued
+            drainPendingResults();
+
         } catch (Exception e) {
-            Log.w(TAG, "pollMacroActions error: " + e.getMessage());
+            Log.e(TAG, "tick error: " + e.getMessage());
         }
     }
 
-    private void sendNotification(String title, String message) {
-        try {
-            android.app.NotificationManager nm = (android.app.NotificationManager)
-                ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE);
-            if (nm == null) return;
-            String chId = "kira_automation";
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                nm.createNotificationChannel(new android.app.NotificationChannel(
-                    chId, "Kira Automations",
-                    android.app.NotificationManager.IMPORTANCE_DEFAULT));
-            }
-            android.app.Notification notif = new android.app.Notification.Builder(ctx, chId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(title)
-                .setContentText(message)
-                .setAutoCancel(true)
-                .build();
-            nm.notify((int)(System.currentTimeMillis() % 10000), notif);
-        } catch (Exception e) {
-            Log.w(TAG, "sendNotification error: " + e.getMessage());
+    private void drainPendingResults() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                String resp = httpGet("http://localhost:7070/macro/pending_results");
+                if (resp == null || resp.contains("\"has_action\":false")) break;
+                String action = parseStr(resp, "action");
+                if (action.isEmpty()) break;
+                // Handle intent-based actions
+                if (action.startsWith("open_app:")) {
+                    String pkg = action.substring(9);
+                    Intent i = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
+                    if (i != null) { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(i); }
+                }
+            } catch (Exception e) { break; }
         }
     }
 
-    private int getBatteryPct() {
+    // ── Device state helpers (Android APIs — must stay Java) ──────────────
+
+    private int getBattery() {
         try {
-            android.content.Intent i = ctx.registerReceiver(null,
-                new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+            Intent i = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
             if (i == null) return -1;
-            int level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1);
-            int scale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1);
-            return scale > 0 ? level * 100 / scale : -1;
+            int l = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int s = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            return s > 0 ? l * 100 / s : -1;
         } catch (Exception e) { return -1; }
     }
 
     private boolean isCharging() {
         try {
-            android.content.Intent i = ctx.registerReceiver(null,
-                new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
+            Intent i = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
             if (i == null) return false;
-            int status = i.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1);
-            return status == android.os.BatteryManager.BATTERY_STATUS_CHARGING
-                || status == android.os.BatteryManager.BATTERY_STATUS_FULL;
+            int st = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            return st == BatteryManager.BATTERY_STATUS_CHARGING
+                || st == BatteryManager.BATTERY_STATUS_FULL;
         } catch (Exception e) { return false; }
+    }
+
+    private String getForegroundPkg() {
+        try {
+            if (!ShizukuShell.isAvailable()) return "";
+            String r = ShizukuShell.exec(
+                "dumpsys activity recents | grep 'Recent #0' | grep -o 'A=[^ ]*'"
+                + " | cut -d= -f2 | cut -d/ -f1 2>/dev/null", 3_000);
+            return r != null ? r.trim() : "";
+        } catch (Exception e) { return ""; }
+    }
+
+    private String getScreenText() {
+        try {
+            KiraAccessibilityService svc = KiraAccessibilityService.instance;
+            return svc != null ? svc.getScreenText() : "";
+        } catch (Exception e) { return ""; }
+    }
+
+    private void httpPost(String url, String body) {
+        try {
+            java.net.HttpURLConnection c =
+                (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setRequestMethod("POST");
+            c.setRequestProperty("Content-Type","application/json");
+            c.setConnectTimeout(2_000); c.setReadTimeout(2_000); c.setDoOutput(true);
+            c.getOutputStream().write(body.getBytes());
+            c.getResponseCode(); c.disconnect();
+        } catch (Exception ignored) {}
+    }
+
+    private String httpGet(String url) {
+        try {
+            java.net.HttpURLConnection c =
+                (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setConnectTimeout(1_000); c.setReadTimeout(1_000);
+            try (java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(c.getInputStream()))) {
+                StringBuilder sb = new StringBuilder(); String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } finally { c.disconnect(); }
+        } catch (Exception e) { return null; }
+    }
+
+    private String parseStr(String json, String key) {
+        String k = "\"" + key + "\":\"";
+        int s = json.indexOf(k); if (s < 0) return "";
+        s += k.length(); int e = s;
+        while (e < json.length() && json.charAt(e) != '"') e++;
+        return json.substring(s, e);
     }
 }

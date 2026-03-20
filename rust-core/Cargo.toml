@@ -1,6 +1,6 @@
 [package]
 name    = "kira-core"
-version = "0.0.5"
+version = "0.1.1"
 edition = "2021"
 
 [lib]
@@ -13,6 +13,16 @@ serde       = { version = "1.0", features = ["derive"] }
 serde_json  = "1.0"
 # Safe JNI bindings — fixes SIGSEGV from wrong vtable index for NewStringUTF
 jni         = { version = "0.21", default-features = false }
+# Fast in-memory compression (Session B) — 3-5x smaller conversation history
+lz4_flex    = { version = "0.11", default-features = false }
+# AES-256-GCM authenticated encryption for API keys (Session C)
+aes-gcm     = { version = "0.10", default-features = false, features = ["aes"] }
+# Pure-Rust TLS for AI API calls (Session K)
+# ring backend works reliably on arm64-v8a (primary Android target)
+# Disabled on armv7/x86 — those ABIs fall back to Java HttpURLConnection bridge
+rustls      = { version = "0.23", default-features = false, features = ["ring", "tls12"] }
+rustls-pki-types = "1"
+webpki-roots     = "0.26"
 
 # NOTE: All HTTP, SHA-256, and crypto are implemented using Rust stdlib only:
 #   HTTP server  → std::net::TcpListener / TcpStream
@@ -25,7 +35,7 @@ jni         = { version = "0.21", default-features = false }
 
 [profile.release]
 opt-level     = "z"       # minimise binary size for APK
-lto           = true      # link-time optimisation
+lto           = "fat"     # fat LTO — cross-crate dead code elimination (Session L)
 codegen-units = 1         # single codegen unit for max LTO benefit
 panic         = "abort"   # no unwinding — reduces binary size ~30 KB
 strip         = true      # strip symbols from .so

@@ -206,11 +206,33 @@ public class MainActivity extends Activity
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         if (sensorManager != null)
             accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        ai = new KiraAI(this);
-        agent = new com.kira.service.ai.KiraAgent(this);
-        chain = new com.kira.service.ai.KiraChain(this);
+        // Session I: init AI objects off main thread (they're thin wrappers now)
+        new Thread(() -> {
+            ai    = new KiraAI(MainActivity.this);
+            agent = new com.kira.service.ai.KiraAgent(MainActivity.this);
+            chain = new com.kira.service.ai.KiraChain(MainActivity.this);
+        }, "kira-init").start();
         initViews();
         showTab(0);
+
+        // Session I: populate UI from Rust state after short delay
+        uiHandler.postDelayed(() -> {
+            new Thread(() -> {
+                try {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+                        new java.net.URL("http://localhost:7070/ai/history").openConnection();
+                    c.setConnectTimeout(1000); c.setReadTimeout(1000);
+                    if (c.getResponseCode() == 200) {
+                        java.io.BufferedReader br = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(c.getInputStream()));
+                        StringBuilder sb = new StringBuilder(); String line;
+                        while ((line = br.readLine()) != null) sb.append(line);
+                        // History loaded — could restore bubbles here in future
+                    }
+                    c.disconnect();
+                } catch (Exception ignored) {}
+            }).start();
+        }, 800);
 
         // If launched from CrashActivity — pre-fill input with crash context
         String crashPrompt = getIntent().getStringExtra("crash_prompt");
@@ -232,7 +254,7 @@ public class MainActivity extends Activity
         // Register Shizuku permission result listener before requesting
         try { Shizuku.addRequestPermissionResultListener(shizukuPermListener); }
         catch (Exception ignored) {}
-        uiHandler.postDelayed(this::requestAllPermissions, 1000); // slight delay after UI draws
+        uiHandler.postDelayed(this::requestAllPermissions, 2000); // Session I: delay past first frame
         uiHandler.postDelayed(this::checkShizuku, 8000);   // 8s — let user see UI first
         uiHandler.postDelayed(this::checkAccessibility, 10000); // 10s
 

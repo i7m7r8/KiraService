@@ -103,9 +103,10 @@ public class KiraOtaUpdater {
                 String tag      = rel.optString("tag_name", "");
                 if (tag.isEmpty()) return;
 
-                int remoteCode = parseVersionCode(tag);
-                int localCode  = getInstalledVersionCode();
-                if (remoteCode > 0 && localCode >= remoteCode) {
+                int remoteVer = parseTagVersion(tag);
+                int localVer  = parseInstalledVersion();
+                Log.i(TAG, "Version check: local=" + localVer + " remote=" + remoteVer + " tag=" + tag);
+                if (remoteVer > 0 && localVer >= remoteVer) {
                     if (callback != null) handler.post(callback::onUpToDate);
                     return;
                 }
@@ -161,9 +162,23 @@ public class KiraOtaUpdater {
         new Thread(() -> {
             File apk = new File(ctx.getCacheDir(), "kira_update.apk");
             try {
-                if (tryDelta && apk.exists() && apk.length() > totalBytes * 0.5) {
-                    if (!downloadDelta(url, apk, totalBytes)) downloadFull(url, apk, totalBytes);
+                // Delta baseline: use the installed APK (most accurate) or cached update
+                File baseline = getInstalledApkBaseline();
+                boolean hasSuitableBaseline = baseline != null
+                    && baseline.length() > totalBytes * 0.4
+                    && baseline.length() < totalBytes * 1.6;
+                if (tryDelta && hasSuitableBaseline) {
+                    // Copy baseline to apk location for delta patching
+                    if (!baseline.getAbsolutePath().equals(apk.getAbsolutePath())) {
+                        copyFile(baseline, apk);
+                    }
+                    Log.i(TAG, "Delta from baseline: " + baseline.length() + " → " + totalBytes);
+                    if (!downloadDelta(url, apk, totalBytes)) {
+                        Log.i(TAG, "Delta failed, full download");
+                        downloadFull(url, apk, totalBytes);
+                    }
                 } else {
+                    Log.i(TAG, "Full download (no suitable baseline)");
                     downloadFull(url, apk, totalBytes);
                 }
                 String sha = sha256Hex(apk);
@@ -344,13 +359,29 @@ public class KiraOtaUpdater {
         return uAny;
     }
 
-    private int parseVersionCode(String tag) {
+    /** Parse semver from tag like "v0.0.5-20260320" → int 5 (major*10000+minor*100+patch) */
+    private int parseTagVersion(String tag) {
         try {
-            String[] p = tag.replaceAll("[^0-9.]","").split("\\.");
+            // Extract "0.0.5" from "v0.0.5-20260320-1234"
+            String s = tag.replaceFirst("^v","").split("-")[0];
+            String[] p = s.split("\\.");
+            if (p.length >= 3)
+                return Integer.parseInt(p[0])*10000 + Integer.parseInt(p[1])*100 + Integer.parseInt(p[2]);
+            if (p.length == 2)
+                return Integer.parseInt(p[0])*10000 + Integer.parseInt(p[1])*100;
+        } catch (Exception ignored) {}
+        return -1;
+    }
+
+    /** Parse semver from installed versionName like "0.0.5" → int 5 */
+    private int parseInstalledVersion() {
+        try {
+            String ver = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(),0).versionName;
+            String[] p = ver.split("\\.");
             if (p.length >= 3)
                 return Integer.parseInt(p[0])*10000 + Integer.parseInt(p[1])*100 + Integer.parseInt(p[2]);
         } catch (Exception ignored) {}
-        return -1;
+        return 0;
     }
 
     private int getInstalledVersionCode() {
@@ -361,6 +392,27 @@ public class KiraOtaUpdater {
     private String getInstalledVersion() {
         try { return ctx.getPackageManager().getPackageInfo(ctx.getPackageName(),0).versionName; }
         catch (Exception e) { return "unknown"; }
+    }
+
+    /** Get the installed APK as delta baseline. Returns null if inaccessible. */
+    private File getInstalledApkBaseline() {
+        try {
+            android.content.pm.ApplicationInfo info =
+                ctx.getPackageManager().getApplicationInfo(ctx.getPackageName(), 0);
+            File base = new File(info.sourceDir);
+            if (base.exists() && base.length() > 0) return base;
+        } catch (Exception ignored) {}
+        // Fallback: cached update from previous run
+        File cached = new File(ctx.getCacheDir(), "kira_baseline.apk");
+        return cached.exists() ? cached : null;
+    }
+
+    private void copyFile(File src, File dst) throws Exception {
+        try (FileInputStream in = new FileInputStream(src);
+             FileOutputStream out = new FileOutputStream(dst)) {
+            byte[] buf = new byte[CHUNK_SIZE]; int n;
+            while ((n = in.read(buf)) >= 0) out.write(buf, 0, n);
+        }
     }
 
     private String sha256Hex(File f) throws Exception {

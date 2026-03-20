@@ -376,17 +376,19 @@ public class SetupActivity extends Activity implements SensorEventListener {
 
         root.addView(sectionLabel("Quick-select provider:"));
 
-        // All providers including Custom
-        String[][] providers = {
-            {"Groq (free)",  "https://api.groq.com/openai/v1"},
-            {"OpenAI",       "https://api.openai.com/v1"},
-            {"Anthropic",    "https://api.anthropic.com/v1"},
-            {"Gemini",       "https://generativelanguage.googleapis.com/v1beta/openai"},
-            {"DeepSeek",     "https://api.deepseek.com/v1"},
-            {"OpenRouter",   "https://openrouter.ai/api/v1"},
-            {"Ollama (local)","http://localhost:11434/v1"},
-            {"Custom \u270E", "custom"},
-        };
+        // Session J: providers loaded from Rust /setup/providers
+        // Falls back to hardcoded list if Rust server not yet running
+        String[][] providers = loadProvidersFromRust();
+        if (providers == null || providers.length == 0) {
+            providers = new String[][]{
+                {"Groq (free)",    "https://api.groq.com/openai/v1"},
+                {"OpenAI",         "https://api.openai.com/v1"},
+                {"Anthropic",      "https://api.anthropic.com/v1"},
+                {"Together AI",    "https://api.together.xyz/v1"},
+                {"OpenRouter",     "https://openrouter.ai/api/v1"},
+                {"Custom",         ""}
+            };
+        }
 
         // Custom URL field \u2014 hidden until Custom is tapped
         EditText customUrl = inputField("https://your-server/v1", false);
@@ -783,6 +785,39 @@ public class SetupActivity extends Activity implements SensorEventListener {
             overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             finish();
         }, 800);
+    }
+
+    /** Session J: Load provider list from Rust /setup/providers */
+    private String[][] loadProvidersFromRust() {
+        try {
+            java.net.HttpURLConnection c = (java.net.HttpURLConnection)
+                new java.net.URL("http://localhost:7070/setup/providers").openConnection();
+            c.setConnectTimeout(1500); c.setReadTimeout(1500);
+            if (c.getResponseCode() != 200) return null;
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                new java.io.InputStreamReader(c.getInputStream()));
+            StringBuilder sb = new StringBuilder(); String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+            c.disconnect();
+            String json = sb.toString().trim();
+            // Parse JSON array of {name, base_url} objects
+            java.util.List<String[]> result = new java.util.ArrayList<>();
+            int pos = 0;
+            while ((pos = json.indexOf(""name":", pos)) >= 0) {
+                pos += 7;
+                int ns = json.indexOf('"', pos) + 1;
+                int ne = json.indexOf('"', ns);
+                String name = json.substring(ns, ne);
+                int us = json.indexOf(""base_url":"", pos) + 12;
+                int ue = json.indexOf('"', us);
+                String url  = json.substring(us, ue);
+                result.add(new String[]{name, url});
+                pos = ue;
+            }
+            return result.isEmpty() ? null : result.toArray(new String[0][]);
+        } catch (Exception e) {
+            return null; // fallback to hardcoded list
+        }
     }
 
     private void showPage(int page, boolean initial) {

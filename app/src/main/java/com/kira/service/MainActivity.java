@@ -444,10 +444,10 @@ public class MainActivity extends Activity
 
         // Layer 5: Settings row tap flash (Lavender 15% overlay, 200ms)
         int[] settingsRows = {R.id.rowApiKey, R.id.rowModel, R.id.rowBaseUrl,
-            R.id.rowTgToken, R.id.rowTgId, R.id.rowThemeToggle, R.id.rowShizuku,
+            R.id.rowTgToken, R.id.rowTgId, R.id.rowThemeToggle, R.id.cardShizuku,
             R.id.rowFloating, R.id.rowPersona, R.id.rowMaxSteps, R.id.rowHeartbeat,
-            R.id.rowAudit, R.id.rowHistory2, R.id.rowMemory, R.id.rowMemoryClear,
-            R.id.rowSkills, R.id.rowCheckpoints, R.id.rowRustStats, R.id.rowOta};
+            R.id.rowAuditLog, R.id.rowHistory, R.id.rowSkills, R.id.rowCheckpoints,
+            R.id.rowRustStats, R.id.rowOta};
         for (int rid : settingsRows) {
             View row = settingsFragment.findViewById(rid);
             if (row == null) continue;

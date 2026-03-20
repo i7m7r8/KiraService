@@ -1246,7 +1246,7 @@ public class MainActivity extends Activity
                 float phase    = parseJsonFloat(j, "phase");
                 float bpm      = parseJsonFloat(j, "bpm");
                 float activity = parseJsonFloat(j, "activity");
-                boolean thinking = j.contains(""thinking":true");
+                boolean thinking = j.contains("\"thinking\":true");
                 uiHandler.post(() -> {
                     galaxyView.setAnimState(phase, bpm, activity, thinking);
                     // L8: header border intensity from activity_level
@@ -2669,7 +2669,7 @@ public class MainActivity extends Activity
                     .url("http://localhost:7070/settings/shizuku/halo").get().build()).execute();
                 if (rh.body() != null) {
                     String jh = rh.body().string();
-                    boolean haloVisible = jh.contains(""visible":true");
+                    boolean haloVisible = jh.contains("\"visible\":true");
                     int haloColor = (int)(long) parseJsonDouble(jh, "color");
                     int revMs     = (int) parseJsonDouble(jh, "revolution_ms");
                     uiHandler.post(() -> applyGodModeHalo(haloVisible, haloColor, revMs));

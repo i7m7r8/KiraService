@@ -219,8 +219,14 @@ public class MainActivity extends Activity
         uiHandler.postDelayed(this::checkShizuku, 500);
         uiHandler.postDelayed(this::checkAccessibility, 2000);
 
-        // Start foreground service to keep Telegram alive
+        // Start foreground service (also starts Rust HTTP server inside it)
         KiraForegroundService.start(this);
+        // Safety: also attempt Rust server start from main thread in case service delays
+        new Thread(() -> {
+            try { Thread.sleep(200); } catch (Exception ignored) {}
+            try { RustBridge.startServer(7070); }
+            catch (Throwable ignored) {} // no-op if already running
+        }, "kira-rust-init").start();
         // v43: init OTA engine (registers version with Rust, schedules checks)
         initOta();
         // Start galaxy animation polling

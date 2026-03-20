@@ -1628,17 +1628,44 @@ fn action_to_json(a: &MacroAction) -> String {
 mod jni_bridge {
     use super::*;
     use std::ffi::{CStr, CString};
-    use std::os::raw::c_char;
+    use std::os::raw::{c_char, c_void};
 
+    // ── JNI type aliases ──────────────────────────────────────────────────
+    type JNIEnv  = *mut *mut c_void;   // JNIEnv**
+    type JObject = *mut c_void;         // jobject
+    type JString = *mut c_void;         // jstring (IS a JVM object reference)
+
+    /// Convert a raw *const c_char (from Java) to a Rust String.
     fn cs(p: *const c_char) -> String {
         if p.is_null() { return String::new(); }
         unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() }
     }
 
+    /// Create a JVM-managed jstring from a Rust &str.
+    /// Uses jni crate for safe, correct NewStringUTF call.
+    /// Falls back to manual vtable[169] if env is null.
+    unsafe fn jni_str(env: JNIEnv, s: &str) -> JString {
+        use jni::JNIEnv as SafeEnv;
+        // jni crate wraps env pointer safely
+        if env.is_null() {
+            return std::ptr::null_mut();
+        }
+        let mut safe_env = SafeEnv::from_raw(env as *mut jni::sys::JNIEnv)
+            .expect("invalid JNIEnv");
+        match safe_env.new_string(s) {
+            Ok(jstr) => jstr.into_raw() as JString,
+            Err(_)   => {
+                // Fallback: empty string
+                safe_env.new_string("").map(|j| j.into_raw() as JString)
+                    .unwrap_or(std::ptr::null_mut())
+            }
+        }
+    }
+
     // \u{2500}\u{2500} Lifecycle \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_startServer(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, port: i32,
+        _e: JNIEnv, _c: JObject, port: i32,
     ) {
         let p = port as u16;
         {
@@ -1668,52 +1695,52 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOn(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { STATE.lock().unwrap().sig_screen_on = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOff(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { STATE.lock().unwrap().sig_screen_off = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalUnlocked(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { STATE.lock().unwrap().sig_device_unlocked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocked(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { STATE.lock().unwrap().sig_device_locked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalShake(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { STATE.lock().unwrap().sig_shake = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeUp(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { STATE.lock().unwrap().sig_vol_up = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeDown(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { STATE.lock().unwrap().sig_vol_down = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalWifi(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, ssid: *const c_char,
+        _e: JNIEnv, _c: JObject, ssid: *const c_char,
     ) { STATE.lock().unwrap().sig_wifi_ssid = cs(ssid); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalBluetooth(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, device: *const c_char,
+        _e: JNIEnv, _c: JObject, device: *const c_char,
     ) { STATE.lock().unwrap().sig_bt_device = cs(device); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalSms(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         sender: *const c_char, text: *const c_char,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -1723,32 +1750,32 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalCall(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, number: *const c_char,
+        _e: JNIEnv, _c: JObject, number: *const c_char,
     ) { STATE.lock().unwrap().sig_call_number = cs(number); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalNfc(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, tag_id: *const c_char,
+        _e: JNIEnv, _c: JObject, tag_id: *const c_char,
     ) { STATE.lock().unwrap().sig_nfc_tag = cs(tag_id); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalClipboard(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, text: *const c_char,
+        _e: JNIEnv, _c: JObject, text: *const c_char,
     ) { STATE.lock().unwrap().sig_clipboard = cs(text); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppLaunched(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pkg: *const c_char,
+        _e: JNIEnv, _c: JObject, pkg: *const c_char,
     ) { STATE.lock().unwrap().sig_app_launched = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppClosed(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pkg: *const c_char,
+        _e: JNIEnv, _c: JObject, pkg: *const c_char,
     ) { STATE.lock().unwrap().sig_app_closed = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocation(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, lat: f64, lon: f64, geofence: *const c_char,
+        _e: JNIEnv, _c: JObject, lat: f64, lon: f64, geofence: *const c_char,
     ) {
         let mut s = STATE.lock().unwrap();
         s.sig_lat      = lat;
@@ -1758,7 +1785,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalKiraEvent(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, event: *const c_char,
+        _e: JNIEnv, _c: JObject, event: *const c_char,
     ) { STATE.lock().unwrap().sig_kira_event = cs(event); }
 
     // \u{2500}\u{2500} v40: Macro management JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
@@ -1766,20 +1793,20 @@ mod jni_bridge {
     /// Add or replace a macro. Body is full macro JSON.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addMacro(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, json: *const c_char,
+    ) -> JString {
         let body = cs(json);
         let m = parse_macro_from_json(&body);
         let mut s = STATE.lock().unwrap();
         s.macros.retain(|x| x.id != m.id);
         let id = m.id.clone();
         s.macros.push(m);
-        CString::new(format!(r#"{{"ok":true,"id":"{}"}}"#, id)).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, id)) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_removeMacro(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
+        _e: JNIEnv, _c: JObject, id: *const c_char,
     ) {
         let id = cs(id);
         STATE.lock().unwrap().macros.retain(|m| m.id != id);
@@ -1787,7 +1814,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_enableMacro(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char, enabled: bool,
+        _e: JNIEnv, _c: JObject, id: *const c_char, enabled: bool,
     ) {
         let id = cs(id);
         if let Some(m) = STATE.lock().unwrap().macros.iter_mut().find(|m| m.id == id) {
@@ -1797,17 +1824,17 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacros(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.macros.iter().map(macro_to_json).collect();
-        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runMacroNow(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, id: *const c_char,
+    ) -> JString {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
         let actions: Vec<MacroAction> = s.macros.iter()
@@ -1826,14 +1853,14 @@ mod jni_bridge {
             success:true, steps_run:steps, duration_ms:now_ms()-start, ts:start, error:String::new()
         });
         if s.macro_run_log.len() > 1000 { s.macro_run_log.pop_front(); }
-        CString::new(format!(r#"{{"ok":true,"steps":{}}}"#, steps)).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!(r#"{{"ok":true,"steps":{}}}"#, steps)) }
     }
 
     /// Get next pending macro action for Java to execute
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextMacroAction(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         match STATE.lock().unwrap().pending_actions.pop_front() {
             Some(pa) => {
                 let params_json: Vec<String> = pa.params.iter()
@@ -1842,7 +1869,7 @@ mod jni_bridge {
                     r#"{{"macro_id":"{}","action_id":"{}","kind":"{}","ts":{},"params":{{{}}}}}"#,
                     esc(&pa.macro_id), esc(&pa.action_id), esc(&pa.kind), pa.ts, params_json.join(",")
                 );
-                CString::new(json).unwrap_or_default().into_raw()
+                unsafe { jni_str(env, &json) }
             }
             None => std::ptr::null_mut(),
         }
@@ -1852,7 +1879,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setVariable(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         name: *const c_char, value: *const c_char, var_type: *const c_char,
     ) {
         let name = cs(name); let value = cs(value); let vt = cs(var_type);
@@ -1864,33 +1891,33 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getVariable(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, name: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, name: *const c_char,
+    ) -> JString {
         let name = cs(name);
         let s = STATE.lock().unwrap();
         let json = match s.variables.get(&name) {
             Some(v) => format!(r#"{{"name":"{}","value":"{}","type":"{}"}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type)),
             None    => r#"{"error":"not_found"}"#.to_string(),
         };
-        CString::new(json).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &json) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getVariables(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.variables.values().map(|v|
             format!(r#"{{"name":"{}","value":"{}","type":"{}","updated_ms":{}}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type), v.updated_ms)
         ).collect();
-        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
 
     // \u{2500}\u{2500} v40: Profile management \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setProfile(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
+        _e: JNIEnv, _c: JObject, id: *const c_char,
     ) {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
@@ -1901,32 +1928,32 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getProfiles(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.profiles.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","active":{}}}"#, esc(&p.id), esc(&p.name), p.active)
         ).collect();
-        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacroRunLog(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.macro_run_log.iter().skip(s.macro_run_log.len().saturating_sub(100)).map(|r|
             format!(r#"{{"macro_id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"duration_ms":{},"ts":{}}}"#,
                 esc(&r.macro_id), esc(&r.macro_name), esc(&r.trigger), r.success, r.steps_run, r.duration_ms, r.ts)
         ).collect();
-        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
 
     // \u{2500}\u{2500} v38 JNI (unchanged) \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_syncConfig(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         user_name:*const c_char, api_key:*const c_char, base_url:*const c_char,
         model:*const c_char, vision_model:*const c_char, persona:*const c_char,
         tg_token:*const c_char, tg_allowed:i64, max_steps:i32, auto_approve:bool,
@@ -1951,16 +1978,16 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getConfig(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let json = config_to_json(&s.config);
-        CString::new(json).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &json) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateSetupPage(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         page:i32, api_key:*const c_char, base_url:*const c_char,
         model:*const c_char, user_name:*const c_char, tg_token:*const c_char, tg_id:i64,
     ) {
@@ -1976,17 +2003,17 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_completeSetup(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) { let mut s = STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_isSetupDone(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
     ) -> bool { STATE.lock().unwrap().config.setup_done }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setCustomProvider(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, url:*const c_char, model:*const c_char,
+        _e: JNIEnv, _c: JObject, url:*const c_char, model:*const c_char,
     ) {
         let url=cs(url); let model=cs(model);
         let mut s = STATE.lock().unwrap();
@@ -2000,8 +2027,8 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setActiveProvider(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, provider_id:*const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, provider_id:*const c_char,
+    ) -> JString {
         let id=cs(provider_id);
         let mut s = STATE.lock().unwrap();
         let found=s.providers.iter().find(|p| p.id==id).cloned();
@@ -2009,23 +2036,23 @@ mod jni_bridge {
             s.active_provider=id; s.config.base_url=p.base_url.clone(); s.config.model=p.model.clone();
             format!(r#"{{"ok":true,"id":"{}","base_url":"{}","model":"{}"}}"#, esc(&s.active_provider),esc(&p.base_url),esc(&p.model))
         } else { format!(r#"{{"error":"unknown provider {}"}}"#, esc(&id)) };
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getProviders(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.providers.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)
         ).collect();
-        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateShizukuStatus(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         installed:bool, permission_granted:bool, error_msg:*const c_char,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -2035,15 +2062,15 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getShizukuJson(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
-        CString::new(shizuku_to_json(&s.shizuku)).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &shizuku_to_json(&s.shizuku)) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateTilt(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, ax:f32, ay:f32,
+        _e: JNIEnv, _c: JObject, ax:f32, ay:f32,
     ) {
         let mut s = STATE.lock().unwrap();
         s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay;
@@ -2054,23 +2081,23 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getStarParallax(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
-        CString::new(format!(r#"{{"px":{:.6},"py":{:.6},"ax":{:.4},"ay":{:.4}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y,s.theme.star_tilt_x,s.theme.star_tilt_y)).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!(r#"{{"px":{:.6},"py":{:.6},"ax":{:.4},"ay":{:.4}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y,s.theme.star_tilt_x,s.theme.star_tilt_y)) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getTheme(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
-        CString::new(s.theme.to_json()).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &s.theme.to_json()) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setTheme(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         name: *const c_char,
     ) {
         let name = unsafe { std::ffi::CStr::from_ptr(name).to_str().unwrap_or("catppuccin_mocha") };
@@ -2086,10 +2113,10 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getStatsJson(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
-        CString::new(format!(
+        { let _s = format!(
             r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"profiles":{},"active_profile":"{}","variables":{}}}"#,
             s.memory_index.len(), s.context_turns.len(),
             if s.shizuku.permission_granted{"active \u{2713}"} else if s.shizuku.installed{"no permission"} else{"not running"},
@@ -2098,14 +2125,14 @@ mod jni_bridge {
             now_ms().saturating_sub(s.uptime_start),
             s.macros.len(), s.profiles.len(), esc(&s.active_profile),
             s.variables.len()
-        )).unwrap_or_default().into_raw()
+        ); unsafe { jni_str(env, &_s) } }
     }
 
     // \u{2500}\u{2500} v7 JNI (unchanged) \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushNotification(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         pkg:*const c_char, title:*const c_char, text:*const c_char,
     ) {
         let (pkg,title,text) = (cs(pkg),cs(title),cs(text));
@@ -2120,12 +2147,12 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenNodes(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json:*const c_char,
+        _e: JNIEnv, _c: JObject, json:*const c_char,
     ) { STATE.lock().unwrap().screen_nodes = cs(json); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenPackage(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pkg:*const c_char,
+        _e: JNIEnv, _c: JObject, pkg:*const c_char,
     ) {
         let pkg = cs(pkg);
         let mut s = STATE.lock().unwrap();
@@ -2139,7 +2166,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateBattery(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pct:i32, charging:bool,
+        _e: JNIEnv, _c: JObject, pct:i32, charging:bool,
     ) {
         let mut s = STATE.lock().unwrap();
         let prev = s.battery_pct;
@@ -2149,12 +2176,12 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateAgentContext(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, ctx:*const c_char,
+        _e: JNIEnv, _c: JObject, ctx:*const c_char,
     ) { STATE.lock().unwrap().agent_context = cs(ctx); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushContextTurn(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         role:*const c_char, content:*const c_char,
     ) {
         let role=cs(role); let content=cs(content);
@@ -2170,7 +2197,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_indexMemory(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         key:*const c_char, value:*const c_char, tags:*const c_char,
     ) {
         let (key,value,tags_raw) = (cs(key),cs(value),cs(tags));
@@ -2188,7 +2215,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_storeCredential(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         name:*const c_char, value:*const c_char,
     ) {
         let name=cs(name); let value=cs(value);
@@ -2198,7 +2225,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_registerSkill(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         name:*const c_char, desc:*const c_char, trigger:*const c_char, content:*const c_char,
     ) {
         let name=cs(name);
@@ -2207,7 +2234,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addHeartbeatItem(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         id:*const c_char, check:*const c_char, action:*const c_char, interval_ms:i64,
     ) {
         let item = HeartbeatItem { id:cs(id), check:cs(check), action:cs(action), enabled:true, last_run:0, interval_ms:interval_ms as u128 };
@@ -2218,7 +2245,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_incrementToolIter(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, session_id:*const c_char,
+        _e: JNIEnv, _c: JObject, session_id:*const c_char,
     ) -> i32 {
         let id=cs(session_id);
         let mut s = STATE.lock().unwrap();
@@ -2230,12 +2257,12 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_resetToolIter(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, session_id:*const c_char,
+        _e: JNIEnv, _c: JObject, session_id:*const c_char,
     ) { STATE.lock().unwrap().tool_iterations.remove(&cs(session_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_logTaskStep(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         task_id:*const c_char, step:i32, action:*const c_char, result:*const c_char, success:bool,
     ) {
         let (tid,act,res) = (cs(task_id),cs(action),cs(result));
@@ -2248,58 +2275,58 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextCommand(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         match STATE.lock().unwrap().pending_cmds.pop_front() {
-            Some((id,body)) => CString::new(format!(r#"{{"id":"{}","body":{}}}"#, id, body)).unwrap().into_raw(),
+            Some((id,body)) => unsafe { jni_str(env, &format!(r#"{{"id":"{}","body":{}}}"#, id, body)) },
             None => std::ptr::null_mut(),
         }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushResult(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id:*const c_char, result:*const c_char,
+        _e: JNIEnv, _c: JObject, id:*const c_char, result:*const c_char,
     ) { STATE.lock().unwrap().results.insert(cs(id), cs(result)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextFiredTrigger(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         match STATE.lock().unwrap().fired_triggers.pop_front() {
-            Some(t) => CString::new(t).unwrap().into_raw(),
+            Some(t) => unsafe { jni_str(env, &t) },
             None    => std::ptr::null_mut(),
         }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addTrigger(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         id:*const c_char, ttype:*const c_char, value:*const c_char, action:*const c_char, repeat:bool,
     ) { STATE.lock().unwrap().triggers.push(Trigger { id:cs(id), trigger_type:cs(ttype), value:cs(value), action:cs(action), fired:false, repeat }); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_removeTrigger(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id:*const c_char,
+        _e: JNIEnv, _c: JObject, id:*const c_char,
     ) { let id=cs(id); STATE.lock().unwrap().triggers.retain(|t| t.id!=id); }
 
     // \u{2500}\u{2500} OpenClaw v3 JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runDslScript(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         macro_id: *const c_char, script: *const c_char,
-    ) -> *mut c_char {
+    ) -> JString {
         let log = execute_dsl_script(&mut STATE.lock().unwrap(), &cs(macro_id), &cs(script));
         let log_json: Vec<String> = log.iter().map(|l| format!(r#""{}""#, esc(l))).collect();
-        CString::new(format!(r#"{{"ok":true,"log":[{}]}}"#, log_json.join(","))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!(r#"{{"ok":true,"log":[{}]}}"#, log_json.join(","))) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_rxSubscribe(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         id: *const c_char, name: *const c_char, event_kinds: *const c_char,
         target_macro: *const c_char, debounce_ms: i64, throttle_ms: i64, distinct: bool,
-    ) -> *mut c_char {
+    ) -> JString {
         let id   = cs(id); let name = cs(name);
         let kinds: Vec<String> = cs(event_kinds).split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
         let target = cs(target_macro);
@@ -2313,12 +2340,12 @@ mod jni_bridge {
             take_count: 0, skip_count: 0, last_value: String::new(), buffer: Vec::new(),
         };
         STATE.lock().unwrap().rx_subscriptions.push(sub);
-        CString::new(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_rxPostEvent(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         kind: *const c_char, data: *const c_char,
     ) {
         let event = RxEvent { kind: cs(kind), data: cs(data), ts: now_ms(), source: "jni".to_string() };
@@ -2338,70 +2365,70 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_channelPost(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         channel: *const c_char, message: *const c_char,
     ) { channel_post(&mut STATE.lock().unwrap(), &cs(channel), &cs(message)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_batteryDefer(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         macro_id: *const c_char, min_pct: i32,
     ) { defer_until_charged(&mut STATE.lock().unwrap(), &cs(macro_id), min_pct); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_exportBundle(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, tag_filter: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, tag_filter: *const c_char,
+    ) -> JString {
         let tag = cs(tag_filter);
         let result = export_bundle(&STATE.lock().unwrap(), if tag.is_empty() { None } else { Some(&tag) });
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_fsmEvent(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         machine_id: *const c_char, event: *const c_char,
     ) { fsm_process_event(&mut STATE.lock().unwrap(), &cs(machine_id), &cs(event)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_freeString(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, s:*mut c_char,
+        _e: JNIEnv, _c: JObject, s:*mut c_char,
     ) { if !s.is_null() { unsafe { drop(CString::from_raw(s)); } } }
 
     // \u{2500}\u{2500} OpenClaw / NanoBot / ZeroClaw extended JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_exportMacros(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let json = export_macros_json(&STATE.lock().unwrap());
-        CString::new(json).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &json) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_importMacros(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+        _e: JNIEnv, _c: JObject, json: *const c_char,
     ) { import_macros_json(&mut STATE.lock().unwrap(), &cs(json)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_chainMacro(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, target_id: *const c_char,
+        _e: JNIEnv, _c: JObject, target_id: *const c_char,
     ) { chain_macro(&mut STATE.lock().unwrap(), &cs(target_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_evalExpr(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, expr: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, expr: *const c_char,
+    ) -> JString {
         let result = eval_expr(&STATE.lock().unwrap(), &cs(expr));
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_expandVars(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, text: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, text: *const c_char,
+    ) -> JString {
         let result = expand_vars(&STATE.lock().unwrap(), &cs(text));
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     // \u{2500}\u{2500} Roubao / Open-AutoGLM VLM JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
@@ -2409,9 +2436,9 @@ mod jni_bridge {
     /// Start a new phone agent task. Returns {ok, task_id}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_startAgentTask(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         goal: *const c_char, max_steps: i32,
-    ) -> *mut c_char {
+    ) -> JString {
         let goal = cs(goal);
         let max_s = if max_steps > 0 { max_steps as u32 } else { 20 };
         let task_id = gen_id();
@@ -2435,24 +2462,24 @@ mod jni_bridge {
             current_step: 0, context: String::new(), result: String::new(),
             created_ms: now_ms(), last_step_ms: now_ms(),
         });
-        CString::new(format!(r#"{{"ok":true,"task_id":"{}"}}"#, esc(&task_id))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!(r#"{{"ok":true,"task_id":"{}"}}"#, esc(&task_id))) }
     }
 
     /// Called by Java after VLM responds with action decision
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_processVlmStep(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         task_id: *const c_char, vlm_response: *const c_char,
-    ) -> *mut c_char {
+    ) -> JString {
         let task_id = cs(task_id); let vlm_resp = cs(vlm_response);
         let done = execute_vlm_step(&mut STATE.lock().unwrap(), &task_id, &vlm_resp);
-        CString::new(format!(r#"{{"ok":true,"done":{}}}"#, done)).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!(r#"{{"ok":true,"done":{}}}"#, done)) }
     }
 
     /// Called by Java after taking screenshot + getting VLM screen description
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_recordScreenObservation(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         task_id: *const c_char, step: i32, vlm_desc: *const c_char,
     ) {
         record_screen_observation(&mut STATE.lock().unwrap(), &cs(task_id), step as u32, &cs(vlm_desc));
@@ -2461,7 +2488,7 @@ mod jni_bridge {
     /// Set the AI-generated plan for a task
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setAgentPlan(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         task_id: *const c_char, plan_json: *const c_char,
     ) {
         let task_id = cs(task_id); let plan_str = cs(plan_json);
@@ -2481,9 +2508,9 @@ mod jni_bridge {
     /// Get current agent prompt for the AI call (Java reads this before calling AI)
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAgentPrompt(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         task_id: *const c_char,
-    ) -> *mut c_char {
+    ) -> JString {
         let task_id = cs(task_id);
         let s = STATE.lock().unwrap();
         let result = match s.phone_agent_tasks.iter().find(|t| t.id == task_id) {
@@ -2501,14 +2528,14 @@ Context: {}",
             }
             None => r#"{"error":"not found"}"#.to_string(),
         };
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     /// Get all agent tasks summary
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAgentTasks(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.phone_agent_tasks.iter().map(|t| format!(
             r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"result":"{}"}}"#,
@@ -2522,29 +2549,29 @@ Context: {}",
             },
             t.current_step, esc(&t.result)
         )).collect();
-        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
 
     // \u{2500}\u{2500} Roboru JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addFlow(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, json: *const c_char,
+    ) -> JString {
         let body = cs(json);
         if let Some(flow) = parse_flow_from_json(&body) {
             let id = flow.id.clone();
             STATE.lock().unwrap().roboru_flows.insert(id.clone(), flow);
-            CString::new(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))).unwrap_or_default().into_raw()
+            unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
         } else {
-            CString::new(r#"{"error":"invalid flow"}"#).unwrap_or_default().into_raw()
+            unsafe { jni_str(env, &r#"{"error":"invalid flow"}"#) }
         }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runFlow(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, id: *const c_char,
+    ) -> JString {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
         let flow = s.roboru_flows.get(&id).cloned();
@@ -2553,27 +2580,27 @@ Context: {}",
             if let Some(f) = s.roboru_flows.get_mut(&id) { f.run_count += 1; f.last_run_ms = now_ms(); }
             format!(r#"{{"ok":true,"steps":{}}}"#, steps)
         } else { format!(r#"{{"error":"not found: {}"}}"#, esc(&id)) };
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addKeyword(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, json: *const c_char,
+    ) -> JString {
         let body = cs(json);
         let result = if let Some(kw) = parse_keyword_from_json(&body) {
             let name = kw.name.clone();
             STATE.lock().unwrap().roboru_keywords.insert(name.clone(), kw);
             format!(r#"{{"ok":true,"name":"{}"}}"#, esc(&name))
         } else { r#"{"error":"invalid keyword"}"#.to_string() };
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runKeyword(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         name: *const c_char, args_json: *const c_char,
-    ) -> *mut c_char {
+    ) -> JString {
         let name = cs(name); let args_body = cs(args_json);
         let mut s = STATE.lock().unwrap();
         let kw = s.roboru_keywords.get(&name).cloned();
@@ -2585,26 +2612,26 @@ Context: {}",
             let r = execute_keyword(&mut s, &kw, &args);
             format!(r#"{{"ok":true,"result":"{}"}}"#, esc(&r))
         } else { format!(r#"{{"error":"keyword not found: {}"}}"#, esc(&name)) };
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addPipeline(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, json: *const c_char,
+    ) -> JString {
         let body = cs(json);
         let result = if let Some(p) = parse_pipeline_from_json(&body) {
             let id = p.id.clone();
             STATE.lock().unwrap().roboru_pipelines.insert(id.clone(), p);
             format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))
         } else { r#"{"error":"invalid pipeline"}"#.to_string() };
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runPipeline(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject, id: *const c_char,
+    ) -> JString {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
         let pipeline = s.roboru_pipelines.get(&id).cloned();
@@ -2614,28 +2641,28 @@ Context: {}",
             format!(r#"{{"ok":true,"steps":{},"errors":{}}}"#, steps,
                 format!("[{}]", errors.iter().map(|e| format!(r#""{}""#, esc(e))).collect::<Vec<_>>().join(",")))
         } else { format!(r#"{{"error":"pipeline not found: {}"}}"#, esc(&id)) };
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationAnalytics(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let json = get_automation_analytics(&STATE.lock().unwrap());
-        CString::new(json).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &json) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationReport(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let report = get_automation_report(&STATE.lock().unwrap());
-        CString::new(report).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &report) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_scheduleMacroDaily(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         macro_id: *const c_char, time_hhmm: *const c_char,
     ) {
         let id = cs(macro_id); let time = cs(time_hhmm);
@@ -2646,30 +2673,30 @@ Context: {}",
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_findMacroByName(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         name: *const c_char,
-    ) -> *mut c_char {
+    ) -> JString {
         let result = find_macro_by_name(&STATE.lock().unwrap(), &cs(name));
         let json = match result {
             Some(id) => format!(r#"{{"found":true,"id":"{}"}}"#, esc(&id)),
             None     => r#"{"found":false}"#.to_string(),
         };
-        CString::new(json).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &json) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_resolveParam(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         param: *const c_char,
-    ) -> *mut c_char {
+    ) -> JString {
         let result = resolve_param(&STATE.lock().unwrap(), &cs(param));
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationStatus(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
         let s = STATE.lock().unwrap();
         let enabled = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
         let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
@@ -2679,7 +2706,7 @@ Context: {}",
             esc(&s.active_profile), s.pending_actions.len(),
             s.macro_run_log.len(), check_rate_limit(&s)
         );
-        CString::new(json).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &json) }
     }
 
     // ── v43: OTA Engine JNI ───────────────────────────────────────────────────
@@ -2687,7 +2714,7 @@ Context: {}",
     /// Register installed version with Rust on app start.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaSetCurrentVersion(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         version: *const c_char, code: i64,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -2700,7 +2727,7 @@ Context: {}",
     /// Set GitHub repo slug e.g. "i7m7r8/KiraService".
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaSetRepo(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         repo: *const c_char,
     ) {
         let r = cs(repo);
@@ -2711,19 +2738,19 @@ Context: {}",
     /// Returns JSON {"action":"...","version":"...","current":"..."}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnRelease(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         tag:       *const c_char,
         url:       *const c_char,
         changelog: *const c_char,
         date:      *const c_char,
         sha256:    *const c_char,
         apk_bytes: i64,
-    ) -> *mut c_char {
+    ) -> JString {
         let (tag, url, log, date, sha) = (cs(tag), cs(url), cs(changelog), cs(date), cs(sha256));
         let mut s = STATE.lock().unwrap();
         if s.ota.skipped_versions.contains(&tag) {
             s.ota.phase = OtaPhase::Idle;
-            return CString::new(r#"{"action":"skipped"}"#).unwrap_or_default().into_raw();
+            return unsafe { jni_str(env, &r#"{"action":"skipped"}"#) };
         }
         let newer = s.ota.is_newer(&tag);
         s.ota.latest_version  = tag.clone();
@@ -2744,13 +2771,13 @@ Context: {}",
         let cur = s.ota.current_version.clone();
         let result = format!(r#"{{"action":"{}","version":"{}","current":"{}"}}"#,
             action, esc(&tag), esc(&cur));
-        CString::new(result).unwrap_or_default().into_raw()
+        unsafe { jni_str(env, &result) }
     }
 
     /// Java reports streaming download progress. Rust tracks % for /ota/status.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaProgress(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         bytes_done: i64, bytes_total: i64,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -2768,10 +2795,10 @@ Context: {}",
     /// Returns {"ok":true,"method":"shizuku|package_installer","shizuku":bool,"cmd":"..."}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnDownloaded(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        env: JNIEnv, _c: JObject,
         path:   *const c_char,
         sha256: *const c_char,
-    ) -> *mut c_char {
+    ) -> JString {
         let (path, sha) = (cs(path), cs(sha256));
         // SECURITY: Validate APK path — must end with .apk, no path traversal
         let path_ok = path.ends_with(".apk")
@@ -2779,8 +2806,7 @@ Context: {}",
             && !path.contains("//")
             && (path.contains("/cache/") || path.contains("/data/"));
         if !path_ok {
-            return CString::new(r#"{"ok":false,"error":"invalid_apk_path"}"#)
-                .unwrap_or_default().into_raw();
+            return unsafe { jni_str(env, r#"{"ok":false,"error":"invalid_apk_path"}"#) };
         }
         let mut s = STATE.lock().unwrap();
         s.ota.apk_local_path = path.clone();
@@ -2792,22 +2818,22 @@ Context: {}",
             let method = if use_shizuku { "shizuku" } else { "package_installer" };
             s.ota.install_method = method.to_string();
             let cmd = format!("pm install -r -t \"{}\"", esc(&path));
-            CString::new(format!(
+            { let _s = format!(
                 r#"{{"ok":true,"path":"{}","method":"{}","shizuku":{},"cmd":"{}","verified":{}}}"#,
                 esc(&path), method, use_shizuku, esc(&cmd), ok
-            )).unwrap_or_default().into_raw()
+            ); unsafe { jni_str(env, &_s) } }
         } else {
             let err = format!("sha256_mismatch");
             s.ota.phase = OtaPhase::Failed(err.clone());
-            CString::new(format!(r#"{{"ok":false,"error":"{}"}}"#, esc(&err)))
-                .unwrap_or_default().into_raw()
+            { let _s = format!(r#"{{"ok":false,"error":"{}"}}"#, esc(&err)))
+                ; unsafe { jni_str(env, &_jni_s) }
         }
     }
 
     /// Install completed. Pass new versionName.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnInstalled(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         new_version: *const c_char,
     ) {
         let ver = cs(new_version);
@@ -2819,7 +2845,7 @@ Context: {}",
     /// Install failed. Rust records error and sets Failed phase.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnFailed(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         error: *const c_char,
     ) {
         let err = cs(error);
@@ -2831,7 +2857,7 @@ Context: {}",
     /// Permanently skip this version (stored in Rust skip list).
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaSkip(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+        _e: JNIEnv, _c: JObject,
         version: *const c_char,
     ) {
         let ver = cs(version);
@@ -2845,9 +2871,9 @@ Context: {}",
     /// Get full OTA status JSON from Rust.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaGetStatus(
-        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
-    ) -> *mut c_char {
-        CString::new(STATE.lock().unwrap().ota.to_json()).unwrap_or_default().into_raw()
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
+        unsafe { jni_str(env, &STATE.lock().unwrap().ota.to_json()) }
     }
 
 }

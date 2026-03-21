@@ -9,7 +9,7 @@ import android.content.SharedPreferences;
  */
 public class KiraConfig {
     private static final String PREFS   = "kira_config";
-    private static final int    VERSION = 2; // bump to clear old encrypted prefs
+    private static final int    VERSION = 3; // v3: clear encrypted prefs on all existing installs
 
     public String  userName          = "User";
     public String  apiKey            = "";
@@ -25,25 +25,45 @@ public class KiraConfig {
     public boolean setupDone         = false;
     public String  otaRepo           = "i7m7r8/KiraService";
 
+    /** Returns true if string contains only printable ASCII chars */
+    private static boolean isAscii(String s) {
+        if (s == null || s.isEmpty()) return true;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (ch < 32 || ch > 126) return false;
+        }
+        return true;
+    }
+
     public static KiraConfig load(Context ctx) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
 
         // One-time migration: wipe old encrypted keys that cause "unknown scheme" crash
         if (p.getInt("config_version", 0) < VERSION) {
-            p.edit()
-                .remove("apiKey_enc")
-                .remove("tgToken_enc")
-                .remove("seed")
-                .putInt("config_version", VERSION)
-                .commit();
-            // After wipe, user will need to re-enter apiKey in Settings
-            // (setupDone stays true so they don't re-run setup)
+            // Wipe encrypted/corrupt keys
+            SharedPreferences.Editor wipe = p.edit();
+            wipe.remove("apiKey_enc");
+            wipe.remove("tgToken_enc");
+            wipe.remove("seed");
+            // Also fix baseUrl if it looks corrupt
+            String storedUrl = p.getString("baseUrl", "");
+            if (!storedUrl.isEmpty() && !storedUrl.startsWith("http"))
+                wipe.putString("baseUrl", "https://api.groq.com/openai/v1");
+            // Also fix apiKey if it contains binary garbage
+            String storedKey = p.getString("apiKey", "");
+            if (!isAscii(storedKey)) wipe.putString("apiKey", "");
+            wipe.putInt("config_version", VERSION).commit();
+            // After wipe, user re-enters apiKey in Settings once
+            // setupDone stays true — no re-setup needed
         }
 
         KiraConfig c = new KiraConfig();
         c.userName          = p.getString ("userName",          "User");
-        c.apiKey            = p.getString ("apiKey",            "");
-        c.baseUrl           = p.getString ("baseUrl",           "https://api.groq.com/openai/v1");
+        String rawKey = p.getString("apiKey", "");
+        c.apiKey = isAscii(rawKey) ? rawKey : "";
+        String rawUrl = p.getString("baseUrl", "https://api.groq.com/openai/v1");
+        c.baseUrl = (rawUrl.startsWith("http://") || rawUrl.startsWith("https://"))
+            ? rawUrl : "https://api.groq.com/openai/v1";
         c.model             = p.getString ("model",             "llama-3.1-8b-instant");
         c.visionModel       = p.getString ("visionModel",       "");
         c.persona           = p.getString ("persona",           "");

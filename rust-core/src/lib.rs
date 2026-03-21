@@ -1831,7 +1831,7 @@ fn parse_api_url(url: &str) -> Result<(String, u16, String), String> {
     } else if url.starts_with("http://") {
         ("http", &url[7..])
     } else {
-        return Err(format!("unknown scheme: {}", url));
+        return Err(format!("invalid base_url (go to Settings and fix API URL): {:.40}", url));
     };
     let (host_port, path) = match rest.find('/') {
         Some(i) => (&rest[..i], &rest[i..]),

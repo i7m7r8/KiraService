@@ -345,9 +345,15 @@ mod jni_bridge {
         heartbeat:i32, setup_done:bool,
     ) {
         let mut s = STATE.lock().unwrap();
-        s.config.user_name          = cs(user_name);
-        s.config.api_key            = cs(api_key);
-        s.config.base_url           = cs(base_url);
+        s.config.user_name = cs(user_name);
+        // Sanitize: reject non-UTF8 / binary garbage from old encrypted storage
+        let raw_key = cs(api_key);
+        let raw_url = cs(base_url);
+        if !raw_key.is_empty() {
+            s.config.api_key = if raw_key.chars().all(|c| c.is_ascii()) { raw_key } else { String::new() };
+        }
+        let is_valid_url = raw_url.starts_with("http://") || raw_url.starts_with("https://");
+        s.config.base_url = if is_valid_url { raw_url } else { "https://api.groq.com/openai/v1".to_string() };
         s.config.model              = cs(model);
         s.config.vision_model       = cs(vision_model);
         s.config.persona            = cs(persona);
@@ -378,8 +384,14 @@ mod jni_bridge {
     ) {
         let mut s = STATE.lock().unwrap();
         s.setup.current_page = page as u8;
-        let ak=cs(api_key);   if !ak.is_empty()  { s.setup.api_key   =ak.clone();  s.config.api_key  =ak; }
-        let bu=cs(base_url);  if !bu.is_empty()  { s.setup.base_url  =bu.clone();  s.config.base_url =bu; }
+        let ak=cs(api_key);
+        if !ak.is_empty() && ak.chars().all(|c| c.is_ascii()) {
+            s.setup.api_key = ak.clone(); s.config.api_key = ak;
+        }
+        let bu=cs(base_url);
+        if !bu.is_empty() && (bu.starts_with("http://") || bu.starts_with("https://")) {
+            s.setup.base_url = bu.clone(); s.config.base_url = bu;
+        }
         let mo=cs(model);     if !mo.is_empty()  { s.setup.model     =mo.clone();  s.config.model    =mo; }
         let un=cs(user_name); if !un.is_empty()  { s.setup.user_name =un.clone();  s.config.user_name=un; }
         let tt=cs(tg_token);  if !tt.is_empty()  { s.setup.tg_token  =tt.clone();  s.config.tg_token =tt; }

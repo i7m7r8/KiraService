@@ -142,6 +142,29 @@ public class RustBridge {
     public static native String getProfiles();
 
     // \u2500\u2500 v38: Config sync (Java SharedPrefs \u2194 Rust state) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    // ── Session C: AES-256-GCM encryption ────────────────────────────
+    public static native String encryptSecret(String plaintext, String seed, String domain);
+    public static native String decryptSecret(String hexCiphertext, String seed, String domain);
+    public static native String deriveKeySeed(String androidId, String packageName);
+
+    // ── Session D: AI chat + shell queue ───────────────────────────
+    public static native String chatSync(String message, String sessionId, int maxToolSteps);
+    public static native String getNextShellJob();
+    public static native void   postShellResult(String jobId, String stdout);
+
+    // ── Session E: Agent + Chain ─────────────────────────────
+    public static native String agentSync(String goal, int maxSteps, String session);
+    public static native String chainSync(String goal, int depth);
+    public static native String getAgentStatus();
+    public static native void   stopAgent();
+
+    // ── Session G: Tool execution + app lookup ────────────────────
+    public static native String executeTool(String name, String paramsJson);
+    public static native String appNameToPkg(String appName);
+
+
+
     public static native void syncConfig(
         String userName, String apiKey, String baseUrl, String model,
         String visionModel, String persona, String tgToken,

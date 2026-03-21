@@ -2,332 +2,186 @@ package com.kira.service.telegram;
 
 import android.content.Context;
 import android.util.Log;
-
-import com.kira.service.KiraForegroundService;
-import com.kira.service.ai.KiraAI;
-import com.kira.service.KiraEventBus;
 import com.kira.service.ai.KiraConfig;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.io.*;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * KiraTelegram — Session F: thin Java polling wrapper.
+ * Original: 333 lines. Rewritten: ~120 lines.
+ *
+ * Java responsibility (only things Rust cannot do — raw HTTP to Telegram API):
+ *   1. Long-poll getUpdates from Telegram
+ *   2. POST /telegram/incoming to Rust (Rust runs AI + queues reply)
+ *   3. Poll GET /telegram/next_send from Rust
+ *   4. Send reply via Telegram sendMessage API
+ */
 public class KiraTelegram {
-
-    private static final String TAG = "KiraTelegram";
-    private static final int POLL_TIMEOUT = 25; // long poll seconds
-    private static final int MAX_MSG_LEN = 4096;
+    private static final String TAG      = "KiraTelegram";
+    private static final String BASE_URL = "https://api.telegram.org/bot";
+    private static final int    TIMEOUT  = 25;
 
     private final Context ctx;
-    private final KiraAI  ai;
-    private volatile boolean running = false;
+    private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread pollThread;
-    private final AtomicLong lastUpdateId = new AtomicLong(0);
 
-    public KiraTelegram(Context ctx, KiraAI ai) {
-        this.ctx = ctx.getApplicationContext(); // use app context to avoid leaks
-        this.ai  = ai;
+    public KiraTelegram(Context ctx) {
+        this.ctx = ctx.getApplicationContext();
     }
 
+    // Legacy constructor
+    public KiraTelegram(Context ctx, Object unused) { this(ctx); }
+
     public void start() {
-        KiraConfig cfg = KiraConfig.load(ctx);
-        if (cfg.tgToken == null || cfg.tgToken.trim().isEmpty()) {
-            Log.w(TAG, "No Telegram token configured -- bot not starting");
+        try {
+            KiraConfig cfg = KiraConfig.load(ctx);
+            if (cfg.tgToken == null || cfg.tgToken.isEmpty()) return;
+        } catch (Exception e) {
+            Log.w(TAG, "config load failed, deferring telegram start: " + e.getMessage());
+            // Retry after 5s — Rust may not be loaded yet
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                .postDelayed(this::start, 5000);
             return;
         }
-
-        if (running) {
-            Log.i(TAG, "Already running");
-            return;
-        }
-
-        running = true;
-
-        // Start foreground service FIRST so Android doesn't kill us
-        KiraForegroundService.start(ctx);
-
+        if (!running.compareAndSet(false, true)) return;
         pollThread = new Thread(this::pollLoop, "kira-telegram");
-        pollThread.setDaemon(false); // keep alive
+        pollThread.setDaemon(true);
         pollThread.start();
-        Log.i(TAG, "Telegram bot started with token: ****" +
-            cfg.tgToken.substring(Math.max(0, cfg.tgToken.length() - 6)));
+        Log.i(TAG, "Telegram polling started");
     }
 
     public void stop() {
-        running = false;
+        running.set(false);
         if (pollThread != null) pollThread.interrupt();
-        Log.i(TAG, "Telegram bot stopped");
     }
-
-    public boolean isRunning() { return running && pollThread != null && pollThread.isAlive(); }
-
-    // -- Poll loop -------------------------------------------------------------
 
     private void pollLoop() {
-        Log.i(TAG, "Poll loop started");
-        int errorCount = 0;
-
-        while (running && !Thread.interrupted()) {
+        while (running.get()) {
             try {
-                KiraConfig cfg = KiraConfig.load(ctx);
+                KiraConfig cfg;
+                try { cfg = KiraConfig.load(ctx); }
+                catch (Exception ex) { Thread.sleep(5000); continue; }
+                if (cfg.tgToken.isEmpty()) { Thread.sleep(5000); continue; }
 
-                if (cfg.tgToken == null || cfg.tgToken.trim().isEmpty()) {
-                    Log.w(TAG, "Token cleared -- stopping bot");
-                    break;
-                }
+                // Get last update id from Rust
+                long offset = getLastUpdateId() + 1;
 
-                // Keep foreground service alive
-                KiraForegroundService.start(ctx);
+                // Long-poll Telegram
+                String updatesUrl = BASE_URL + cfg.tgToken
+                    + "/getUpdates?timeout=" + TIMEOUT + "&offset=" + offset;
+                String response = httpGet(updatesUrl, (TIMEOUT + 5) * 1000);
+                if (response == null) { Thread.sleep(1000); continue; }
 
-                JSONObject updates = getUpdates(cfg.tgToken, lastUpdateId.get() + 1);
+                processUpdates(response, cfg.tgToken);
 
-                if (updates == null) {
-                    errorCount++;
-                    if (errorCount > 5) {
-                        Log.e(TAG, "Too many errors, sleeping 30s");
-                        Thread.sleep(30000);
-                        errorCount = 0;
-                    } else {
-                        Thread.sleep(3000);
-                    }
-                    continue;
-                }
-
-                errorCount = 0;
-                JSONArray results = updates.optJSONArray("result");
-                if (results == null) continue;
-
-                for (int i = 0; i < results.length(); i++) {
-                    JSONObject update = results.getJSONObject(i);
-                    long updateId = update.optLong("update_id", 0);
-                    if (updateId > lastUpdateId.get()) lastUpdateId.set(updateId);
-                    handleUpdate(update, cfg);
-                }
+                // Drain Rust send queue
+                drainSendQueue(cfg.tgToken);
 
             } catch (InterruptedException e) {
-                Log.i(TAG, "Poll thread interrupted");
-                break;
+                Thread.currentThread().interrupt(); break;
             } catch (Exception e) {
-                Log.e(TAG, "Poll error: " + e.getMessage());
-                try { Thread.sleep(5000); } catch (InterruptedException ie) { break; }
+                Log.e(TAG, "poll error: " + e.getMessage());
+                try { Thread.sleep(3000); } catch (InterruptedException ie) { break; }
             }
         }
-
-        running = false;
-        Log.i(TAG, "Poll loop ended");
+        Log.i(TAG, "Telegram polling stopped");
     }
 
-    // -- Handle update ---------------------------------------------------------
+    private void processUpdates(String json, String token) throws Exception {
+        if (!json.contains("\"ok\":true")) return;
+        int pos = json.indexOf("\"result\":[");
+        if (pos < 0) return;
+        // Simple array scan
+        int i = pos;
+        while ((i = json.indexOf("\"update_id\":", i)) >= 0) {
+            long updateId = parseLong(json, i + 13);
+            long chatId   = parseChatId(json, i);
+            String user   = parseStr(json, i, "first_name");
+            String text   = parseStr(json, i, "text");
+            i += 15; // advance past this update
+            if (text.isEmpty() || chatId == 0) continue;
 
-    private void handleUpdate(JSONObject update, KiraConfig cfg) {
-        try {
-            JSONObject message = update.optJSONObject("message");
-            if (message == null) {
-                // Also handle callback queries
-                JSONObject callback = update.optJSONObject("callback_query");
-                if (callback != null) handleCallback(callback, cfg);
-                return;
-            }
-
-            long chatId = message.getJSONObject("chat").getLong("id");
-            long userId = message.getJSONObject("from").getLong("id");
-            String text = message.optString("text", "").trim();
-            String name = message.getJSONObject("from").optString("first_name", "user");
-
-            // Auth -- allow if tgAllowed is 0 (any) or matches userId
-            if (cfg.tgAllowed != 0 && userId != cfg.tgAllowed) {
-                sendMessage(cfg.tgToken, chatId, "not authorized. your id: " + userId);
-                return;
-            }
-
-            if (text.isEmpty()) return;
-
-            // Built-in commands
-            if (text.equals("/start")) {
-                sendMessage(cfg.tgToken, chatId,
-                    "? *Kira Agent* connected\n\nHey " + name.toLowerCase() + ". I'm running on your phone. What do you need?",
-                    true);
-                return;
-            }
-
-            if (text.equals("/status")) {
-                String status = "? *Status*\n"
-                    + "? Accessibility: " + (com.kira.service.KiraAccessibilityService.instance != null ? "?" : "?") + "\n"
-                    + "? Shizuku: " + (com.kira.service.ShizukuShell.isAvailable() ? "?" : "?") + "\n"
-                    + "? Bot: ? running";
-                sendMessage(cfg.tgToken, chatId, status, true);
-                return;
-            }
-
-            if (text.equals("/screen")) {
-                String screen = ai.quickTool("read_screen", new JSONObject());
-                sendMessage(cfg.tgToken, chatId, "? Screen:\n```\n" + truncate(screen, 3000) + "\n```", true);
-                return;
-            }
-
-            if (text.equals("/notifs")) {
-                String notifs = ai.quickTool("get_notifications", new JSONObject());
-                sendMessage(cfg.tgToken, chatId, "? Notifications:\n" + truncate(notifs, 3000), true);
-                return;
-            }
-
-            if (text.startsWith("/chain ")) {
-                String goal = text.substring(7);
-                sendTyping(cfg.tgToken, chatId);
-                final long fChatId2 = chatId;
-                final String fToken2 = cfg.tgToken;
-                new com.kira.service.ai.KiraChain(ctx).run(goal, new com.kira.service.ai.KiraChain.ChainCallback() {
-                    StringBuilder log = new StringBuilder();
-                    @Override public void onThought(String t) { log.append("Think: ").append(t).append("\n"); }
-                    @Override public void onAction(String tool, String a) { log.append("Act: ").append(tool).append("\n"); }
-                    @Override public void onObservation(String o) { log.append("Obs: ").append(o.substring(0,Math.min(60,o.length()))).append("\n"); }
-                    @Override public void onFinal(String answer) { sendMessage(fToken2, fChatId2, log.toString().trim() + "\n\nResult: " + answer, false); }
-                    @Override public void onError(String e) { sendMessage(fToken2, fChatId2, "chain error: " + e, false); }
-                });
-                return;
-            }
-            if (text.startsWith("/run ")) {
-                String cmd = text.substring(5);
-                String result = com.kira.service.ShizukuShell.exec(cmd);
-                sendMessage(cfg.tgToken, chatId, "```\n" + truncate(result, 3500) + "\n```", true);
-                return;
-            }
-
-            // Send typing
-            sendTyping(cfg.tgToken, chatId);
-
-            // Chat with AI
-            final long fChatId = chatId;
-            final String fToken = cfg.tgToken;
-
-            ai.chat(text, new KiraAI.Callback() {
-                StringBuilder toolLog = new StringBuilder();
-
-                @Override public void onThinking() {
-                    sendTyping(fToken, fChatId);
-                }
-
-                @Override public void onTool(String name, String result) {
-                    toolLog.append("? ").append(name).append("\n");
-                }
-
-                @Override public void onReply(String reply) {
-                    String full = reply;
-                    if (toolLog.length() > 0) {
-                        full = toolLog.toString().trim() + "\n\n" + reply;
-                    }
-                    sendMessage(fToken, fChatId, truncate(full, MAX_MSG_LEN), true);
-                }
-
-                @Override public void onError(String error) {
-                    sendMessage(fToken, fChatId, "? " + error, false);
-                }
-            });
-
-        } catch (Exception e) {
-            Log.e(TAG, "handleUpdate error", e);
+            // POST to Rust — Rust runs AI, queues reply
+            String body = String.format(
+                "{\"update_id\":%d,\"chat_id\":%d,\"user\":\"%s\",\"text\":\"%s\"}",
+                updateId, chatId, user.replace("\"","\\\""), text.replace("\"","\\\""));
+            httpPost("http://localhost:7070/telegram/incoming", body, 10_000);
         }
     }
 
-    private void handleCallback(JSONObject callback, KiraConfig cfg) {
-        // Future: inline keyboard callbacks
-    }
-
-    // -- API calls -------------------------------------------------------------
-
-    private JSONObject getUpdates(String token, long offset) {
-        try {
-            URL url = new URL("https://api.telegram.org/bot" + token
-                + "/getUpdates?timeout=" + POLL_TIMEOUT + "&offset=" + offset
-                + "&allowed_updates=[\"message\",\"callback_query\"]");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout((POLL_TIMEOUT + 5) * 1000);
-            conn.setRequestProperty("User-Agent", "KiraAgent/5.0");
-
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                Log.w(TAG, "getUpdates HTTP " + code);
-                return null;
-            }
-
-            BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = r.readLine()) != null) sb.append(line);
-            return new JSONObject(sb.toString());
-
-        } catch (Exception e) {
-            if (running) Log.w(TAG, "getUpdates error: " + e.getMessage());
-            return null;
+    private void drainSendQueue(String token) throws Exception {
+        for (int i = 0; i < 10; i++) {
+            String msg = httpGet("http://localhost:7070/telegram/next_send", 2_000);
+            if (msg == null || msg.contains("\"has_message\":false")) break;
+            long chatId = parseLongKey(msg, "chat_id");
+            String text = parseStr(msg, 0, "text");
+            if (chatId == 0 || text.isEmpty()) break;
+            sendMessage(token, chatId, text);
         }
     }
 
-    private void sendMessage(String token, long chatId, String text, boolean markdown) {
-        try {
-            URL url = new URL("https://api.telegram.org/bot" + token + "/sendMessage");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(15000);
-            conn.setDoOutput(true);
-
-            JSONObject body = new JSONObject();
-            body.put("chat_id", chatId);
-            body.put("text", text.length() > MAX_MSG_LEN ? text.substring(0, MAX_MSG_LEN) : text);
-            if (markdown) body.put("parse_mode", "Markdown");
-
-            byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
-            try (OutputStream os = conn.getOutputStream()) { os.write(bytes); }
-
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                // Retry without markdown if parse error
-                if (markdown && code == 400) {
-                    sendMessage(token, chatId, text, false);
-                    return;
-                }
-                Log.w(TAG, "sendMessage HTTP " + code);
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "sendMessage error", e);
-        }
+    private void sendMessage(String token, long chatId, String text) throws Exception {
+        String body = String.format(
+            "{\"chat_id\":%d,\"text\":\"%s\"}",
+            chatId, text.replace("\\","\\\\").replace("\"","\\\"").replace("\n","\\n"));
+        httpPost(BASE_URL + token + "/sendMessage", body, 10_000);
     }
 
-    private void sendMessage(String token, long chatId, String text) {
-        sendMessage(token, chatId, text, false);
+    private long getLastUpdateId() {
+        try {
+            String r = httpGet("http://localhost:7070/telegram/last_update_id", 1_000);
+            if (r == null) return 0;
+            return parseLongKey(r, "update_id");
+        } catch (Exception e) { return 0; }
     }
 
-    private void sendTyping(String token, long chatId) {
+    // ── HTTP helpers ──────────────────────────────────────────────────────
+
+    private String httpGet(String url, int timeoutMs) {
         try {
-            URL url = new URL("https://api.telegram.org/bot" + token + "/sendChatAction");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setDoOutput(true);
-            JSONObject body = new JSONObject();
-            body.put("chat_id", chatId);
-            body.put("action", "typing");
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
-            }
-            conn.getResponseCode();
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(timeoutMs); c.setReadTimeout(timeoutMs);
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
+                StringBuilder sb = new StringBuilder(); String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                return sb.toString();
+            } finally { c.disconnect(); }
+        } catch (Exception e) { return null; }
+    }
+
+    private void httpPost(String url, String body, int timeoutMs) {
+        try {
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setRequestMethod("POST");
+            c.setRequestProperty("Content-Type","application/json");
+            c.setConnectTimeout(timeoutMs); c.setReadTimeout(timeoutMs);
+            c.setDoOutput(true);
+            c.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+            c.getResponseCode(); c.disconnect();
         } catch (Exception ignored) {}
     }
 
-    private String truncate(String s, int max) {
-        if (s == null) return "(null)";
-        return s.length() > max ? s.substring(0, max) + "?" : s;
+    // ── Minimal JSON helpers ──────────────────────────────────────────────
+
+    private long parseLong(String s, int from) {
+        int e = from; while (e < s.length() && Character.isDigit(s.charAt(e))) e++;
+        try { return Long.parseLong(s.substring(from, e)); } catch (Exception ex) { return 0; }
+    }
+    private long parseLongKey(String s, String key) {
+        String k = "\"" + key + "\":"; int i = s.indexOf(k);
+        return i < 0 ? 0 : parseLong(s, i + k.length());
+    }
+    private long parseChatId(String s, int from) {
+        int i = s.indexOf("\"id\":", from);
+        return i < 0 ? 0 : parseLong(s, i + 6);
+    }
+    private String parseStr(String s, int from, String key) {
+        String k = "\"" + key + "\":\"";
+        int i = s.indexOf(k, from); if (i < 0) return "";
+        i += k.length(); int e = i;
+        while (e < s.length() && !(s.charAt(e)=='"' && s.charAt(e-1)!='\\')) e++;
+        return s.substring(i, Math.min(e, s.length())).replace("\\n","\n");
     }
 }

@@ -50,6 +50,7 @@
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <application
+        android:name=".KiraApp"
         android:label="Kira"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/AppTheme"
@@ -62,8 +63,12 @@
             android:name=".MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
-            android:screenOrientation="portrait">
-
+            android:screenOrientation="portrait"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
 
         <!-- Shizuku provider -->
@@ -127,10 +132,7 @@
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- Not the launcher — MainActivity handles initial routing -->
         </activity>
         <!-- FileProvider for OTA APK install on Android 7+ -->
         <provider
@@ -152,6 +154,14 @@
                 <action android:name="com.kira.ota.SKIP"/>
             </intent-filter>
         </receiver>
+
+        <!-- Crash display activity — shown instead of system crash dialog -->
+        <activity
+            android:name=".CrashActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"/>
 
     </application>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>

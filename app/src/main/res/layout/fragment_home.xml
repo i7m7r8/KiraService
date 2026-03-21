@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Catppuccin Terminal — Chat tab -->
+<!-- Layer 2+3: Chat Interface + Input Composer (Catppuccin Mocha Neural Glass) -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="#00000000">
 
-    <!-- Header: Mantle bar with K badge -->
+    <!-- Layer 2: Header — 52dp Mantle strip -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="52dp"
@@ -16,8 +16,10 @@
         android:paddingEnd="14dp"
         android:background="#FF181825">
 
-        <!-- Lavender K square -->
+        <!-- K badge: 30×30dp, Lavender fill, dark text, tagged for rotation animation -->
         <TextView
+            android:id="@+id/kBadge"
+            android:tag="kBadge"
             android:layout_width="30dp"
             android:layout_height="30dp"
             android:text="K"
@@ -27,6 +29,7 @@
             android:gravity="center"
             android:background="#FFB4BEFE"/>
 
+        <!-- Name + subtitle block -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -40,6 +43,7 @@
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:textColor="#FFCDD6F4"/>
+            <!-- Subtitle: crossfades between ready/thinking/reasoning/composing -->
             <TextView
                 android:id="@+id/headerSubtitle"
                 android:layout_width="wrap_content"
@@ -50,7 +54,7 @@
                 android:fontFamily="monospace"/>
         </LinearLayout>
 
-        <!-- Online dot: Green -->
+        <!-- Status dot: Green when connected -->
         <View
             android:id="@+id/statusDot"
             android:layout_width="6dp"
@@ -58,11 +62,14 @@
             android:background="#FFA6E3A1"/>
     </LinearLayout>
 
-    <!-- Lavender accent line -->
-    <View android:layout_width="match_parent" android:layout_height="1dp"
+    <!-- Header bottom border: Lavender 27% opacity, pulses to 35% when processing -->
+    <View
+        android:id="@+id/headerBorder"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
         android:background="#44B4BEFE"/>
 
-    <!-- Chat scroll -->
+    <!-- Chat scroll area -->
     <ScrollView
         android:id="@+id/chatScroll"
         android:layout_width="match_parent"
@@ -81,16 +88,18 @@
             android:paddingBottom="8dp"/>
     </ScrollView>
 
-    <!-- Quick-action chips -->
+    <!-- Layer 3: Quick-action suggestion chips — horizontal scroll with edge fade -->
     <HorizontalScrollView
         android:id="@+id/suggestionsScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:scrollbars="none"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="2dp">
+        android:requiresFadingEdge="horizontal"
+        android:fadingEdgeLength="24dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="4dp">
         <LinearLayout
             android:id="@+id/suggestionsRow"
             android:layout_width="wrap_content"
@@ -98,8 +107,10 @@
             android:orientation="horizontal"/>
     </HorizontalScrollView>
 
-    <!-- Input bar: Mantle bg, Surface0 field -->
+    <!-- Layer 3: Input Composer — Surface0 field with Lavender focus border -->
     <LinearLayout
+        android:id="@+id/inputBar"
+        android:tag="inputBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -110,6 +121,7 @@
         android:paddingBottom="8dp"
         android:gravity="center_vertical">
 
+        <!-- Input field: Surface0, 12dp corners, Lavender border on focus -->
         <EditText
             android:id="@+id/inputField"
             android:layout_width="0dp"
@@ -117,7 +129,7 @@
             android:layout_weight="1"
             android:hint="ask kira anything…"
             android:textColor="#FFCDD6F4"
-            android:textColorHint="#FF45475A"
+            android:textColorHint="#FF6C7086"
             android:textSize="14sp"
             android:background="#FF313244"
             android:paddingStart="12dp"
@@ -128,16 +140,17 @@
             android:inputType="textMultiLine|textCapSentences"
             android:maxLines="4"/>
 
-        <!-- Lavender send button -->
+        <!-- Send button: Lavender circle, press spring animation -->
         <TextView
             android:id="@+id/sendBtn"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:text="▶"
             android:textSize="13sp"
             android:gravity="center"
             android:textColor="#FF1E1E2E"
             android:background="#FFB4BEFE"
             android:layout_marginStart="8dp"/>
+
     </LinearLayout>
 </LinearLayout>

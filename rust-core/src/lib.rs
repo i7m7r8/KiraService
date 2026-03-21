@@ -1181,13 +1181,12 @@ struct KbEntry { id:String, title:String, content:String, tags:Vec<String>, ts:u
 struct EventFeedEntry { event:String, data:String, ts:u128 }
 struct Notif { pkg:String, title:String, text:String, time:u128 }
 
-lazy_static::
 // ── LZ4 compression helpers for conversation history (Session B) ──────────
 
 /// Compress a conversation turn into LZ4 bytes.
-/// Format: "role content" → lz4_prepend_size(bytes)
+/// Format: "role\x00content" → lz4_prepend_size(bytes)
 pub fn lz4_pack_turn(role: &str, content: &str) -> Vec<u8> {
-    let raw = format!("{} {}", role, content);
+    let raw = format!("{}\x00{}", role, content);
     compress_prepend_size(raw.as_bytes())
 }
 
@@ -1195,7 +1194,7 @@ pub fn lz4_pack_turn(role: &str, content: &str) -> Vec<u8> {
 pub fn lz4_unpack_turn(compressed: &[u8]) -> Option<(String, String)> {
     let raw = decompress_size_prepended(compressed).ok()?;
     let s   = String::from_utf8(raw).ok()?;
-    let mut parts = s.splitn(2, ' ');
+    let mut parts = s.splitn(2, '\x00');
     let role    = parts.next()?.to_string();
     let content = parts.next()?.to_string();
     Some((role, content))
@@ -1240,12 +1239,6 @@ lazy_static! {
         shizuku: ShizukuStatus::default(),
         ..Default::default()
     
-            pending_shell:     std::collections::VecDeque::new(),
-            shell_results:     std::collections::HashMap::new(),
-            agent_tasks:       std::collections::VecDeque::new(),
-            tg_last_update_id: 0,
-            tg_pending_sends:  std::collections::VecDeque::new(),
-            tg_message_log:    std::collections::VecDeque::new(),
         }));
 }
 

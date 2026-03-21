@@ -4,12 +4,12 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 /**
- * KiraConfig — stores app configuration in SharedPreferences.
- * Plain text storage (no encryption) — encryption was causing
- * key override and crash bugs due to Rust timing issues.
+ * KiraConfig — plain text SharedPreferences storage.
+ * v55_fixed: removed AES encryption (was causing API key override bugs).
  */
 public class KiraConfig {
-    private static final String PREFS = "kira_config";
+    private static final String PREFS   = "kira_config";
+    private static final int    VERSION = 2; // bump to clear old encrypted prefs
 
     public String  userName          = "User";
     public String  apiKey            = "";
@@ -27,6 +27,19 @@ public class KiraConfig {
 
     public static KiraConfig load(Context ctx) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+
+        // One-time migration: wipe old encrypted keys that cause "unknown scheme" crash
+        if (p.getInt("config_version", 0) < VERSION) {
+            p.edit()
+                .remove("apiKey_enc")
+                .remove("tgToken_enc")
+                .remove("seed")
+                .putInt("config_version", VERSION)
+                .commit();
+            // After wipe, user will need to re-enter apiKey in Settings
+            // (setupDone stays true so they don't re-run setup)
+        }
+
         KiraConfig c = new KiraConfig();
         c.userName          = p.getString ("userName",          "User");
         c.apiKey            = p.getString ("apiKey",            "");
@@ -41,16 +54,6 @@ public class KiraConfig {
         c.heartbeatInterval = p.getInt    ("heartbeatInterval", 30);
         c.setupDone         = p.getBoolean("setupDone",         false);
         c.otaRepo           = p.getString ("otaRepo",           "i7m7r8/KiraService");
-
-        // Migration: read from old encrypted keys if plain key is empty
-        if (c.apiKey.isEmpty()) {
-            String enc = p.getString("apiKey_enc", "");
-            if (!enc.isEmpty()) c.apiKey = enc; // best-effort plain fallback
-        }
-        if (c.tgToken.isEmpty()) {
-            String enc = p.getString("tgToken_enc", "");
-            if (!enc.isEmpty()) c.tgToken = enc;
-        }
         return c;
     }
 
@@ -70,12 +73,13 @@ public class KiraConfig {
         e.putInt    ("heartbeatInterval", heartbeatInterval);
         e.putBoolean("setupDone",         setupDone);
         e.putString ("otaRepo",           otaRepo);
-        // Clear old encrypted keys to avoid migration confusion
+        e.putInt    ("config_version",    VERSION);
+        // Always clear old encrypted keys
         e.remove("apiKey_enc");
         e.remove("tgToken_enc");
-        e.commit(); // synchronous
+        e.commit();
 
-        // Mirror to Rust — best effort
+        // Mirror to Rust
         try {
             com.kira.service.RustBridge.syncConfig(
                 userName, apiKey, baseUrl, model, visionModel,

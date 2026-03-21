@@ -3802,7 +3802,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("POST", "/ai/agent") => {
             let goal       = extract_json_str(body, "goal").unwrap_or_default();
             let max_steps  = extract_json_num(body, "max_steps").unwrap_or(25.0) as usize;
-            let session_id = extract_json_str(body, "session")
+            let _session_id = extract_json_str(body, "session")
                 .unwrap_or_else(|| "agent_default".into());
 
             if goal.is_empty() {
@@ -4008,7 +4008,7 @@ You are executing a multi-step task autonomously.
         // Returns: {"role":"assistant","content":"..","tools_used":["x"],"tokens":0,"done":true}
         ("POST", "/ai/chat") => {
             let user_msg    = extract_json_str(body, "message").unwrap_or_default();
-            let session_id  = extract_json_str(body, "session").unwrap_or_else(||"default".into());
+            let _session_id  = extract_json_str(body, "session").unwrap_or_else(||"default".into());
             let max_steps   = extract_json_num(body, "max_tool_steps").unwrap_or(5.0) as usize;
 
             if user_msg.is_empty() {
@@ -4016,7 +4016,7 @@ You are executing a multi-step task autonomously.
             }
 
             // Load config
-            let (api_key, base_url, model, persona, system_prompt): (String,String,String,String,String) = {
+            let (api_key, base_url, model, _persona, system_prompt): (String,String,String,String,String) = {
                 let s = STATE.lock().unwrap();
                 let cfg = &s.config;
                 let persona = if cfg.persona.is_empty() {
@@ -4236,26 +4236,27 @@ You are executing a multi-step task autonomously.
 
                 // Screen watch rules from memory
                 if !screen_hash.is_empty() {
-                    for mem in s.memory_index.iter() {
-                        if !mem.value.starts_with("watch_screen_") { continue; }
-                        if let Some(colon) = mem.value.find(':') {
-                            let rule = &mem.value[colon+1..];
-                            let parts: Vec<&str> = rule.splitn(2, '|').collect();
-                            if parts.len() == 2 {
-                                let keyword = parts[0].trim();
-                                let action  = parts[1].trim();
-                                if screen_txt.to_lowercase().contains(&keyword.to_lowercase()) {
-                                    // Queue AI chat for this screen rule
-                                    s.pending_shell.push_back(ShellJob {
-                                        id:      format!("watch_{}", now),
-                                        cmd:     format!("__ai_chat__:{}", action),
-                                        timeout: 30_000,
-                                        created: now,
-                                    });
-                                    fired += 1;
-                                }
-                            }
-                        }
+                    // Collect matching actions first (avoids borrow conflict with pending_shell)
+                    let watch_jobs: Vec<String> = s.memory_index.iter()
+                        .filter(|mem| mem.value.starts_with("watch_screen_"))
+                        .filter_map(|mem| {
+                            let colon = mem.value.find(':')?;
+                            let rule  = &mem.value[colon+1..];
+                            let mut parts = rule.splitn(2, '|');
+                            let keyword = parts.next()?.trim().to_lowercase();
+                            let action  = parts.next()?.trim().to_string();
+                            if screen_txt.to_lowercase().contains(&keyword) {
+                                Some(action)
+                            } else { None }
+                        }).collect();
+                    fired += watch_jobs.len() as u32;
+                    for action in watch_jobs {
+                        s.pending_shell.push_back(ShellJob {
+                            id:      format!("watch_{}", now),
+                            cmd:     format!("__ai_chat__:{}", action),
+                            timeout: 30_000,
+                            created: now,
+                        });
                     }
                 }
             }
@@ -4684,7 +4685,7 @@ You are executing a multi-step task autonomously.
             let total    = s.memory_index.len();
             let pinned   = s.memory_index.iter().filter(|e| e.access_count > 5).count();
             let recent   = s.memory_index.iter()
-                .filter(|e| now_ms().saturating_sub(
+                .filter(|_e| now_ms().saturating_sub(
                     s.context_turns.iter().map(|_| now_ms()).next().unwrap_or(0)) < 86_400_000)
                 .count();
             let top: Vec<String> = {

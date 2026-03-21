@@ -2,25 +2,30 @@ package com.kira.service.ai;
 
 import android.content.Context;
 import android.util.Log;
-import com.kira.service.RustBridge;
-import com.kira.service.ShizukuShell;
 
-/**
- * KiraAI — Session D: thin Java wrapper over Rust /ai/chat engine.
- *
- * All AI logic (history, system prompt, LLM call, tool dispatch, memory)
- * now runs in Rust. This class:
- *   1. Calls RustBridge.chatSync() on a background thread
- *   2. Drains the shell job queue (for Shizuku/intent tools Rust can't call directly)
- *   3. Fires callbacks to update UI
- *
- * ~95% of original KiraAI.java (377 lines) is now in Rust state.rs + http.rs.
- */
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
 public class KiraAI {
-    private static final String TAG      = "KiraAI";
-    private static final int    MAX_STEPS = 10;
 
-    private final Context ctx;
+    private static final String TAG       = "KiraAI";
+    private static final int    MAX_HIST  = 40;
+    private static final int    MAX_ITER  = 5;
+
+    private final Context     ctx;
+    private final KiraMemory  memory;
+    private final KiraTools   tools;
+    private final List<JSONObject> history = new ArrayList<>();
+    private final KiraSkillEngine skillEngine;
 
     public interface Callback {
         void onThinking();
@@ -30,87 +35,343 @@ public class KiraAI {
     }
 
     public KiraAI(Context ctx) {
-        this.ctx = ctx.getApplicationContext();
-        // No initialization needed — Rust owns all state
+        this.ctx    = ctx.getApplicationContext();
+        this.memory = new KiraMemory(ctx);
+        this.skillEngine = new KiraSkillEngine(ctx);
+        skillEngine.loadCustomSkillsFromMemory();
+        this.tools  = new KiraTools(ctx);
+        restoreHistory(); // load previous conversations on startup
+    }
+
+    // -- Restore history from persistent storage -------------------------------
+
+    private void restoreHistory() {
+        try {
+            JSONArray saved = memory.loadHistory();
+            int start = Math.max(0, saved.length() - 10); // last 10 exchanges
+            for (int i = start; i < saved.length(); i++) {
+                JSONObject entry = saved.getJSONObject(i);
+                history.add(msg("user",      entry.getString("user")));
+                history.add(msg("assistant", entry.getString("kira")));
+            }
+            Log.i(TAG, "Restored " + history.size() + " messages from history");
+        } catch (Exception e) {
+            Log.e(TAG, "restoreHistory error", e);
+        }
+    }
+
+    // -- Main chat -------------------------------------------------------------
+
+
+    /**
+     * ZeroClaw: Get active provider base URL and model.
+     * Falls back to config if Rust server isn't running.
+     */
+    private String[] getActiveProvider() {
+        try {
+            okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build();
+            okhttp3.Response resp = client.newCall(
+                new okhttp3.Request.Builder().url("http://localhost:7070/providers").build()
+            ).execute();
+            if (resp.body() != null) {
+                org.json.JSONArray providers = new org.json.JSONArray(resp.body().string());
+                for (int i = 0; i < providers.length(); i++) {
+                    org.json.JSONObject p = providers.getJSONObject(i);
+                    if (p.optBoolean("active", false)) {
+                        String baseUrl = p.optString("base_url", "");
+                        String model   = p.optString("model", "");
+                        if (!baseUrl.isEmpty()) return new String[]{baseUrl, model};
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        // Fallback to config
+        KiraConfig cfg = KiraConfig.load(ctx);
+        return new String[]{
+            cfg.baseUrl.isEmpty() ? "https://api.groq.com/openai/v1" : cfg.baseUrl,
+            cfg.model.isEmpty()   ? "llama-3.1-8b-instant" : cfg.model
+        };
     }
 
     public void chat(String userMessage, Callback cb) {
         new Thread(() -> {
             try {
-                if (cb != null) cb.onThinking();
+                cb.onThinking();
+                history.add(msg("user", userMessage));
+                trimHistory();
 
-                // ── Single Rust call — runs entire AI turn ─────────────────
-                String resultJson = RustBridge.chatSync(userMessage, "default", MAX_STEPS);
+                String system = buildSystemPrompt();
+                String raw    = callLLM(system, history);
+                if (raw == null) { cb.onError("API call failed -- check your API key in settings"); return; }
 
-                // ── Drain shell job queue (Shizuku/intent tools) ───────────
-                drainShellQueue(cb);
+                history.add(msg("assistant", raw));
 
-                // ── Parse result ───────────────────────────────────────────
-                if (resultJson == null || resultJson.isEmpty()) {
-                    if (cb != null) cb.onError("no response from Rust engine");
+                List<ToolCall> toolCalls = parseTools(raw);
+                String reply = cleanReply(raw);
+
+                if (toolCalls.isEmpty()) {
+                    cb.onReply(reply);
+                    memory.storeConversation(userMessage, reply);
                     return;
                 }
 
-                String error = parseJsonStr(resultJson, "error");
-                if (!error.isEmpty()) {
-                    if (cb != null) cb.onError(error);
-                    return;
+                // Tool execution loop
+                int iter = 0;
+                while (!toolCalls.isEmpty() && iter < MAX_ITER) {
+                    iter++;
+                    StringBuilder results = new StringBuilder();
+                    for (ToolCall tc : toolCalls) {
+                        String result = tools.execute(tc.name, tc.args);
+                        results.append("[").append(tc.name).append("]: ").append(result).append("\n");
+                        cb.onTool(tc.name, result);
+                    }
+
+                    history.add(msg("user", "[tool results]\n" + results + "\nrespond to the user now."));
+                    cb.onThinking();
+                    raw = callLLM(system, history);
+                    if (raw == null) break;
+
+                    // Remove tool injection from history
+                    history.remove(history.size() - 1);
+                    history.add(msg("assistant", raw));
+
+                    toolCalls = parseTools(raw);
+                    reply = cleanReply(raw);
                 }
 
-                String reply      = parseJsonStr(resultJson, "content");
-                String toolsUsed  = parseJsonStr(resultJson, "tools_used");
-
-                if (!toolsUsed.isEmpty() && !toolsUsed.equals("[]") && cb != null) {
-                    cb.onTool("tools", toolsUsed);
-                }
-                if (cb != null) cb.onReply(reply.isEmpty() ? "done." : reply);
+                if (reply.isEmpty()) reply = "done.";
+                cb.onReply(reply);
+                memory.storeConversation(userMessage, reply);
 
             } catch (Exception e) {
                 Log.e(TAG, "chat error", e);
-                if (cb != null) cb.onError(e.getMessage());
+                cb.onError(e.getMessage());
             }
-        }, "KiraAI-Chat").start();
+        }).start();
     }
 
-    /** Execute pending shell jobs queued by Rust AI engine */
-    private void drainShellQueue(Callback cb) {
-        for (int i = 0; i < 20; i++) { // max 20 shell jobs per turn
+    // -- LLM call --------------------------------------------------------------
+
+    private String callLLM(String system, List<JSONObject> msgs) {
+        KiraConfig cfg = KiraConfig.load(ctx);
+        if (cfg.apiKey.isEmpty()) return "no API key -- go to settings and add one.";
+        // Use active provider (Rust-managed) with config fallback
+        String[] provider = getActiveProvider();
+        String activeUrl   = provider[0];
+        String activeModel = provider[1].isEmpty() ? cfg.model : provider[1];
+
+        for (int attempt = 0; attempt < 3; attempt++) {
             try {
-                String jobJson = RustBridge.getNextShellJob();
-                if (jobJson == null || jobJson.contains("\"empty\":true")) break;
+                JSONArray messages = new JSONArray();
 
-                String id  = parseJsonStr(jobJson, "id");
-                String cmd = parseJsonStr(jobJson, "cmd");
-                if (cmd.isEmpty()) break;
+                if (!isAnthropic(cfg) && system != null) {
+                    JSONObject sys = new JSONObject();
+                    sys.put("role", "system");
+                    sys.put("content", system);
+                    messages.put(sys);
+                }
+                for (JSONObject m : msgs) messages.put(m);
 
-                String result = ShizukuShell.isAvailable()
-                    ? ShizukuShell.exec(cmd, 10_000)
-                    : "shizuku_unavailable";
+                JSONObject body = new JSONObject();
+                body.put("model", activeModel);
+                body.put("max_tokens", getMaxTokens());
+                body.put("messages", messages);
+                if (isAnthropic(cfg) && system != null) body.put("system", system);
 
-                RustBridge.postShellResult(id, result != null ? result : "");
-                if (cb != null) cb.onTool(cmd.split(" ")[0], result != null ? result : "");
+                String endpoint = isAnthropic(cfg)
+                    ? activeUrl + "/messages"
+                    : activeUrl + "/chat/completions";
+
+                URL url = new URL(endpoint);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setConnectTimeout(30000);
+                conn.setReadTimeout(60000);
+                if (isAnthropic(cfg)) {
+                    conn.setRequestProperty("x-api-key", cfg.apiKey);
+                    conn.setRequestProperty("anthropic-version", "2023-06-01");
+                } else {
+                    conn.setRequestProperty("Authorization", "Bearer " + cfg.apiKey);
+                }
+                conn.setDoOutput(true);
+                conn.getOutputStream().write(body.toString().getBytes(StandardCharsets.UTF_8));
+
+                int code = conn.getResponseCode();
+                if (code == 429 && attempt < 2) {
+                    Thread.sleep(2000L * (attempt + 1));
+                    continue;
+                }
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    code >= 400 ? conn.getErrorStream() : conn.getInputStream(),
+                    StandardCharsets.UTF_8));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+
+                if (code >= 400) {
+                    return "API error " + code + ": " + sb.toString().substring(0, Math.min(200, sb.length()));
+                }
+
+                JSONObject resp = new JSONObject(sb.toString());
+                if (isAnthropic(cfg)) {
+                    return resp.getJSONArray("content").getJSONObject(0).getString("text");
+                } else {
+                    return resp.getJSONArray("choices").getJSONObject(0)
+                               .getJSONObject("message").getString("content");
+                }
 
             } catch (Exception e) {
-                Log.w(TAG, "shell job error: " + e.getMessage());
-                break;
+                Log.e(TAG, "LLM attempt " + attempt, e);
+                if (attempt == 2) return "connection error: " + e.getMessage();
             }
+        }
+        return null;
+    }
+
+    // -- Tool parsing ----------------------------------------------------------
+
+    private List<ToolCall> parseTools(String text) {
+        List<ToolCall> calls = new ArrayList<>();
+        int pos = 0;
+        while (pos < text.length()) {
+            int start = text.indexOf("<tool:", pos);
+            if (start == -1) break;
+            int nameEnd = text.indexOf(">", start);
+            if (nameEnd == -1) break;
+            String name = text.substring(start + 6, nameEnd);
+            int end = text.indexOf("</tool>", nameEnd);
+            if (end == -1) break;
+            String argsStr = text.substring(nameEnd + 1, end).trim();
+            try {
+                JSONObject args = argsStr.isEmpty() ? new JSONObject() : new JSONObject(argsStr);
+                calls.add(new ToolCall(name, args));
+            } catch (Exception e) {
+                calls.add(new ToolCall(name, new JSONObject()));
+            }
+            pos = end + 7;
+        }
+        return calls;
+    }
+
+    private String cleanReply(String text) {
+        return text.replaceAll("<tool:[\\s\\S]*?</tool>", "").trim();
+    }
+
+    // -- System prompt ---------------------------------------------------------
+
+    private String buildSystemPrompt() {
+        KiraConfig cfg = KiraConfig.load(ctx);
+        String memCtx  = memory.getContext();
+        String toolList = tools.getToolList();
+
+        return "You are Kira, " + cfg.userName + "'s AI agent on Android. Female. You CONTROL this phone.\n"
+            + "CRITICAL: To do ANYTHING on this phone you MUST use tools. Never say you did something without using a tool.\n"
+            + "Talk short, direct, lowercase. No emojis unless asked.\n\n"
+            + "PERSON: " + cfg.userName + "\n"
+            + "MEMORY: " + (memCtx.isEmpty() ? "nothing yet" : memCtx) + "\n\n"
+            + "AVAILABLE TOOLS:\n" + toolList + "\n"
+            + "TOOL SYNTAX -- you MUST use this exact format, no variations:\n"
+            + "<tool:TOOLNAME>{\"arg\": \"value\"}</tool>\n\n"
+            + "EXAMPLES -- study these carefully:\n"
+            + "open youtube: <tool:open_app>{\"package\": \"com.google.android.youtube\"}</tool>\n"
+            + "open whatsapp: <tool:open_app>{\"package\": \"com.whatsapp\"}</tool>\n"
+            + "open settings: <tool:open_app>{\"package\": \"com.android.settings\"}</tool>\n"
+            + "open chrome: <tool:open_app>{\"package\": \"com.android.chrome\"}</tool>\n"
+            + "tap at 540,1200: <tool:tap_screen>{\"x\": 540, \"y\": 1200}</tool>\n"
+            + "read screen: <tool:read_screen>{}</tool>\n"
+            + "run shell: <tool:sh_run>{\"cmd\": \"pm list packages\"}</tool>\n"
+            + "search web: <tool:web_search>{\"query\": \"weather today\"}</tool>\n"
+            + "send sms: <tool:send_sms>{\"number\": \"+1234\", \"message\": \"hi\"}</tool>\n"
+            + "battery: <tool:battery_info>{}</tool>\n"
+            + "remember: <tool:remember>{\"key\": \"name\", \"value\": \"Imran\"}</tool>\n\n"
+            + "RULES:\n"
+            + "1. ALWAYS use a tool tag when doing something. No tool = nothing happened.\n"
+            + "2. For open_app use exact package. If unsure run: <tool:sh_run>{\"cmd\": \"pm list packages | grep -i NAME\"}</tool>\n"
+            + "3. Never say 'I cannot'. Say what tool you need instead.\n"
+            + "4. For SMS/calls: confirm with user first.\n"
+            + "5. After opening app: verify with read_screen.\n";
+    }
+
+    // -- Helpers ---------------------------------------------------------------
+
+    private boolean isAnthropic(KiraConfig cfg) {
+        return cfg.baseUrl.contains("anthropic.com");
+    }
+
+    private int getMaxTokens() {
+        return 1024;
+    }
+
+    private void trimHistory() {
+        while (history.size() > MAX_HIST) history.remove(0);
+    }
+
+    private JSONObject msg(String role, String content) {
+        try {
+            JSONObject m = new JSONObject();
+            m.put("role", role);
+            m.put("content", content);
+            return m;
+        } catch (Exception e) { return new JSONObject(); }
+    }
+
+
+
+    // Single-turn chat without tool loop - for agent planning/reflection
+    public String simpleChat(String prompt) {
+        try {
+            KiraConfig cfg = KiraConfig.load(ctx);
+            org.json.JSONArray messages = new org.json.JSONArray();
+            org.json.JSONObject msg = new org.json.JSONObject();
+            msg.put("role", "user");
+            msg.put("content", prompt);
+            messages.put(msg);
+            org.json.JSONObject body = new org.json.JSONObject();
+            body.put("model", cfg.model.isEmpty() ? "llama-3.1-8b-instant" : cfg.model);
+            body.put("max_tokens", 500);
+            body.put("messages", messages);
+            String baseUrl = cfg.baseUrl.isEmpty() ? "https://api.groq.com/openai/v1" : cfg.baseUrl;
+            okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build();
+            okhttp3.Request req = new okhttp3.Request.Builder()
+                .url(baseUrl + "/chat/completions")
+                .addHeader("Authorization", "Bearer " + cfg.apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(okhttp3.RequestBody.create(body.toString(), okhttp3.MediaType.parse("application/json")))
+                .build();
+            okhttp3.Response resp = client.newCall(req).execute();
+            if (resp.body() == null) return "(no response)";
+            org.json.JSONObject respJson = new org.json.JSONObject(resp.body().string());
+            return respJson.getJSONArray("choices").getJSONObject(0)
+                .getJSONObject("message").getString("content");
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
         }
     }
 
-    // ── Minimal JSON parsing — no library needed ───────────────────────────
-
-    private static String parseJsonStr(String json, String key) {
-        String search = "\"" + key + "\":\"";
-        int start = json.indexOf(search);
-        if (start < 0) return "";
-        start += search.length();
-        int end = start;
-        while (end < json.length()) {
-            char c = json.charAt(end);
-            if (c == '"' && (end == 0 || json.charAt(end-1) != '\\')) break;
-            end++;
+    // Quick tool call without AI -- for direct Telegram commands
+    public String quickTool(String toolName, org.json.JSONObject args) {
+        try {
+            return tools.execute(toolName, args);
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
         }
-        return json.substring(start, end)
-            .replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+    }
+
+    public void clearHistory() {
+        history.clear();
+        memory.clearHistory();
+    }
+
+    public KiraMemory getMemory() { return memory; }
+
+    static class ToolCall {
+        final String name;
+        final JSONObject args;
+        ToolCall(String name, JSONObject args) { this.name = name; this.args = args; }
     }
 }

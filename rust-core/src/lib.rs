@@ -1,8 +1,3 @@
-use lz4_flex::{compress_prepend_size, decompress_size_prepended};
-
-#[macro_use]
-extern crate lazy_static;
-
 // Kira Rust Core v9 \u{2014} v40 edition
 //
 // NEW in v40 (Tasker/MacroDroid automation engine \u{2014} pure Rust):
@@ -19,7 +14,7 @@ extern crate lazy_static;
 //   - Macro import/export JSON
 //   - All v8/v38 features preserved
 
-#[allow(non_snake_case, dead_code, unused_mut, clippy::upper_case_acronyms)]
+#![allow(non_snake_case, dead_code, unused_mut, clippy::upper_case_acronyms)]
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
@@ -634,11 +629,6 @@ struct ThemeConfig {
     corner_radius_md:  u32,   // Medium component radius (card, button) dp
     corner_radius_lg:  u32,   // Large component radius (bottom sheet) dp
     corner_radius_xl:  u32,   // Extra large (dialog, nav drawer) dp
-    // ── Live animation state (polled by UI at 500ms) ─────────────────────────
-    animation_phase:   f32,   // 0.0–1.0, cycles with uptime (3s period)
-    pulse_bpm:         u32,   // 60=idle, 90=processing, 120=agent running
-    activity_level:    f32,   // 0.0–1.0, based on tool_calls in last 60s
-    is_thinking:       bool,  // Kira is currently processing a request
 }
 impl Default for ThemeConfig {
     fn default() -> Self {
@@ -678,11 +668,6 @@ impl Default for ThemeConfig {
             corner_radius_md: 16,
             corner_radius_lg: 24,
             corner_radius_xl: 28,
-            animation_phase:  0.0,
-            pulse_bpm:        60,
-            activity_level:   0.0,
-            is_thinking:      false,
-
         }
     }
 }
@@ -764,12 +749,6 @@ impl ThemeConfig {
             star_parallax_y:  0.0,
             theme_name:       String::from("material"),
             is_dark:          true,
-            // ── Animation state defaults ──────────────────────────────────
-            animation_phase:  0.0,
-            pulse_bpm:        60,
-            activity_level:   0.0,
-            is_thinking:      false,
-
         }
     }
 
@@ -821,12 +800,6 @@ impl ThemeConfig {
             star_parallax_y:  0.0,
             theme_name:       String::from("material_light"),
             is_dark:          false,
-            // ── Animation state defaults ──────────────────────────────────
-            animation_phase:  0.0,
-            pulse_bpm:        60,
-            activity_level:   0.0,
-            is_thinking:      false,
-
         }
     }
 
@@ -874,18 +847,12 @@ impl ThemeConfig {
             star_parallax_y:  0.0,
             theme_name:       String::from("catppuccin_mocha"),
             is_dark:          true,
-            // ── Animation state defaults ──────────────────────────────────
-            animation_phase:  0.0,
-            pulse_bpm:        60,
-            activity_level:   0.0,
-            is_thinking:      false,
-
         }
     }
 
     fn to_json(&self) -> String {
         format!(
-            r#"{{"name":"{}","accent":{},"bg":{},"card":{},"muted":{},"surface":{},"on_surface":{},"on_accent":{},"surface_var":{},"outline":{},"error":{},"is_dark":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6},"secondary":{},"on_secondary":{},"tertiary":{},"on_tertiary":{},"surface2":{},"surface3":{},"surface5":{},"outline_var":{},"success":{},"warning":{},"scrim":{},"ripple":{},"corner_sm":{},"corner_md":{},"corner_lg":{},"corner_xl":{},"animation_phase":{:.6},"pulse_bpm":{},"activity_level":{:.6},"is_thinking":{}}}"#,
+            r#"{{"name":"{}","accent":{},"bg":{},"card":{},"muted":{},"surface":{},"on_surface":{},"on_accent":{},"surface_var":{},"outline":{},"error":{},"is_dark":{},"star_count":{},"parallax_x":{:.6},"parallax_y":{:.6},"secondary":{},"on_secondary":{},"tertiary":{},"on_tertiary":{},"surface2":{},"surface3":{},"surface5":{},"outline_var":{},"success":{},"warning":{},"scrim":{},"ripple":{},"corner_sm":{},"corner_md":{},"corner_lg":{},"corner_xl":{}}}"#,
             self.theme_name,
             self.accent_color, self.bg_color, self.card_color, self.muted_color,
             self.surface_color, self.on_surface_color, self.on_accent_color,
@@ -899,9 +866,7 @@ impl ThemeConfig {
             self.success_color, self.warning_color,
             self.scrim_color, self.ripple_color,
             self.corner_radius_sm, self.corner_radius_md,
-            self.corner_radius_lg, self.corner_radius_xl,
-            self.animation_phase, self.pulse_bpm,
-            self.activity_level, self.is_thinking
+            self.corner_radius_lg, self.corner_radius_xl
         )
     }
 }
@@ -937,54 +902,6 @@ struct ShizukuStatus {
 // Core State
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
-/// A Telegram message to be sent (queued for Java to execute)
-
-/// A received Telegram message
-
-
-#[derive(Clone)]
-struct CrashEntry {
-    ts:      u128,
-    thread:  String,
-    message: String,   // first line of trace
-    trace:   String,   // full stack trace (capped at 4KB)
-}
-
-#[derive(Default, Clone)]
-pub struct ShellJob {
-    pub id:      String,
-    pub cmd:     String,
-    pub timeout: u64,
-    pub created: u128,
-}
-
-#[derive(Clone, Default)]
-pub struct TgSend {
-    pub chat_id: i64,
-    pub text:    String,
-    pub ts:      u128,
-}
-
-#[derive(Clone, Default)]
-pub struct TgMessage {
-    pub update_id: i64,
-    pub chat_id:   i64,
-    pub user:      String,
-    pub text:      String,
-    pub ts:        u128,
-}
-
-#[derive(Clone, Default)]
-pub struct AgentTask {
-    pub id:           String,
-    pub goal:         String,
-    pub status:       String,  // "running" | "done" | "stopped" | "cancelled"
-    pub current_step: usize,
-    pub max_steps:    usize,
-    pub created_ms:   u128,
-}
-
-
 #[derive(Default)]
 struct KiraState {
     // Device
@@ -992,7 +909,6 @@ struct KiraState {
     screen_pkg:        String,
     battery_pct:       i32,
     battery_charging:  bool,
-    foreground_pkg:    String,   // current foreground app package
 
     // Notifications
     notifications:     VecDeque<Notif>,
@@ -1016,10 +932,6 @@ struct KiraState {
 
     // Context
     context_turns:     VecDeque<ContextTurn>,
-    // ── Session B: LZ4-compressed history buffer ─────────────────────────
-    // Stores turns as LZ4-compressed bytes: 4-6x smaller than raw String.
-    // Used by /ai/chat to load context without decompressing all history.
-    context_turns_lz4: VecDeque<Vec<u8>>,
     context_compact:   String,
     agent_context:     String,
     total_tokens:      u64,
@@ -1079,16 +991,6 @@ struct KiraState {
 
     // Stats
     uptime_start:      u128,
-    crash_log:         std::collections::VecDeque<CrashEntry>,  // last 50 crashes
-    // ── Session D: shell command queue ─────────────────────────────────────
-    pending_shell:     std::collections::VecDeque<ShellJob>,
-    shell_results:     std::collections::HashMap<String, String>,
-    // ── Session E: agent task log ─────────────────────────────────────────
-    agent_tasks:       std::collections::VecDeque<AgentTask>,
-    // ── Session F: Telegram state ─────────────────────────────────────────
-    tg_last_update_id: i64,
-    tg_pending_sends:  std::collections::VecDeque<TgSend>,   // queued for Java to send
-    tg_message_log:    std::collections::VecDeque<TgMessage>, // last 50 received
     // HTTP auth secret (empty = localhost-only open access)
     http_secret:       String,
     request_count:     u64,
@@ -1184,53 +1086,9 @@ struct KbEntry { id:String, title:String, content:String, tags:Vec<String>, ts:u
 struct EventFeedEntry { event:String, data:String, ts:u128 }
 struct Notif { pkg:String, title:String, text:String, time:u128 }
 
-// ── LZ4 compression helpers for conversation history (Session B) ──────────
-
-/// Compress a conversation turn into LZ4 bytes.
-/// Format: "role\x00content" → lz4_prepend_size(bytes)
-pub fn lz4_pack_turn(role: &str, content: &str) -> Vec<u8> {
-    let raw = format!("{}\x00{}", role, content);
-    compress_prepend_size(raw.as_bytes())
-}
-
-/// Decompress a single turn. Returns (role, content) or None on error.
-pub fn lz4_unpack_turn(compressed: &[u8]) -> Option<(String, String)> {
-    let raw = decompress_size_prepended(compressed).ok()?;
-    let s   = String::from_utf8(raw).ok()?;
-    let mut parts = s.splitn(2, '\x00');
-    let role    = parts.next()?.to_string();
-    let content = parts.next()?.to_string();
-    Some((role, content))
-}
-
-/// Push a turn to the compressed buffer, evicting oldest if over limit.
-/// Also evicts corresponding entry from context_turns to keep in sync.
-pub fn push_turn_compressed(state: &mut KiraState, role: &str, content: &str) {
-    let packed = lz4_pack_turn(role, content);
-    state.context_turns_lz4.push_back(packed);
-    // Keep at most 40 compressed turns (~160KB raw → ~35KB compressed)
-    if state.context_turns_lz4.len() > 40 {
-        state.context_turns_lz4.pop_front();
-    }
-}
-
-/// Decompress all turns for use in an AI context window.
-/// Returns Vec of (role, content) pairs, oldest first.
-pub fn decompress_context(state: &KiraState) -> Vec<(String, String)> {
-    state.context_turns_lz4.iter()
-        .filter_map(|b| lz4_unpack_turn(b))
-        .collect()
-}
-
-/// Compressed size in bytes of the entire conversation buffer.
-pub fn compressed_context_bytes(state: &KiraState) -> usize {
-    state.context_turns_lz4.iter().map(|b| b.len()).sum()
-}
-
-lazy_static! {
+lazy_static::lazy_static! {
     static ref STATE: Arc<Mutex<KiraState>> = Arc::new(Mutex::new(KiraState {
         battery_pct:     100,
-        foreground_pkg:  String::new(),
         max_tool_iters:  20,
         active_session:  "default".to_string(),
         active_provider: "groq".to_string(),
@@ -1241,8 +1099,7 @@ lazy_static! {
         setup:   SetupState::default(),
         shizuku: ShizukuStatus::default(),
         ..Default::default()
-    
-        }));
+    }));
 }
 
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
@@ -1733,348 +1590,20 @@ fn action_to_json(a: &MacroAction) -> String {
 // JNI Bridge
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session D — AI engine helpers (called by /ai/chat route)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-/// Shell job queued for Java to execute via Shizuku
-
-/// Build the system prompt for the AI, including memory context
-pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
-    let mem_context: String = state.memory_index.iter().take(5)
-        .map(|m| format!("- {}", m.value))
-        .collect::<Vec<_>>().join("\n");
-
-    let tools_list = "[get_battery, get_wifi, run_shell, read_file, write_file, \
-        list_files, add_memory, search_memory, http_get, http_post, \
-        open_app, send_message, set_variable, get_variable, run_macro]";
-
-    format!(
-        "{}\n\nAvailable tools (call with <tool name=\"x\"><param k=\"v\"/></tool>):\n{}\
-        \n\nUser memories:\n{}\n\nBe concise. Use tools when helpful.",
-        persona, tools_list,
-        if mem_context.is_empty() { "(none yet)".into() } else { mem_context }
-    )
-}
-
-/// Synchronous LLM call via std::net::TcpStream (OpenAI-compatible).
-/// Returns the raw assistant response or an error message.
-pub fn call_llm_sync(
-    api_key:    &str,
-    base_url:   &str,
-    model:      &str,
-    system:     &str,
-    history:    &[(String, String)],
-) -> Result<String, String> {
-    // Build messages JSON (Session K: HTTP I/O now in https_post)
-    let mut msgs = Vec::new();
-    if !system.is_empty() {
-        msgs.push(format!(r#"{{"role":"system","content":"{}"}}"#, esc(system)));
-    }
-    for (role, content) in history {
-        msgs.push(format!(r#"{{"role":"{}","content":"{}"}}"#, esc(role), esc(content)));
-    }
-    let messages_json = msgs.join(",");
-
-    let body = format!(
-        r#"{{"model":"{}","max_tokens":2048,"messages":[{}]}}"#,
-        esc(model), messages_json
-    );
-
-    // Parse base_url → host, port, path
-    let url_clean = base_url.trim_end_matches('/');
-    let (host, port, base_path) = parse_api_url(url_clean)?;
-    let path = format!("{}/chat/completions", base_path.trim_end_matches('/'));
-
-    // Use rustls HTTPS (Session K) — pure Rust, no Java round-trip needed
-    // Falls back to plain TCP for http:// endpoints (e.g. localhost, LAN providers)
-    let response_body = if port == 443 || base_url.starts_with("https://") {
-        https_post(&host, port, &path, &body, api_key, 60)?
-    } else {
-        // Plain HTTP (local providers, self-hosted)
-        use std::io::{Write, BufRead, BufReader};
-        let addr = format!("{}:{}", host, port);
-        let mut stream = std::net::TcpStream::connect(&addr)
-            .map_err(|e| format!("connect {}: {}", addr, e))?;
-        stream.set_read_timeout(Some(std::time::Duration::from_secs(60)))
-            .map_err(|e| e.to_string())?;
-        let request = format!(
-            "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\n             Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-            path, host, api_key, body.len(), body
-        );
-        stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
-        let mut reader = BufReader::new(stream);
-        let _buf = String::new();
-        let mut in_body = false; let mut body_buf = String::new();
-        loop {
-            let mut line = String::new();
-            match reader.read_line(&mut line) {
-                Ok(0) => break, Ok(_) => {
-                    if !in_body { if line == "\r\n" { in_body = true; } }
-                    else { body_buf.push_str(&line); }
-                } Err(_) => break,
-            }
-        }
-        body_buf
-    };
-
-    extract_llm_content(&response_body)
-        .ok_or_else(|| format!("parse error: {}",
-            &response_body[..response_body.len().min(200)]))
-}
-
-/// Parse base_url into (host, port, path)
-fn parse_api_url(url: &str) -> Result<(String, u16, String), String> {
-    let (scheme, rest) = if url.starts_with("https://") {
-        ("https", &url[8..])
-    } else if url.starts_with("http://") {
-        ("http", &url[7..])
-    } else {
-        return Err(format!("unknown scheme: {}", url));
-    };
-    let (host_port, path) = match rest.find('/') {
-        Some(i) => (&rest[..i], &rest[i..]),
-        None    => (rest, "/"),
-    };
-    let (host, port) = if let Some(i) = host_port.rfind(':') {
-        let p: u16 = host_port[i+1..].parse().unwrap_or(if scheme=="https" {443} else {80});
-        (host_port[..i].to_string(), p)
-    } else {
-        (host_port.to_string(), if scheme == "https" { 443u16 } else { 80u16 })
-    };
-    Ok((host, port, path.to_string()))
-}
-
-/// Extract the content string from OpenAI JSON response
-fn extract_llm_content(json: &str) -> Option<String> {
-    // Try multiple response formats from different LLM providers.
-    fn unescape(s: &str) -> String {
-        s.replace("\\n", "\n")
-         .replace("\\t", "\t")
-         .replace("\\\"", "\"")
-         .replace("\\\\", "\\")
-    }
-    fn extract_str(json: &str, key: &str) -> Option<String> {
-        let search = format!("\"{}\": \"", key);
-        let search2 = format!("\"{}\":\"", key);
-        let start = json.find(&search).map(|i| i + search.len())
-            .or_else(|| json.find(&search2).map(|i| i + search2.len()))?;
-        let bytes = json.as_bytes();
-        let mut end = start;
-        while end < bytes.len() {
-            if bytes[end] == b'"' && (end == 0 || bytes[end-1] != b'\\') { break; }
-            end += 1;
-        }
-        let s = &json[start..end];
-        if s.is_empty() { None } else { Some(unescape(s)) }
-    }
-
-    // 1. OpenAI / Groq / Together / LLaMA: {"choices":[{"message":{"content":"..."}}]}
-    if json.contains("\"choices\":[") {
-        // Find "content":"..." inside the first choice
-        if let Some(choice_start) = json.find("\"message\":{") {
-            if let Some(result) = extract_str(&json[choice_start..], "content") {
-                return Some(result);
-            }
-        }
-    }
-
-    // 2. Anthropic: {"content":[{"type":"text","text":"..."}]}
-    if json.contains("\"type\":\"text\"") {
-        if let Some(result) = extract_str(json, "text") {
-            return Some(result);
-        }
-    }
-
-    // 3. Gemini: {"candidates":[{"content":{"parts":[{"text":"..."}]}}]}
-    if json.contains("\"candidates\":[") {
-        if let Some(result) = extract_str(json, "text") {
-            return Some(result);
-        }
-    }
-
-    // 4. OpenRouter delta / streaming format: {"choices":[{"delta":{"content":"..."}}]}
-    if json.contains("\"delta\":{") {
-        if let Some(delta_start) = json.find("\"delta\":{") {
-            if let Some(result) = extract_str(&json[delta_start..], "content") {
-                return Some(result);
-            }
-        }
-    }
-
-    // 5. Generic fallbacks
-    extract_str(json, "content")
-        .or_else(|| extract_str(json, "text"))
-        .or_else(|| extract_str(json, "response"))
-        .or_else(|| extract_str(json, "message"))
-}
-
-/// Parse <tool name="x"><param k="v"/></tool> blocks from LLM output
-pub fn parse_tool_calls(text: &str) -> Vec<(String, std::collections::HashMap<String,String>)> {
-    let mut calls = Vec::new();
-    let mut rest = text;
-    while let Some(start) = rest.find("<tool ") {
-        rest = &rest[start..];
-        let end = match rest.find("</tool>") {
-            Some(i) => i + 7,
-            None    => break,
-        };
-        let block = &rest[..end];
-        // Extract name="..."
-        if let Some(name) = extract_attr(block, "name") {
-            let mut params = std::collections::HashMap::new();
-            // Extract <param k="..." v="..."/> or <param name="..." value="..."/>
-            let mut pb = block;
-            while let Some(pi) = pb.find("<param ") {
-                pb = &pb[pi..];
-                let pe = pb.find("/>").unwrap_or(pb.len());
-                let ptag = &pb[..pe+2];
-                let k = extract_attr(ptag, "k")
-                    .or_else(|| extract_attr(ptag, "name"))
-                    .unwrap_or_default();
-                let v = extract_attr(ptag, "v")
-                    .or_else(|| extract_attr(ptag, "value"))
-                    .unwrap_or_default();
-                if !k.is_empty() { params.insert(k, v); }
-                pb = &pb[pe+2..];
-            }
-            calls.push((name, params));
-        }
-        rest = &rest[end..];
-    }
-    calls
-}
-
-fn extract_attr(s: &str, attr: &str) -> Option<String> {
-    let key = format!("{}=\"", attr);
-    let start = s.find(&key)? + key.len();
-    let end = s[start..].find('"')? + start;
-    Some(s[start..end].to_string())
-}
-
-/// Remove <tool>...</tool> blocks from LLM output to get clean reply
-pub fn clean_reply(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(start) = rest.find("<tool ") {
-        out.push_str(&rest[..start]);
-        match rest.find("</tool>") {
-            Some(end) => rest = &rest[end+7..],
-            None      => { rest = ""; break; }
-        }
-    }
-    out.push_str(rest);
-    out.trim().to_string()
-}
-
-/// Dispatch a tool call — pure Rust tools execute here,
-/// Shizuku/intent tools are queued for Java via /shell/next
-pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,String>) -> String {
-    match name {
-        "add_memory" => {
-            let content = params.get("content").cloned().unwrap_or_default();
-            if content.is_empty() { return "error: content required".into(); }
-            let mut s = STATE.lock().unwrap();
-            let idx = s.memory_index.len();
-            s.memory_index.push(MemoryEntry { key: format!("mem_{}", idx), value: content.clone(), tags: vec![], ts: now_ms(), relevance: 1.0, access_count: 0 });
-            format!("memory added: {}", &content[..content.len().min(50)])
-        }
-        "search_memory" => {
-            let query = params.get("query").cloned().unwrap_or_default();
-            search_memory(&query)
-        }
-        "get_variable" => {
-            let key = params.get("key").cloned().unwrap_or_default();
-            let s = STATE.lock().unwrap();
-            s.variables.get(&key).map(|v| v.value.clone()).unwrap_or_else(|| "not found".into())
-        }
-        "set_variable" => {
-            let key = params.get("key").cloned().unwrap_or_default();
-            let val = params.get("value").cloned().unwrap_or_default();
-            { let mut s = STATE.lock().unwrap();
-                let ts = now_ms();
-                s.variables.entry(key.clone()).and_modify(|v| v.value = val.clone())
-                    .or_insert(AutoVariable { name: key.clone(), value: val.clone(),
-                        var_type: "string".to_string(), persistent: false, created_ms: ts, updated_ms: ts });
-            }
-            format!("set {} = {}", key, val)
-        }
-        "get_battery" => {
-            let s = STATE.lock().unwrap();
-            format!("{}% {}", s.battery_pct,
-                if s.battery_charging { "charging" } else { "not charging" })
-        }
-        "get_wifi" => {
-            let s = STATE.lock().unwrap();
-            if !s.sig_wifi_ssid.is_empty() {
-                format!("connected: {}", s.sig_wifi_ssid)
-            } else { "disconnected".into() }
-        }
-        // Shell, file, and intent tools: queue for Java
-        "run_shell" | "open_app" | "read_file" | "write_file" | "list_files" |
-        "http_get"  | "http_post" => {
-            // Return a sentinel — /ai/chat will queue a ShellJob
-            // Java executes and result comes back via /shell/result
-            format!("__shell__:{}", name)
-        }
-        _ => format!("unknown tool: {}", name),
-    }
-}
-
 mod jni_bridge {
     use super::*;
     use std::ffi::{CStr, CString};
-    use std::os::raw::{c_char, c_void};
+    use std::os::raw::c_char;
 
-    // ── JNI type aliases ──────────────────────────────────────────────────
-    type JNIEnv  = *mut *mut c_void;   // JNIEnv**
-    type JObject = *mut c_void;         // jobject
-    type JString = *mut c_void;         // jstring (IS a JVM object reference)
-
-    /// Convert a raw *const c_char (from Java) to a Rust String.
     fn cs(p: *const c_char) -> String {
         if p.is_null() { return String::new(); }
         unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() }
     }
 
-    /// Length-bounded, safe version of cs() for untrusted JNI input (Session L).
-    /// Rejects strings over max_len bytes with an empty string + log.
-    fn cs_safe(p: *const c_char, max_len: usize) -> String {
-        if p.is_null() { return String::new(); }
-        let s = unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() };
-        if s.len() > max_len {
-            // Truncate rather than reject — avoids Java crash on oversized input
-            return s[..max_len].to_string();
-        }
-        s
-    }
-
-    /// Create a JVM-managed jstring from a Rust &str.
-    /// Uses jni crate for safe, correct NewStringUTF call.
-    /// Falls back to manual vtable[169] if env is null.
-    unsafe fn jni_str(env: JNIEnv, s: &str) -> JString {
-        use jni::JNIEnv as SafeEnv;
-        // jni crate wraps env pointer safely
-        if env.is_null() {
-            return std::ptr::null_mut();
-        }
-        let mut safe_env = SafeEnv::from_raw(env as *mut jni::sys::JNIEnv)
-            .expect("invalid JNIEnv");
-        match safe_env.new_string(s) {
-            Ok(jstr) => jstr.into_raw() as JString,
-            Err(_)   => {
-                // Fallback: empty string
-                safe_env.new_string("").map(|j| j.into_raw() as JString)
-                    .unwrap_or(std::ptr::null_mut())
-            }
-        }
-    }
-
     // \u{2500}\u{2500} Lifecycle \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_startServer(
-        _e: JNIEnv, _c: JObject, port: i32,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, port: i32,
     ) {
         let p = port as u16;
         {
@@ -2104,52 +1633,52 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOn(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { STATE.lock().unwrap().sig_screen_on = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOff(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { STATE.lock().unwrap().sig_screen_off = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalUnlocked(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { STATE.lock().unwrap().sig_device_unlocked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocked(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { STATE.lock().unwrap().sig_device_locked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalShake(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { STATE.lock().unwrap().sig_shake = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeUp(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { STATE.lock().unwrap().sig_vol_up = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeDown(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { STATE.lock().unwrap().sig_vol_down = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalWifi(
-        _e: JNIEnv, _c: JObject, ssid: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, ssid: *const c_char,
     ) { STATE.lock().unwrap().sig_wifi_ssid = cs(ssid); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalBluetooth(
-        _e: JNIEnv, _c: JObject, device: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, device: *const c_char,
     ) { STATE.lock().unwrap().sig_bt_device = cs(device); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalSms(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         sender: *const c_char, text: *const c_char,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -2159,32 +1688,32 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalCall(
-        _e: JNIEnv, _c: JObject, number: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, number: *const c_char,
     ) { STATE.lock().unwrap().sig_call_number = cs(number); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalNfc(
-        _e: JNIEnv, _c: JObject, tag_id: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, tag_id: *const c_char,
     ) { STATE.lock().unwrap().sig_nfc_tag = cs(tag_id); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalClipboard(
-        _e: JNIEnv, _c: JObject, text: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, text: *const c_char,
     ) { STATE.lock().unwrap().sig_clipboard = cs(text); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppLaunched(
-        _e: JNIEnv, _c: JObject, pkg: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pkg: *const c_char,
     ) { STATE.lock().unwrap().sig_app_launched = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppClosed(
-        _e: JNIEnv, _c: JObject, pkg: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pkg: *const c_char,
     ) { STATE.lock().unwrap().sig_app_closed = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocation(
-        _e: JNIEnv, _c: JObject, lat: f64, lon: f64, geofence: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, lat: f64, lon: f64, geofence: *const c_char,
     ) {
         let mut s = STATE.lock().unwrap();
         s.sig_lat      = lat;
@@ -2194,7 +1723,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalKiraEvent(
-        _e: JNIEnv, _c: JObject, event: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, event: *const c_char,
     ) { STATE.lock().unwrap().sig_kira_event = cs(event); }
 
     // \u{2500}\u{2500} v40: Macro management JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
@@ -2202,20 +1731,20 @@ mod jni_bridge {
     /// Add or replace a macro. Body is full macro JSON.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addMacro(
-        env: JNIEnv, _c: JObject, json: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) -> *mut c_char {
         let body = cs(json);
         let m = parse_macro_from_json(&body);
         let mut s = STATE.lock().unwrap();
         s.macros.retain(|x| x.id != m.id);
         let id = m.id.clone();
         s.macros.push(m);
-        unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, id)) }
+        CString::new(format!(r#"{{"ok":true,"id":"{}"}}"#, id)).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_removeMacro(
-        _e: JNIEnv, _c: JObject, id: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
     ) {
         let id = cs(id);
         STATE.lock().unwrap().macros.retain(|m| m.id != id);
@@ -2223,7 +1752,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_enableMacro(
-        _e: JNIEnv, _c: JObject, id: *const c_char, enabled: bool,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char, enabled: bool,
     ) {
         let id = cs(id);
         if let Some(m) = STATE.lock().unwrap().macros.iter_mut().find(|m| m.id == id) {
@@ -2233,17 +1762,17 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacros(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.macros.iter().map(macro_to_json).collect();
-        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
+        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runMacroNow(
-        env: JNIEnv, _c: JObject, id: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
+    ) -> *mut c_char {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
         let actions: Vec<MacroAction> = s.macros.iter()
@@ -2262,14 +1791,14 @@ mod jni_bridge {
             success:true, steps_run:steps, duration_ms:now_ms()-start, ts:start, error:String::new()
         });
         if s.macro_run_log.len() > 1000 { s.macro_run_log.pop_front(); }
-        unsafe { jni_str(env, &format!(r#"{{"ok":true,"steps":{}}}"#, steps)) }
+        CString::new(format!(r#"{{"ok":true,"steps":{}}}"#, steps)).unwrap_or_default().into_raw()
     }
 
     /// Get next pending macro action for Java to execute
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextMacroAction(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         match STATE.lock().unwrap().pending_actions.pop_front() {
             Some(pa) => {
                 let params_json: Vec<String> = pa.params.iter()
@@ -2278,7 +1807,7 @@ mod jni_bridge {
                     r#"{{"macro_id":"{}","action_id":"{}","kind":"{}","ts":{},"params":{{{}}}}}"#,
                     esc(&pa.macro_id), esc(&pa.action_id), esc(&pa.kind), pa.ts, params_json.join(",")
                 );
-                unsafe { jni_str(env, &json) }
+                CString::new(json).unwrap_or_default().into_raw()
             }
             None => std::ptr::null_mut(),
         }
@@ -2288,7 +1817,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setVariable(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         name: *const c_char, value: *const c_char, var_type: *const c_char,
     ) {
         let name = cs(name); let value = cs(value); let vt = cs(var_type);
@@ -2300,33 +1829,33 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getVariable(
-        env: JNIEnv, _c: JObject, name: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, name: *const c_char,
+    ) -> *mut c_char {
         let name = cs(name);
         let s = STATE.lock().unwrap();
         let json = match s.variables.get(&name) {
             Some(v) => format!(r#"{{"name":"{}","value":"{}","type":"{}"}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type)),
             None    => r#"{"error":"not_found"}"#.to_string(),
         };
-        unsafe { jni_str(env, &json) }
+        CString::new(json).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getVariables(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.variables.values().map(|v|
             format!(r#"{{"name":"{}","value":"{}","type":"{}","updated_ms":{}}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type), v.updated_ms)
         ).collect();
-        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
+        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
     // \u{2500}\u{2500} v40: Profile management \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setProfile(
-        _e: JNIEnv, _c: JObject, id: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
     ) {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
@@ -2337,75 +1866,66 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getProfiles(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.profiles.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","active":{}}}"#, esc(&p.id), esc(&p.name), p.active)
         ).collect();
-        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
+        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacroRunLog(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.macro_run_log.iter().skip(s.macro_run_log.len().saturating_sub(100)).map(|r|
             format!(r#"{{"macro_id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"duration_ms":{},"ts":{}}}"#,
                 esc(&r.macro_id), esc(&r.macro_name), esc(&r.trigger), r.success, r.steps_run, r.duration_ms, r.ts)
         ).collect();
-        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
+        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
     // \u{2500}\u{2500} v38 JNI (unchanged) \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_syncConfig(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         user_name:*const c_char, api_key:*const c_char, base_url:*const c_char,
         model:*const c_char, vision_model:*const c_char, persona:*const c_char,
         tg_token:*const c_char, tg_allowed:i64, max_steps:i32, auto_approve:bool,
         heartbeat:i32, setup_done:bool,
     ) {
         let mut s = STATE.lock().unwrap();
-        // Only overwrite non-empty values — prevents cold-start race where
-        // Java reads prefs before Rust has loaded and wipes the stored key.
-        let v_user   = cs(user_name);
-        let v_key    = cs(api_key);
-        let v_url    = cs(base_url);
-        let v_model  = cs(model);
-        let v_vision = cs(vision_model);
-        let v_persona= cs(persona);
-        let v_tg     = cs(tg_token);
-        if !v_user.is_empty()   { s.config.user_name    = v_user; }
-        if !v_key.is_empty()    { s.config.api_key      = v_key; }
-        if !v_url.is_empty()    { s.config.base_url     = v_url; }
-        if !v_model.is_empty()  { s.config.model        = v_model; }
-        if !v_vision.is_empty() { s.config.vision_model = v_vision; }
-        if !v_persona.is_empty(){ s.config.persona      = v_persona; }
-        if !v_tg.is_empty()     { s.config.tg_token     = v_tg; }
-        if tg_allowed > 0       { s.config.tg_allowed   = tg_allowed; }
-        if max_steps > 0        { s.config.agent_max_steps = max_steps as u32; }
+        s.config.user_name          = cs(user_name);
+        s.config.api_key            = cs(api_key);
+        s.config.base_url           = cs(base_url);
+        s.config.model              = cs(model);
+        s.config.vision_model       = cs(vision_model);
+        s.config.persona            = cs(persona);
+        s.config.tg_token           = cs(tg_token);
+        s.config.tg_allowed         = tg_allowed;
+        s.config.agent_max_steps    = max_steps as u32;
         s.config.agent_auto_approve = auto_approve;
-        if heartbeat > 0        { s.config.heartbeat_interval = heartbeat as u32; }
-        if setup_done           { s.config.setup_done = true; }
+        s.config.heartbeat_interval = heartbeat as u32;
+        s.config.setup_done         = setup_done;
         let bu = s.config.base_url.clone();
         if let Some(p) = s.providers.iter().find(|p| p.base_url == bu) { s.active_provider = p.id.clone(); }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getConfig(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let json = config_to_json(&s.config);
-        unsafe { jni_str(env, &json) }
+        CString::new(json).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateSetupPage(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         page:i32, api_key:*const c_char, base_url:*const c_char,
         model:*const c_char, user_name:*const c_char, tg_token:*const c_char, tg_id:i64,
     ) {
@@ -2421,17 +1941,17 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_completeSetup(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) { let mut s = STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_isSetupDone(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
     ) -> bool { STATE.lock().unwrap().config.setup_done }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setCustomProvider(
-        _e: JNIEnv, _c: JObject, url:*const c_char, model:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, url:*const c_char, model:*const c_char,
     ) {
         let url=cs(url); let model=cs(model);
         let mut s = STATE.lock().unwrap();
@@ -2445,8 +1965,8 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setActiveProvider(
-        env: JNIEnv, _c: JObject, provider_id:*const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, provider_id:*const c_char,
+    ) -> *mut c_char {
         let id=cs(provider_id);
         let mut s = STATE.lock().unwrap();
         let found=s.providers.iter().find(|p| p.id==id).cloned();
@@ -2454,23 +1974,23 @@ mod jni_bridge {
             s.active_provider=id; s.config.base_url=p.base_url.clone(); s.config.model=p.model.clone();
             format!(r#"{{"ok":true,"id":"{}","base_url":"{}","model":"{}"}}"#, esc(&s.active_provider),esc(&p.base_url),esc(&p.model))
         } else { format!(r#"{{"error":"unknown provider {}"}}"#, esc(&id)) };
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getProviders(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.providers.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)
         ).collect();
-        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
+        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateShizukuStatus(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         installed:bool, permission_granted:bool, error_msg:*const c_char,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -2480,15 +2000,15 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getShizukuJson(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
-        unsafe { jni_str(env, &shizuku_to_json(&s.shizuku)) }
+        CString::new(shizuku_to_json(&s.shizuku)).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateTilt(
-        _e: JNIEnv, _c: JObject, ax:f32, ay:f32,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, ax:f32, ay:f32,
     ) {
         let mut s = STATE.lock().unwrap();
         s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay;
@@ -2499,23 +2019,23 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getStarParallax(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
-        unsafe { jni_str(env, &format!(r#"{{"px":{:.6},"py":{:.6},"ax":{:.4},"ay":{:.4}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y,s.theme.star_tilt_x,s.theme.star_tilt_y)) }
+        CString::new(format!(r#"{{"px":{:.6},"py":{:.6},"ax":{:.4},"ay":{:.4}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y,s.theme.star_tilt_x,s.theme.star_tilt_y)).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getTheme(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
-        unsafe { jni_str(env, &s.theme.to_json()) }
+        CString::new(s.theme.to_json()).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setTheme(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         name: *const c_char,
     ) {
         let name = unsafe { std::ffi::CStr::from_ptr(name).to_str().unwrap_or("catppuccin_mocha") };
@@ -2531,10 +2051,10 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getStatsJson(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
-        { let _s = format!(
+        CString::new(format!(
             r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"profiles":{},"active_profile":"{}","variables":{}}}"#,
             s.memory_index.len(), s.context_turns.len(),
             if s.shizuku.permission_granted{"active \u{2713}"} else if s.shizuku.installed{"no permission"} else{"not running"},
@@ -2543,14 +2063,14 @@ mod jni_bridge {
             now_ms().saturating_sub(s.uptime_start),
             s.macros.len(), s.profiles.len(), esc(&s.active_profile),
             s.variables.len()
-        ); unsafe { jni_str(env, &_s) } }
+        )).unwrap_or_default().into_raw()
     }
 
     // \u{2500}\u{2500} v7 JNI (unchanged) \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushNotification(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         pkg:*const c_char, title:*const c_char, text:*const c_char,
     ) {
         let (pkg,title,text) = (cs(pkg),cs(title),cs(text));
@@ -2565,12 +2085,12 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenNodes(
-        _e: JNIEnv, _c: JObject, json:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json:*const c_char,
     ) { STATE.lock().unwrap().screen_nodes = cs(json); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenPackage(
-        _e: JNIEnv, _c: JObject, pkg:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pkg:*const c_char,
     ) {
         let pkg = cs(pkg);
         let mut s = STATE.lock().unwrap();
@@ -2584,7 +2104,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateBattery(
-        _e: JNIEnv, _c: JObject, pct:i32, charging:bool,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, pct:i32, charging:bool,
     ) {
         let mut s = STATE.lock().unwrap();
         let prev = s.battery_pct;
@@ -2594,12 +2114,12 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateAgentContext(
-        _e: JNIEnv, _c: JObject, ctx:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, ctx:*const c_char,
     ) { STATE.lock().unwrap().agent_context = cs(ctx); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushContextTurn(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         role:*const c_char, content:*const c_char,
     ) {
         let role=cs(role); let content=cs(content);
@@ -2609,15 +2129,13 @@ mod jni_bridge {
         let sess_id = s.active_session.clone();
         s.total_tokens += tokens as u64;
         s.daily_log.push_back(format!("[{}] {}: {}", ts, role, &content[..content.len().min(80)]));
-        // Also push compressed copy (Session B) — for memory-efficient context loading
-        push_turn_compressed(&mut s, &role, &content);
         s.context_turns.push_back(ContextTurn { role, content, ts, tokens, session:sess_id });
         if s.context_turns.len() > 60 { compact_context(&mut s); }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_indexMemory(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         key:*const c_char, value:*const c_char, tags:*const c_char,
     ) {
         let (key,value,tags_raw) = (cs(key),cs(value),cs(tags));
@@ -2635,7 +2153,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_storeCredential(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         name:*const c_char, value:*const c_char,
     ) {
         let name=cs(name); let value=cs(value);
@@ -2645,7 +2163,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_registerSkill(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         name:*const c_char, desc:*const c_char, trigger:*const c_char, content:*const c_char,
     ) {
         let name=cs(name);
@@ -2654,7 +2172,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addHeartbeatItem(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         id:*const c_char, check:*const c_char, action:*const c_char, interval_ms:i64,
     ) {
         let item = HeartbeatItem { id:cs(id), check:cs(check), action:cs(action), enabled:true, last_run:0, interval_ms:interval_ms as u128 };
@@ -2665,7 +2183,7 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_incrementToolIter(
-        _e: JNIEnv, _c: JObject, session_id:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, session_id:*const c_char,
     ) -> i32 {
         let id=cs(session_id);
         let mut s = STATE.lock().unwrap();
@@ -2677,12 +2195,12 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_resetToolIter(
-        _e: JNIEnv, _c: JObject, session_id:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, session_id:*const c_char,
     ) { STATE.lock().unwrap().tool_iterations.remove(&cs(session_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_logTaskStep(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         task_id:*const c_char, step:i32, action:*const c_char, result:*const c_char, success:bool,
     ) {
         let (tid,act,res) = (cs(task_id),cs(action),cs(result));
@@ -2695,58 +2213,58 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextCommand(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         match STATE.lock().unwrap().pending_cmds.pop_front() {
-            Some((id,body)) => unsafe { jni_str(env, &format!(r#"{{"id":"{}","body":{}}}"#, id, body)) },
+            Some((id,body)) => CString::new(format!(r#"{{"id":"{}","body":{}}}"#, id, body)).unwrap().into_raw(),
             None => std::ptr::null_mut(),
         }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushResult(
-        _e: JNIEnv, _c: JObject, id:*const c_char, result:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id:*const c_char, result:*const c_char,
     ) { STATE.lock().unwrap().results.insert(cs(id), cs(result)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextFiredTrigger(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         match STATE.lock().unwrap().fired_triggers.pop_front() {
-            Some(t) => unsafe { jni_str(env, &t.as_str()) },
+            Some(t) => CString::new(t).unwrap().into_raw(),
             None    => std::ptr::null_mut(),
         }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addTrigger(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         id:*const c_char, ttype:*const c_char, value:*const c_char, action:*const c_char, repeat:bool,
     ) { STATE.lock().unwrap().triggers.push(Trigger { id:cs(id), trigger_type:cs(ttype), value:cs(value), action:cs(action), fired:false, repeat }); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_removeTrigger(
-        _e: JNIEnv, _c: JObject, id:*const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id:*const c_char,
     ) { let id=cs(id); STATE.lock().unwrap().triggers.retain(|t| t.id!=id); }
 
     // \u{2500}\u{2500} OpenClaw v3 JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runDslScript(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         macro_id: *const c_char, script: *const c_char,
-    ) -> JString {
+    ) -> *mut c_char {
         let log = execute_dsl_script(&mut STATE.lock().unwrap(), &cs(macro_id), &cs(script));
         let log_json: Vec<String> = log.iter().map(|l| format!(r#""{}""#, esc(l))).collect();
-        unsafe { jni_str(env, &format!(r#"{{"ok":true,"log":[{}]}}"#, log_json.join(","))) }
+        CString::new(format!(r#"{{"ok":true,"log":[{}]}}"#, log_json.join(","))).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_rxSubscribe(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         id: *const c_char, name: *const c_char, event_kinds: *const c_char,
         target_macro: *const c_char, debounce_ms: i64, throttle_ms: i64, distinct: bool,
-    ) -> JString {
+    ) -> *mut c_char {
         let id   = cs(id); let name = cs(name);
         let kinds: Vec<String> = cs(event_kinds).split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
         let target = cs(target_macro);
@@ -2760,12 +2278,12 @@ mod jni_bridge {
             take_count: 0, skip_count: 0, last_value: String::new(), buffer: Vec::new(),
         };
         STATE.lock().unwrap().rx_subscriptions.push(sub);
-        unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
+        CString::new(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_rxPostEvent(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         kind: *const c_char, data: *const c_char,
     ) {
         let event = RxEvent { kind: cs(kind), data: cs(data), ts: now_ms(), source: "jni".to_string() };
@@ -2785,70 +2303,70 @@ mod jni_bridge {
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_channelPost(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         channel: *const c_char, message: *const c_char,
     ) { channel_post(&mut STATE.lock().unwrap(), &cs(channel), &cs(message)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_batteryDefer(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         macro_id: *const c_char, min_pct: i32,
     ) { defer_until_charged(&mut STATE.lock().unwrap(), &cs(macro_id), min_pct); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_exportBundle(
-        env: JNIEnv, _c: JObject, tag_filter: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, tag_filter: *const c_char,
+    ) -> *mut c_char {
         let tag = cs(tag_filter);
         let result = export_bundle(&STATE.lock().unwrap(), if tag.is_empty() { None } else { Some(&tag) });
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_fsmEvent(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         machine_id: *const c_char, event: *const c_char,
     ) { fsm_process_event(&mut STATE.lock().unwrap(), &cs(machine_id), &cs(event)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_freeString(
-        _e: JNIEnv, _c: JObject, s:*mut c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, s:*mut c_char,
     ) { if !s.is_null() { unsafe { drop(CString::from_raw(s)); } } }
 
     // \u{2500}\u{2500} OpenClaw / NanoBot / ZeroClaw extended JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_exportMacros(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let json = export_macros_json(&STATE.lock().unwrap());
-        unsafe { jni_str(env, &json) }
+        CString::new(json).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_importMacros(
-        _e: JNIEnv, _c: JObject, json: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
     ) { import_macros_json(&mut STATE.lock().unwrap(), &cs(json)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_chainMacro(
-        _e: JNIEnv, _c: JObject, target_id: *const c_char,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, target_id: *const c_char,
     ) { chain_macro(&mut STATE.lock().unwrap(), &cs(target_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_evalExpr(
-        env: JNIEnv, _c: JObject, expr: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, expr: *const c_char,
+    ) -> *mut c_char {
         let result = eval_expr(&STATE.lock().unwrap(), &cs(expr));
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_expandVars(
-        env: JNIEnv, _c: JObject, text: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, text: *const c_char,
+    ) -> *mut c_char {
         let result = expand_vars(&STATE.lock().unwrap(), &cs(text));
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     // \u{2500}\u{2500} Roubao / Open-AutoGLM VLM JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
@@ -2856,9 +2374,9 @@ mod jni_bridge {
     /// Start a new phone agent task. Returns {ok, task_id}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_startAgentTask(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         goal: *const c_char, max_steps: i32,
-    ) -> JString {
+    ) -> *mut c_char {
         let goal = cs(goal);
         let max_s = if max_steps > 0 { max_steps as u32 } else { 20 };
         let task_id = gen_id();
@@ -2882,24 +2400,24 @@ mod jni_bridge {
             current_step: 0, context: String::new(), result: String::new(),
             created_ms: now_ms(), last_step_ms: now_ms(),
         });
-        unsafe { jni_str(env, &format!(r#"{{"ok":true,"task_id":"{}"}}"#, esc(&task_id))) }
+        CString::new(format!(r#"{{"ok":true,"task_id":"{}"}}"#, esc(&task_id))).unwrap_or_default().into_raw()
     }
 
     /// Called by Java after VLM responds with action decision
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_processVlmStep(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         task_id: *const c_char, vlm_response: *const c_char,
-    ) -> JString {
+    ) -> *mut c_char {
         let task_id = cs(task_id); let vlm_resp = cs(vlm_response);
         let done = execute_vlm_step(&mut STATE.lock().unwrap(), &task_id, &vlm_resp);
-        unsafe { jni_str(env, &format!(r#"{{"ok":true,"done":{}}}"#, done)) }
+        CString::new(format!(r#"{{"ok":true,"done":{}}}"#, done)).unwrap_or_default().into_raw()
     }
 
     /// Called by Java after taking screenshot + getting VLM screen description
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_recordScreenObservation(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         task_id: *const c_char, step: i32, vlm_desc: *const c_char,
     ) {
         record_screen_observation(&mut STATE.lock().unwrap(), &cs(task_id), step as u32, &cs(vlm_desc));
@@ -2908,7 +2426,7 @@ mod jni_bridge {
     /// Set the AI-generated plan for a task
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setAgentPlan(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         task_id: *const c_char, plan_json: *const c_char,
     ) {
         let task_id = cs(task_id); let plan_str = cs(plan_json);
@@ -2928,9 +2446,9 @@ mod jni_bridge {
     /// Get current agent prompt for the AI call (Java reads this before calling AI)
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAgentPrompt(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         task_id: *const c_char,
-    ) -> JString {
+    ) -> *mut c_char {
         let task_id = cs(task_id);
         let s = STATE.lock().unwrap();
         let result = match s.phone_agent_tasks.iter().find(|t| t.id == task_id) {
@@ -2948,14 +2466,14 @@ Context: {}",
             }
             None => r#"{"error":"not found"}"#.to_string(),
         };
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     /// Get all agent tasks summary
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAgentTasks(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let items: Vec<String> = s.phone_agent_tasks.iter().map(|t| format!(
             r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"result":"{}"}}"#,
@@ -2969,29 +2487,29 @@ Context: {}",
             },
             t.current_step, esc(&t.result)
         )).collect();
-        unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
+        CString::new(format!("[{}]", items.join(","))).unwrap_or_default().into_raw()
     }
 
     // \u{2500}\u{2500} Roboru JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addFlow(
-        env: JNIEnv, _c: JObject, json: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) -> *mut c_char {
         let body = cs(json);
         if let Some(flow) = parse_flow_from_json(&body) {
             let id = flow.id.clone();
             STATE.lock().unwrap().roboru_flows.insert(id.clone(), flow);
-            unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
+            CString::new(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))).unwrap_or_default().into_raw()
         } else {
-            unsafe { jni_str(env, &r#"{"error":"invalid flow"}"#) }
+            CString::new(r#"{"error":"invalid flow"}"#).unwrap_or_default().into_raw()
         }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runFlow(
-        env: JNIEnv, _c: JObject, id: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
+    ) -> *mut c_char {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
         let flow = s.roboru_flows.get(&id).cloned();
@@ -3000,58 +2518,58 @@ Context: {}",
             if let Some(f) = s.roboru_flows.get_mut(&id) { f.run_count += 1; f.last_run_ms = now_ms(); }
             format!(r#"{{"ok":true,"steps":{}}}"#, steps)
         } else { format!(r#"{{"error":"not found: {}"}}"#, esc(&id)) };
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addKeyword(
-        env: JNIEnv, _c: JObject, json: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) -> *mut c_char {
         let body = cs(json);
         let result = if let Some(kw) = parse_keyword_from_json(&body) {
             let name = kw.name.clone();
             STATE.lock().unwrap().roboru_keywords.insert(name.clone(), kw);
             format!(r#"{{"ok":true,"name":"{}"}}"#, esc(&name))
         } else { r#"{"error":"invalid keyword"}"#.to_string() };
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runKeyword(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         name: *const c_char, args_json: *const c_char,
-    ) -> JString {
+    ) -> *mut c_char {
         let name = cs(name); let args_body = cs(args_json);
         let mut s = STATE.lock().unwrap();
         let kw = s.roboru_keywords.get(&name).cloned();
         let result = if let Some(kw) = kw {
-            let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name): (usize, &String)| {
+            let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name)| {
                 let val = extract_json_str(&args_body, &format!("arg{}", i)).unwrap_or_default();
                 (arg_name.clone(), val)
             }).collect();
             let r = execute_keyword(&mut s, &kw, &args);
             format!(r#"{{"ok":true,"result":"{}"}}"#, esc(&r))
         } else { format!(r#"{{"error":"keyword not found: {}"}}"#, esc(&name)) };
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_addPipeline(
-        env: JNIEnv, _c: JObject, json: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, json: *const c_char,
+    ) -> *mut c_char {
         let body = cs(json);
         let result = if let Some(p) = parse_pipeline_from_json(&body) {
             let id = p.id.clone();
             STATE.lock().unwrap().roboru_pipelines.insert(id.clone(), p);
             format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))
         } else { r#"{"error":"invalid pipeline"}"#.to_string() };
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_runPipeline(
-        env: JNIEnv, _c: JObject, id: *const c_char,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void, id: *const c_char,
+    ) -> *mut c_char {
         let id = cs(id);
         let mut s = STATE.lock().unwrap();
         let pipeline = s.roboru_pipelines.get(&id).cloned();
@@ -3061,28 +2579,28 @@ Context: {}",
             format!(r#"{{"ok":true,"steps":{},"errors":{}}}"#, steps,
                 format!("[{}]", errors.iter().map(|e| format!(r#""{}""#, esc(e))).collect::<Vec<_>>().join(",")))
         } else { format!(r#"{{"error":"pipeline not found: {}"}}"#, esc(&id)) };
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationAnalytics(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let json = get_automation_analytics(&STATE.lock().unwrap());
-        unsafe { jni_str(env, &json) }
+        CString::new(json).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationReport(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let report = get_automation_report(&STATE.lock().unwrap());
-        unsafe { jni_str(env, &report) }
+        CString::new(report).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_scheduleMacroDaily(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         macro_id: *const c_char, time_hhmm: *const c_char,
     ) {
         let id = cs(macro_id); let time = cs(time_hhmm);
@@ -3093,30 +2611,30 @@ Context: {}",
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_findMacroByName(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         name: *const c_char,
-    ) -> JString {
+    ) -> *mut c_char {
         let result = find_macro_by_name(&STATE.lock().unwrap(), &cs(name));
         let json = match result {
             Some(id) => format!(r#"{{"found":true,"id":"{}"}}"#, esc(&id)),
             None     => r#"{"found":false}"#.to_string(),
         };
-        unsafe { jni_str(env, &json) }
+        CString::new(json).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_resolveParam(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         param: *const c_char,
-    ) -> JString {
+    ) -> *mut c_char {
         let result = resolve_param(&STATE.lock().unwrap(), &cs(param));
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationStatus(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
         let s = STATE.lock().unwrap();
         let enabled = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
         let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
@@ -3126,7 +2644,7 @@ Context: {}",
             esc(&s.active_profile), s.pending_actions.len(),
             s.macro_run_log.len(), check_rate_limit(&s)
         );
-        unsafe { jni_str(env, &json) }
+        CString::new(json).unwrap_or_default().into_raw()
     }
 
     // ── v43: OTA Engine JNI ───────────────────────────────────────────────────
@@ -3134,7 +2652,7 @@ Context: {}",
     /// Register installed version with Rust on app start.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaSetCurrentVersion(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         version: *const c_char, code: i64,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -3147,7 +2665,7 @@ Context: {}",
     /// Set GitHub repo slug e.g. "i7m7r8/KiraService".
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaSetRepo(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         repo: *const c_char,
     ) {
         let r = cs(repo);
@@ -3158,19 +2676,19 @@ Context: {}",
     /// Returns JSON {"action":"...","version":"...","current":"..."}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnRelease(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         tag:       *const c_char,
         url:       *const c_char,
         changelog: *const c_char,
         date:      *const c_char,
         sha256:    *const c_char,
         apk_bytes: i64,
-    ) -> JString {
+    ) -> *mut c_char {
         let (tag, url, log, date, sha) = (cs(tag), cs(url), cs(changelog), cs(date), cs(sha256));
         let mut s = STATE.lock().unwrap();
         if s.ota.skipped_versions.contains(&tag) {
             s.ota.phase = OtaPhase::Idle;
-            return unsafe { jni_str(env, &r#"{"action":"skipped"}"#) };
+            return CString::new(r#"{"action":"skipped"}"#).unwrap_or_default().into_raw();
         }
         let newer = s.ota.is_newer(&tag);
         s.ota.latest_version  = tag.clone();
@@ -3191,13 +2709,13 @@ Context: {}",
         let cur = s.ota.current_version.clone();
         let result = format!(r#"{{"action":"{}","version":"{}","current":"{}"}}"#,
             action, esc(&tag), esc(&cur));
-        unsafe { jni_str(env, &result) }
+        CString::new(result).unwrap_or_default().into_raw()
     }
 
     /// Java reports streaming download progress. Rust tracks % for /ota/status.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaProgress(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         bytes_done: i64, bytes_total: i64,
     ) {
         let mut s = STATE.lock().unwrap();
@@ -3215,19 +2733,19 @@ Context: {}",
     /// Returns {"ok":true,"method":"shizuku|package_installer","shizuku":bool,"cmd":"..."}
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnDownloaded(
-        env: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         path:   *const c_char,
         sha256: *const c_char,
-    ) -> JString {
+    ) -> *mut c_char {
         let (path, sha) = (cs(path), cs(sha256));
         // SECURITY: Validate APK path — must end with .apk, no path traversal
-        // Android getCacheDir() returns /data/user/0/<pkg>/cache/ or /data/data/<pkg>/cache/
         let path_ok = path.ends_with(".apk")
             && !path.contains("..")
             && !path.contains("//")
-            && path.starts_with("/");  // must be absolute — allows all valid Android paths
+            && (path.contains("/cache/") || path.contains("/data/"));
         if !path_ok {
-            return unsafe { jni_str(env, r#"{"ok":false,"error":"invalid_apk_path"}"#) };
+            return CString::new(r#"{"ok":false,"error":"invalid_apk_path"}"#)
+                .unwrap_or_default().into_raw();
         }
         let mut s = STATE.lock().unwrap();
         s.ota.apk_local_path = path.clone();
@@ -3239,21 +2757,22 @@ Context: {}",
             let method = if use_shizuku { "shizuku" } else { "package_installer" };
             s.ota.install_method = method.to_string();
             let cmd = format!("pm install -r -t \"{}\"", esc(&path));
-            { let _s = format!(
+            CString::new(format!(
                 r#"{{"ok":true,"path":"{}","method":"{}","shizuku":{},"cmd":"{}","verified":{}}}"#,
                 esc(&path), method, use_shizuku, esc(&cmd), ok
-            ); unsafe { jni_str(env, &_s) } }
+            )).unwrap_or_default().into_raw()
         } else {
             let err = format!("sha256_mismatch");
             s.ota.phase = OtaPhase::Failed(err.clone());
-            unsafe { jni_str(env, &format!(r#"{{"ok":false,"error":"{}"}}"#, esc(&err))) }
+            CString::new(format!(r#"{{"ok":false,"error":"{}"}}"#, esc(&err)))
+                .unwrap_or_default().into_raw()
         }
     }
 
     /// Install completed. Pass new versionName.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnInstalled(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         new_version: *const c_char,
     ) {
         let ver = cs(new_version);
@@ -3265,7 +2784,7 @@ Context: {}",
     /// Install failed. Rust records error and sets Failed phase.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaOnFailed(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         error: *const c_char,
     ) {
         let err = cs(error);
@@ -3277,7 +2796,7 @@ Context: {}",
     /// Permanently skip this version (stored in Rust skip list).
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaSkip(
-        _e: JNIEnv, _c: JObject,
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
         version: *const c_char,
     ) {
         let ver = cs(version);
@@ -3291,204 +2810,12 @@ Context: {}",
     /// Get full OTA status JSON from Rust.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_otaGetStatus(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
-        unsafe { jni_str(env, &STATE.lock().unwrap().ota.to_json()) }
-    }
-
-
-
-    // ── Session G: Tool execution + app package lookup ───────────────────────
-
-    /// Execute any non-intent tool in Rust. Called by KiraTools.execute() for ~82 tools.
-    /// name: tool name, params_json: JSON object of parameters
-    /// Returns tool result string
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_executeTool(
-        env: JNIEnv, _c: JObject,
-        name:        *const c_char,
-        params_json: *const c_char,
-    ) -> JString {
-        let tname  = cs(name);
-        let pjson  = cs(params_json);
-        // Parse params JSON into HashMap
-        let mut params = std::collections::HashMap::new();
-        let mut rest = pjson.trim_start_matches('{').trim_end_matches('}');
-        while let Some(ks) = rest.find('"') {
-            let after_ks = &rest[ks+1..];
-            let Some(ke) = after_ks.find('"') else { break };
-            let key = &after_ks[..ke];
-            let after_colon = after_ks[ke+1..].trim_start_matches(':').trim_start_matches('"');
-            let val_end = after_colon.find('"').unwrap_or(after_colon.len());
-            let val = &after_colon[..val_end];
-            params.insert(key.to_string(), val.to_string());
-            rest = &after_colon[val_end..];
-            rest = rest.trim_start_matches('"').trim_start_matches(',');
-        }
-        let result = dispatch_tool(&tname, &params);
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Resolve app name to package name using Rust's 280+ entry database.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_appNameToPkg(
-        env: JNIEnv, _c: JObject,
-        app_name: *const c_char,
-    ) -> JString {
-        let result = app_name_to_pkg(&cs(app_name));
-        unsafe { jni_str(env, &result) }
-    }
-
-        // ── Session E: Agent + Chain JNI exports ─────────────────────────────────
-
-    /// Run full autonomous agent. Blocks until completion (use background thread).
-    /// Returns JSON: {"final":"..","steps":8,"tools_used":["x"],"success":true}
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_agentSync(
-        env: JNIEnv, _c: JObject,
-        goal:      *const c_char,
-        max_steps: i32,
-        session:   *const c_char,
-    ) -> JString {
-        let body = format!(
-            r#"{{"goal":"{}","max_steps":{},"session":"{}"}}"#,
-            esc(&cs(goal)), max_steps, esc(&cs(session))
-        );
-        let result = route_http("POST", "/ai/agent", &body);
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Run chain-of-thought reasoning. Returns JSON: {"reasoning":[...],"conclusion":".."}
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_chainSync(
-        env: JNIEnv, _c: JObject,
-        goal:  *const c_char,
-        depth: i32,
-    ) -> JString {
-        let body = format!(r#"{{"goal":"{}","depth":{}}}"#, esc(&cs(goal)), depth);
-        let result = route_http("POST", "/ai/chain", &body);
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Get current agent task status
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_getAgentStatus(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
-        let result = route_http("GET", "/ai/agent/status", "");
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Stop running agent
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_stopAgent(
-        _e: JNIEnv, _c: JObject,
-    ) {
-        route_http("POST", "/ai/agent/stop", "");
-    }
-
-        // ── Session D: AI chat JNI + shell queue exports ─────────────────────────
-
-    /// Single-call AI chat — replaces KiraAI.java entirely.
-    /// Java calls this from a background thread; blocks until reply is ready.
-    /// Returns JSON: {"role":"assistant","content":"..","tools_used":["x"],"done":true}
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_chatSync(
-        env: JNIEnv, _c: JObject,
-        message:       *const c_char,
-        session_id:    *const c_char,
-        max_tool_steps: i32,
-    ) -> JString {
-        let msg  = cs_safe(message, 32768);
-        let sess = cs_safe(session_id, 64);
-        let body = format!(
-            r#"{{"message":"{}","session":"{}","max_tool_steps":{}}}"#,
-            esc(&msg), esc(&sess), max_tool_steps
-        );
-        // Reuse the HTTP route handler — same logic, no code duplication
-        let result = route_http("POST", "/ai/chat", &body);
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Get next queued shell command for Java to execute via Shizuku.
-    /// Returns JSON {"id":"..","cmd":"..","timeout":5000} or {"empty":true}
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_getNextShellJob(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
-        let mut s = STATE.lock().unwrap();
-        match s.pending_shell.pop_front() {
-            Some(job) => {
-                let r = format!(r#"{{"id":"{}","cmd":"{}","timeout":{}}}"#,
-                    esc(&job.id), esc(&job.cmd), job.timeout);
-                unsafe { jni_str(env, &r) }
-            }
-            None => unsafe { jni_str(env, r#"{"empty":true}"#) }
-        }
-    }
-
-    /// Post shell execution result back to Rust.
-    /// id = job id from getNextShellJob; stdout = command output.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_postShellResult(
-        _e: JNIEnv, _c: JObject,
-        job_id: *const c_char,
-        stdout: *const c_char,
-    ) {
-        let (id, out) = (cs(job_id), cs(stdout));
-        let mut s = STATE.lock().unwrap();
-        s.shell_results.insert(id, out);
-    }
-
-        // ── Session C: AES-256-GCM secret encryption JNI exports ─────────────────
-
-    /// Encrypt a secret string. seed = SHA256(ANDROID_ID+pkg) from Java.
-    /// domain = field name ("api_key", "tg_token") for cross-field protection.
-    /// Returns hex-encoded AES-256-GCM ciphertext.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_encryptSecret(
-        env: JNIEnv, _c: JObject,
-        plaintext: *const c_char,
-        seed:      *const c_char,
-        domain:    *const c_char,
-    ) -> JString {
-        let (pt, sd, dm) = (cs_safe(plaintext,65536), cs_safe(seed,256), cs_safe(domain,64));
-        let result = aes_encrypt(&pt, &sd, &dm);
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Decrypt a hex-encoded AES-256-GCM ciphertext.
-    /// Returns original plaintext or empty string if key/data is wrong.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_decryptSecret(
-        env: JNIEnv, _c: JObject,
-        hex_ciphertext: *const c_char,
-        seed:           *const c_char,
-        domain:         *const c_char,
-    ) -> JString {
-        let (ct, sd, dm) = (cs_safe(hex_ciphertext,131072), cs_safe(seed,256), cs_safe(domain,64));
-        let result = aes_decrypt(&ct, &sd, &dm);
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Derive the AES key seed from device_id + pkg_name.
-    /// Call once on first run; store result in SharedPreferences.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_deriveKeySeed(
-        env: JNIEnv, _c: JObject,
-        android_id:   *const c_char,
-        package_name: *const c_char,
-    ) -> JString {
-        let (aid, pkg) = (cs(android_id), cs(package_name));
-        let combined = format!("{}:{}", aid, pkg);
-        // SHA-256 of combined → 64 hex chars as seed
-        let key = derive_aes_key(&combined);
-        let hex: String = key.iter().map(|b| format!("{:02x}", b)).collect();
-        unsafe { jni_str(env, &hex) }
+        _e: *mut std::ffi::c_void, _c: *mut std::ffi::c_void,
+    ) -> *mut c_char {
+        CString::new(STATE.lock().unwrap().ota.to_json()).unwrap_or_default().into_raw()
     }
 
 }
-
 
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 // HTTP Server
@@ -3538,25 +2865,16 @@ fn get_http_header<'a>(req: &'a str, name: &str) -> Option<&'a str> {
 }
 
 fn requires_auth(path: &str) -> bool {
-    // Session L: expanded auth coverage for all sensitive endpoints added in v0.1.x
-    // Public: health checks, layer polling, crash reporting, setup info
-    let public = [
-        "/health", "/appstats", "/layer0", "/layer1",
-        "/layer2/header", "/layer2/bubbles", "/layer2/typing",
-        "/setup/providers", "/setup/status", "/crash",
-        "/auth/set_secret", "/settings/health",
-        "/telegram/last_update_id",
-        "/memory/compression", "/crypto/status",
-    ];
-    if public.contains(&path) { return false; }
-    // Everything else requires auth if a secret is set
-    true
+    matches!(path,
+        "/config" | "/soul" | "/credentials/get" |
+        "/policy" | "/policy/allow" | "/policy/deny" | "/ota/set_version"
+    )
 }
 
 /// Constant-time comparison to prevent timing attacks on the token.
 fn check_auth(token: Option<&str>) -> bool {
     let secret = {
-        let s: std::sync::MutexGuard<KiraState> = match STATE.lock() { Ok(g) => g, Err(e) => e.into_inner() };
+        let s = match STATE.lock() { Ok(g) => g, Err(e) => e.into_inner() };
         s.http_secret.clone()
     };
     if secret.is_empty() { return true; }   // no secret set = localhost open
@@ -3582,12 +2900,6 @@ fn route_http_with_raw(method: &str, path: &str, body: &str, raw_req: &str) -> S
         }
     }
     route_http(method, path, body)
-}
-
-
-/// Inline JSON string extractor
-fn extract_json_str_inline(json: &str, key: &str) -> Option<String> {
-    extract_json_str(json, key)
 }
 
 fn route_http(method: &str, path: &str, body: &str) -> String {
@@ -3673,1203 +2985,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("GET",  "/setup")             => { let s=STATE.lock().unwrap(); format!(r#"{{"page":{},"done":{},"user_name":"{}","model":"{}","base_url":"{}","selected_provider":"{}","custom_url":"{}","quote_index":{}}}"#, s.setup.current_page,s.setup.done,esc(&s.setup.user_name),esc(&s.setup.model),esc(&s.setup.base_url),esc(&s.setup.selected_provider_id),esc(&s.setup.custom_url),s.setup.quote_index) }
         ("POST", "/setup/page")        => { if let Some(page)=extract_json_num(body,"page") { STATE.lock().unwrap().setup.current_page=page as u8; } r#"{"ok":true}"#.to_string() }
         ("POST", "/setup/complete")    => { let mut s=STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; r#"{"ok":true}"#.to_string() }
-        ("GET",  "/theme")             => {
-            // Update animation state before returning
-            let mut s = STATE.lock().unwrap();
-            let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
-            let phase_secs = (uptime_ms % 3000) as f32 / 3000.0; // 3s cycle
-            s.theme.animation_phase = phase_secs;
-            // BPM: 60 idle, 90 when recent requests, 120 when agent active
-            let recent = s.tool_call_count;
-            s.theme.pulse_bpm = if s.theme.is_thinking { 120 }
-                else if recent > 0 { 90 } else { 60 };
-            // activity_level: clamp tool calls per minute to 0-1
-            let tools_recent = s.macro_run_log.iter()
-                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000)
-                .count();
-            s.theme.activity_level = (tools_recent as f32 / 10.0).min(1.0);
-            s.theme.to_json()
-        }
-        // GET /layer0 — full Layer 0 star field animation state
-        // Polled by GalaxyView every 500ms to drive the living canvas.
-        // Returns: phase(0-1, 3s period), bpm, activity(0-1), thinking,
-        //          hue_shift(-12 to +12 degrees, sine-driven),
-        //          vortex_intensity(0-1), burst(true once then reset)
-        ("GET",  "/layer0") => {
-            let mut s = STATE.lock().unwrap();
-            let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
-            // 3-second heartbeat phase (0.0 → 1.0 → 0.0 → ...)
-            let phase      = (uptime_ms % 3_000) as f32 / 3_000.0;
-            s.theme.animation_phase = phase;
-            // Chromatic hue shift: ±12° sine wave on 3s period
-            let hue_shift  = (phase * 2.0 * std::f32::consts::PI).sin() * 12.0;
-            // Activity: tool calls in last 60s, normalised 0-1
-            let tools_60s  = s.macro_run_log.iter()
-                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000).count();
-            let activity   = (tools_60s as f32 / 10.0_f32).min(1.0_f32);
-            s.theme.activity_level = activity;
-            // BPM: 120 thinking, 90 active, 60 idle
-            let bpm = if s.theme.is_thinking { 120u32 }
-                      else if s.request_count > 0 && activity > 0.05 { 90 }
-                      else { 60 };
-            s.theme.pulse_bpm = bpm;
-            // Vortex: ramps up when thinking, decays when idle
-            // Java applies this as the rate of star inward drift
-            let vortex = if s.theme.is_thinking { 1.0f32 }
-                         else { (activity * 0.6).min(0.8) };
-            // Burst flag: consumed once by Java, then auto-cleared
-            let burst = s.theme.is_thinking; // Java triggers burst on thinking→false transition
-            format!(
-                r#"{{"phase":{:.6},"bpm":{},"activity":{:.6},"thinking":{},"hue_shift":{:.4},"vortex":{:.4},"burst":{}}}"#,
-                phase, bpm, activity, s.theme.is_thinking,
-                hue_shift, vortex, burst
-            )
-        }
-
-        // Legacy alias for older Java pollers
-        ("GET",  "/theme/anim") => {
-            let mut s = STATE.lock().unwrap();
-            let uptime_ms = now_ms().saturating_sub(s.uptime_start);
-            let phase = (uptime_ms % 3_000) as f32 / 3_000.0;
-            s.theme.animation_phase = phase;
-            let tools_recent = s.macro_run_log.iter()
-                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000).count();
-            format!(r#"{{"phase":{:.6},"bpm":{},"activity":{:.6},"thinking":{}}}"#,
-                phase, s.theme.pulse_bpm,
-                (tools_recent as f32 / 10.0).min(1.0),
-                s.theme.is_thinking)
-        }
-        // POST /theme/thinking {"active":true}  — set thinking state
-        ("POST", "/theme/thinking")     => {
-            let active = body.contains(r#""active":true"#);
-            STATE.lock().unwrap().theme.is_thinking = active;
-            r#"{"ok":true}"#.to_string()
-        }
-
-        // ── Layer 5: Settings page Rust endpoints ─────────────────────────────
-
-        // GET /settings/health — compact health summary for settings page header
-        // Returns: {shizuku, setup, api_key_set, model, automation_count, memory_count,
-        //           uptime_ms, tool_calls, pulse_bpm, activity}
-        ("GET",  "/settings/health") => {
-            let s = STATE.lock().unwrap();
-            let uptime = now_ms().saturating_sub(s.uptime_start);
-            let tools_60s = s.macro_run_log.iter()
-                .filter(|r| now_ms().saturating_sub(r.ts) < 60_000).count();
-            let activity = (tools_60s as f32 / 10.0_f32).min(1.0);
-            let bpm = if s.theme.is_thinking { 120 }
-                      else if s.request_count > 0 { 90 } else { 60 };
-            format!(
-                r#"{{"shizuku":{},"shizuku_permission":{},"setup_done":{},"api_key_set":{},"model":"{}","base_url":"{}","automation_count":{},"memory_count":{},"uptime_ms":{},"tool_calls":{},"request_count":{},"pulse_bpm":{},"activity":{:.3},"macros_enabled":{}}}"#,
-                s.shizuku.installed, s.shizuku.permission_granted,
-                s.config.setup_done, !s.config.api_key.is_empty(),
-                esc(&s.config.model), esc(&s.config.base_url),
-                s.macros.len(), s.memory_index.len(),
-                uptime, s.tool_call_count, s.request_count,
-                bpm, activity,
-                s.macros.iter().filter(|m| m.enabled).count()
-            )
-        }
-
-        // GET /settings/shizuku — Shizuku status with Layer 5 border color token
-        // Returns: {installed, running, permission, border_color, border_name, pulse}
-        ("GET",  "/settings/shizuku") => {
-            let s = STATE.lock().unwrap();
-            let (border_color, border_name) = if s.shizuku.permission_granted {
-                (0xFFB4BEFEu32, "lavender")   // god mode — Lavender
-            } else if s.shizuku.installed {
-                (0xFFFAB387u32, "peach")      // partial — Peach
-            } else {
-                (0xFFF38BA8u32, "pink")       // absent  — Pink
-            };
-            format!(
-                r#"{{"installed":{},"running":{},"permission":{},"border_color":{},"border_name":"{}","pulse_ms":1500}}"#,
-                s.shizuku.installed, s.shizuku.installed,
-                s.shizuku.permission_granted,
-                border_color, border_name
-            )
-        }
-
-        // POST /settings/row_tap {"row":"api_key"} — log a settings row tap
-        // Used by UI to record which settings the user accesses most often
-        ("POST", "/settings/row_tap") => {
-            let row = extract_json_str(body, "row").unwrap_or_default();
-            if !row.is_empty() {
-                let mut s = STATE.lock().unwrap();
-                // Store in daily_log for usage analytics
-                let entry = format!("[settings_tap] row={} ts={}", esc(&row), now_ms());
-                s.daily_log.push_back(entry);
-                if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
-            }
-            r#"{"ok":true}"#.to_string()
-        }
-
-        // GET /settings/sections — section visibility state for header underline
-        // Returns ordered list of section names with their Lavender animate flag
-        ("GET",  "/settings/sections") => {
-            let sections = vec![
-                "IDENTITY", "AI PROVIDER", "AGENT BEHAVIOR", "TELEGRAM BOT",
-                "INTERFACE", "MEMORY", "TOOLS & AUTOMATION", "RUST ENGINE v9",
-                "SYSTEM", "ABOUT"
-            ];
-            let items: Vec<String> = sections.iter().map(|s|
-                format!(r#"{{"name":"{}","accent_color":4289003262}}"#, s)  // 0xFFB4BEFE Lavender
-            ).collect();
-            format!(r#"{{"sections":[{}]}}"#, items.join(","))
-        }
-
-        // POST /theme/flash {"dark":true}  — record theme switch for analytics
-        // ── Crash reporting endpoints ─────────────────────────────────────────
-
-        // POST /crash {"thread":"..","trace":"..","ts":1234}
-        // Called by KiraApp crash handler to persist crashes in Rust memory
-        // GET /memory/compression — LZ4 compression stats (Session B)
-        ("GET",  "/memory/compression") => {
-            let s = STATE.lock().unwrap();
-            let raw_bytes: usize = s.context_turns.iter()
-                .map(|t| t.role.len() + t.content.len()).sum();
-            let compressed_bytes = compressed_context_bytes(&s);
-            let ratio = if compressed_bytes > 0 {
-                raw_bytes as f32 / compressed_bytes as f32
-            } else { 1.0 };
-            format!(
-                r#"{{"turns":{},"compressed_turns":{},"raw_bytes":{},"compressed_bytes":{},"ratio":{:.2},"saved_kb":{}}}"#,
-                s.context_turns.len(),
-                s.context_turns_lz4.len(),
-                raw_bytes,
-                compressed_bytes,
-                ratio,
-                (raw_bytes.saturating_sub(compressed_bytes)) / 1024
-            )
-        }
-
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session D — AI Chat engine (replaces KiraAI.java)
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session E — Agent + Chain endpoints (replaces KiraAgent.java + KiraChain.java)
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-        // POST /ai/agent
-        // body: {"goal":"..","max_steps":25,"session":"agent_default"}
-        // Full ReAct loop: PLAN → THINK → ACT → OBSERVE → repeat until done
-        // Returns: {"final":"..","steps":8,"tools_used":["x","y"],"success":true}
-        ("POST", "/ai/agent") => {
-            let goal       = extract_json_str(body, "goal").unwrap_or_default();
-            let max_steps  = extract_json_num(body, "max_steps").unwrap_or(25.0) as usize;
-            let _session_id = extract_json_str(body, "session")
-                .unwrap_or_else(|| "agent_default".into());
-
-            if goal.is_empty() {
-                return r#"{"error":"goal is required"}"#.to_string();
-            }
-
-            let (api_key, base_url, model, persona): (String,String,String,String) = {
-                let s = STATE.lock().unwrap();
-                (s.config.api_key.clone(), s.config.base_url.clone(),
-                 s.config.model.clone(),   s.config.persona.clone())
-            };
-            if api_key.is_empty() {
-                return r#"{"error":"no API key","success":false}"#.to_string();
-            }
-
-            let persona_str = if persona.is_empty() {
-                "You are Kira, an autonomous AI agent on Android.".into()
-            } else { persona };
-
-            // Build agent system prompt
-            let agent_system = format!(
-                "{}
-
-You are executing a multi-step task autonomously.
-                For each step: think what to do, pick ONE tool, execute it,                 observe result, decide next step.
-                When done, reply: DONE: <summary>
-                Tools: run_shell, read_file, write_file, http_get, add_memory,                 search_memory, get_battery, get_wifi, set_variable, get_variable",
-                persona_str
-            );
-
-            let mut steps_run   = 0usize;
-            let mut tools_used: Vec<String> = Vec::new();
-            let mut final_summary = String::new();
-            let mut success = false;
-
-            // Agent context — separate from chat history
-            let mut agent_ctx: Vec<(String, String)> = Vec::new();
-            agent_ctx.push(("user".into(), format!("Task: {}", goal)));
-
-            {
-                let mut s = STATE.lock().unwrap();
-                s.theme.is_thinking = true;
-                // Log task start
-                let task = AgentTask {
-                    id:           format!("task_{}", now_ms()),
-                    goal:         goal.clone(),
-                    status:       "running".into(),
-                    current_step: 0,
-                    max_steps,
-                    created_ms:   now_ms(),
-                };
-                s.agent_tasks.push_back(task);
-                if s.agent_tasks.len() > 20 { s.agent_tasks.pop_front(); }
-            }
-
-            // ReAct loop
-            while steps_run < max_steps {
-                let resp: String = match call_llm_sync(
-                    &api_key, &base_url, &model, &agent_system, &agent_ctx
-                ) {
-                    Ok(r)  => r,
-                    Err(e) => { final_summary = e; break; }
-                };
-
-                let clean = clean_reply(&resp);
-
-                // Check for completion
-                if clean.contains("DONE:") || clean.to_lowercase().contains("task complete") {
-                    final_summary = clean.replace("DONE:", "").trim().to_string();
-                    success = true;
-                    break;
-                }
-
-                // Extract + execute tool calls
-                let calls = parse_tool_calls(&resp);
-                if calls.is_empty() {
-                    // No tool call — treat as final answer if we have content
-                    if !clean.is_empty() {
-                        final_summary = clean;
-                        success = true;
-                    }
-                    break;
-                }
-
-                let mut observations = String::new();
-                for (tname, targs) in &calls {
-                    let result = dispatch_tool(tname, targs);
-                    tools_used.push(tname.clone());
-                    observations.push_str(&format!("[{}] → {}
-", tname, result));
-                }
-
-                // Feed observation back into context
-                agent_ctx.push(("assistant".into(), resp.clone()));
-                agent_ctx.push(("user".into(),
-                    format!("Observations:
-{}Continue with the task.", observations)));
-                steps_run += 1;
-
-                // Update task status in STATE
-                if let Some(task) = STATE.lock().unwrap().agent_tasks.back_mut() {
-                    task.current_step = steps_run;
-                }
-            }
-
-            if final_summary.is_empty() {
-                final_summary = if success { "completed".into() }
-                    else { format!("stopped after {} steps", steps_run) };
-            }
-
-            // Push to compressed chat history so user can see result
-            {
-                let mut s = STATE.lock().unwrap();
-                push_turn_compressed(&mut s, "assistant", &final_summary);
-                s.theme.is_thinking = false;
-                if let Some(task) = s.agent_tasks.back_mut() {
-                    task.status = if success { "done".into() } else { "stopped".into() };
-                }
-            }
-
-            let tools_json: String = tools_used.iter()
-                .map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(",");
-            format!(
-                r#"{{"final":"{}","steps":{},"tools_used":[{}],"success":{}}}"#,
-                esc(&final_summary), steps_run, tools_json, success
-            )
-        }
-
-        // POST /ai/chain
-        // body: {"goal":"..","depth":5}
-        // Chain-of-thought: builds sequential reasoning, no tool loop
-        // Returns: {"reasoning":["step1","step2"],"conclusion":".."}
-        ("POST", "/ai/chain") => {
-            let goal  = extract_json_str(body, "goal").unwrap_or_default();
-            let depth = extract_json_num(body, "depth").unwrap_or(4.0) as usize;
-
-            if goal.is_empty() {
-                return r#"{"error":"goal is required"}"#.to_string();
-            }
-            let (api_key, base_url, model): (String,String,String) = {
-                let s = STATE.lock().unwrap();
-                (s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
-            };
-            if api_key.is_empty() {
-                return r#"{"error":"no API key"}"#.to_string();
-            }
-
-            let chain_system = "You are a step-by-step reasoning engine.                 Think through each step carefully before proceeding to the next.                 Format each reasoning step as: STEP N: <thought>.                 End with CONCLUSION: <answer>.";
-
-            let mut chain_ctx: Vec<(String, String)> = Vec::new();
-            chain_ctx.push(("user".into(),
-                format!("Reason through this step by step (max {} steps): {}", depth, goal)));
-
-            let response: String = match call_llm_sync(&api_key, &base_url, &model, chain_system, &chain_ctx) {
-                Ok(r)  => r,
-                Err(e) => return format!(r#"{{"error":"{}"}}"#, esc(&e.to_string())),
-            };
-
-            // Parse STEP N: lines and CONCLUSION:
-            let mut reasoning: Vec<String> = Vec::new();
-            let mut conclusion = String::new();
-            for line in response.lines() {
-                let t = line.trim();
-                if t.starts_with("STEP ") {
-                    reasoning.push(t.to_string());
-                } else if t.starts_with("CONCLUSION:") {
-                    conclusion = t.replace("CONCLUSION:", "").trim().to_string();
-                }
-            }
-            if conclusion.is_empty() { conclusion = clean_reply(&response); }
-
-            let steps_json: String = reasoning.iter()
-                .map(|s| format!("\"{}\"", esc(s))).collect::<Vec<_>>().join(",");
-            format!(r#"{{"reasoning":[{}],"conclusion":"{}","steps":{}}}"#,
-                steps_json, esc(&conclusion), reasoning.len())
-        }
-
-        // GET /ai/agent/status — current running agent task
-        ("GET",  "/ai/agent/status") => {
-            let s = STATE.lock().unwrap();
-            match s.agent_tasks.back() {
-                Some(t) => format!(
-                    r#"{{"id":"{}","goal":"{}","status":"{}","step":{},"max":{}}}"#,
-                    esc(&t.id), esc(&t.goal), esc(&t.status),
-                    t.current_step, t.max_steps),
-                None => r#"{"status":"idle"}"#.to_string(),
-            }
-        }
-
-        // POST /ai/agent/stop — cancel running agent
-        ("POST", "/ai/agent/stop") => {
-            let mut s = STATE.lock().unwrap();
-            s.theme.is_thinking = false;
-            if let Some(task) = s.agent_tasks.back_mut() {
-                task.status = "cancelled".into();
-            }
-            r#"{"ok":true,"stopped":true}"#.to_string()
-        }
-
-                // POST /ai/chat
-        // body: {"message":"..","session":"default","max_tool_steps":5}
-        // Runs full chat turn: history + system prompt → LLM → tool loop → reply
-        // Returns: {"role":"assistant","content":"..","tools_used":["x"],"tokens":0,"done":true}
-        ("POST", "/ai/chat") => {
-            let user_msg    = extract_json_str(body, "message").unwrap_or_default();
-            let _session_id  = extract_json_str(body, "session").unwrap_or_else(||"default".into());
-            let max_steps   = extract_json_num(body, "max_tool_steps").unwrap_or(5.0) as usize;
-
-            if user_msg.is_empty() {
-                return r#"{"error":"message is required"}"#.to_string();
-            }
-
-            // Load config
-            let (api_key, base_url, model, _persona, system_prompt): (String,String,String,String,String) = {
-                let s = STATE.lock().unwrap();
-                let cfg = &s.config;
-                let persona = if cfg.persona.is_empty() {
-                    "You are Kira, an AI agent on Android. Be concise and helpful.".to_string()
-                } else { cfg.persona.clone() };
-                let sys = build_system_prompt(&s, &persona);
-                (cfg.api_key.clone(), cfg.base_url.clone(), cfg.model.clone(),
-                 persona, sys)
-            };
-
-            if api_key.is_empty() {
-                return r#"{"error":"no API key — go to settings and add one","done":true}"#.to_string();
-            }
-
-            // Push user message to compressed history
-            {
-                let mut s = STATE.lock().unwrap();
-                s.request_count += 1;
-                s.theme.is_thinking = true;
-                push_turn_compressed(&mut s, "user", &user_msg);
-            }
-
-            // Build messages array from compressed history
-            let context = {
-                let s = STATE.lock().unwrap();
-                decompress_context(&s)
-            };
-
-            // Call LLM
-            let raw_response: Result<String,String> = call_llm_sync(&api_key, &base_url, &model, &system_prompt, &context);
-            let raw: String = match raw_response {
-                Ok(r)  => r,
-                Err(e) => {
-                    let mut s = STATE.lock().unwrap();
-                    s.theme.is_thinking = false;
-                    return format!(r#"{{"error":"{}","done":true}}"#, esc(&e));
-                }
-            };
-
-            // Extract tool calls if any
-            let tool_calls = parse_tool_calls(&raw);
-            let mut reply  = clean_reply(&raw);
-            let mut tools_used: Vec<String> = Vec::new();
-
-            // Tool execution loop (max_steps iterations)
-            if !tool_calls.is_empty() {
-                let mut pending = tool_calls;
-                let mut step = 0;
-                while !pending.is_empty() && step < max_steps {
-                    step += 1;
-                    let mut tool_results = String::new();
-                    for (tname, targs) in &pending {
-                        let result = dispatch_tool(tname, targs);
-                        tool_results.push_str(&format!("[{}]: {}
-", tname, result));
-                        tools_used.push(tname.clone());
-                        // Queue shell commands for Java to execute if needed
-                        if tname == "run_shell" || result.starts_with("__shell__") {
-                            let mut s = STATE.lock().unwrap();
-                            s.pending_shell.push_back(ShellJob {
-                                id:      format!("tool_{}_{}", step, tname),
-                                cmd:     targs.get("cmd").cloned().unwrap_or_default(),
-                                timeout: 10_000,
-                                created: now_ms(),
-                            });
-                        }
-                    }
-                    // Build follow-up context
-                    let mut ctx2 = context.clone();
-                    ctx2.push(("assistant".into(), raw.clone()));
-                    ctx2.push(("user".into(),
-                        format!("[tool results]
-{}respond to the user now.", tool_results)));
-                    match call_llm_sync(&api_key, &base_url, &model, &system_prompt, &ctx2) {
-                        Ok(r2) => {
-                            reply   = clean_reply(&r2);
-                            pending = parse_tool_calls(&r2);
-                        }
-                        Err(_) => break,
-                    }
-                }
-            }
-
-            if reply.is_empty() { reply = "done.".into(); }
-
-            // Push assistant reply to compressed history
-            {
-                let mut s = STATE.lock().unwrap();
-                push_turn_compressed(&mut s, "assistant", &reply);
-                s.theme.is_thinking = false;
-                s.tool_call_count += tools_used.len() as u64;
-            }
-
-            let tools_json: String = tools_used.iter()
-                .map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(",");
-            format!(
-                r#"{{"role":"assistant","content":"{}","tools_used":[{}],"done":true}}"#,
-                esc(&reply), tools_json
-            )
-        }
-
-        // GET /ai/history — current compressed context as readable JSON
-        ("GET",  "/ai/history") => {
-            let s = STATE.lock().unwrap();
-            let turns = decompress_context(&s);
-            let items: Vec<String> = turns.iter()
-                .map(|(role, content)| format!(r#"{{"role":"{}","content":"{}"}}"#,
-                    esc(role), esc(content)))
-                .collect();
-            format!(r#"{{"count":{},"turns":[{}]}}"#, items.len(), items.join(","))
-        }
-
-        // DELETE /ai/history — clear conversation context
-        ("DELETE", "/ai/history") | ("POST", "/ai/history/clear") => {
-            let mut s = STATE.lock().unwrap();
-            s.context_turns.clear();
-            s.context_turns_lz4.clear();
-            r#"{"ok":true,"cleared":true}"#.to_string()
-        }
-
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session H — Macro loop (replaces KiraWatcher.java logic)
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-        // POST /macro/tick
-        // Called by Java KiraWatcher every 5s with current device state.
-        // Rust evaluates all macro triggers and queues fired actions.
-        // body: {"battery":85,"charging":false,"pkg":"com.spotify.music",
-        //        "screen_hash":"abc123","wifi":"HomeNet","screen_text":"..."}
-        ("POST", "/macro/tick") => {
-            let battery   = extract_json_num(body, "battery").unwrap_or(-1.0) as i32;
-            let charging  = body.contains("\"charging\":true");
-            let pkg       = extract_json_str(body, "pkg").unwrap_or_default();
-            let wifi      = extract_json_str(body, "wifi").unwrap_or_default();
-            let screen_txt= extract_json_str(body, "screen_text").unwrap_or_default();
-            let screen_hash=extract_json_str(body, "screen_hash").unwrap_or_default();
-
-            let mut fired = 0u32;
-            let now = now_ms();
-
-            {
-                let mut s = STATE.lock().unwrap();
-
-                // Update device state
-                if battery >= 0 {
-                    s.battery_pct = battery;
-                    s.battery_charging = charging;
-                }
-                if !pkg.is_empty()  { s.foreground_pkg = pkg.clone(); }
-                if !wifi.is_empty() { s.sig_wifi_ssid = wifi.clone(); }
-
-                // Evaluate macro triggers
-                let macro_ids: Vec<String> = s.macros.iter()
-                    .filter(|m| m.enabled)
-                    .map(|m| m.id.clone())
-                    .collect();
-
-                for mid in macro_ids {
-                    // Evaluate each trigger in the macro
-                    let triggers_snap: Vec<(String, String, bool)> = {
-                        if let Some(m) = s.macros.iter().find(|m| m.id == mid) {
-                            m.triggers.iter().map(|t| {
-                                let kind = format!("{:?}", t.kind).to_lowercase();
-                                let val  = t.config.get("value").cloned()
-                                    .or_else(|| t.config.get("ssid").cloned())
-                                    .or_else(|| t.config.get("pkg").cloned())
-                                    .or_else(|| t.config.get("threshold").cloned())
-                                    .unwrap_or_default();
-                                (kind, val, t.enabled)
-                            }).collect()
-                        } else { continue; }
-                    };
-
-                    let triggered = triggers_snap.iter().any(|(kind, val, en): &(String, String, bool)| {
-                        if !en { return false; }
-                        match kind.as_str() {
-                            k if k.contains("battery") && k.contains("low")  =>
-                                battery >= 0 && battery < val.parse().unwrap_or(20),
-                            k if k.contains("battery") && k.contains("full") =>
-                                battery >= 95 && charging,
-                            k if k.contains("app") || k.contains("launch")   =>
-                                !pkg.is_empty() && pkg.contains(val.as_str()),
-                            k if k.contains("wifi")                           =>
-                                !wifi.is_empty() && wifi.contains(val.as_str()),
-                            k if k.contains("screen") || k.contains("text")  =>
-                                !screen_txt.is_empty()
-                                && screen_txt.to_lowercase().contains(&val.to_lowercase()),
-                            k if k.contains("time") => {
-                                let day_mins = ((now / 60_000) % 1440) as u64;
-                                let hm: Vec<u64> = val.split(':')
-                                    .filter_map(|x| x.parse::<u64>().ok()).collect();
-                                hm.len() == 2 && day_mins == hm[0]*60+hm[1]
-                            }
-                            _ => false,
-                        }
-                    });
-
-                    if triggered {
-                        // Queue a kira_chat action for each macro
-                        let mname: String = s.macros.iter().find(|m| m.id == mid)
-                            .map(|m| m.name.clone()).unwrap_or_default();
-                        let mid_str: String = mid.clone();
-                        s.macro_run_log.push_back(MacroRunLog {
-                            macro_id:   mid_str,
-                            macro_name: mname,
-                            trigger:    "tick".into(),
-                            success:    true,
-                            steps_run:  1,
-                            duration_ms:0,
-                            ts:         now,
-                            error:      String::new(),
-                        });
-                        if s.macro_run_log.len() > 100 { s.macro_run_log.pop_front(); }
-                        fired += 1;
-                    }
-                }
-
-                // Screen watch rules from memory
-                if !screen_hash.is_empty() {
-                    // Collect matching actions first (avoids borrow conflict with pending_shell)
-                    let watch_jobs: Vec<String> = s.memory_index.iter()
-                        .filter(|mem| mem.value.starts_with("watch_screen_"))
-                        .filter_map(|mem| {
-                            let colon = mem.value.find(':')?;
-                            let rule  = &mem.value[colon+1..];
-                            let mut parts = rule.splitn(2, '|');
-                            let keyword = parts.next()?.trim().to_lowercase();
-                            let action  = parts.next()?.trim().to_string();
-                            if screen_txt.to_lowercase().contains(&keyword) {
-                                Some(action)
-                            } else { None }
-                        }).collect();
-                    fired += watch_jobs.len() as u32;
-                    for action in watch_jobs {
-                        s.pending_shell.push_back(ShellJob {
-                            id:      format!("watch_{}", now),
-                            cmd:     format!("__ai_chat__:{}", action),
-                            timeout: 30_000,
-                            created: now,
-                        });
-                    }
-                }
-            }
-
-            format!(r#"{{"ok":true,"fired":{},"ts":{}}}"#, fired, now)
-        }
-
-        // GET /macro/pending_results — results queued for Java to dispatch
-        // Java polls this for completed macro actions requiring Android intents
-        ("GET",  "/macro/pending_results") => {
-            let mut s = STATE.lock().unwrap();
-            // Return next pending shell job that needs Java (intent-based actions)
-            match s.pending_shell.iter().position(|j| j.cmd.starts_with("__intent__:")) {
-                Some(idx) => {
-                    let job = s.pending_shell.remove(idx).unwrap();
-                    let action = job.cmd.trim_start_matches("__intent__:");
-                    format!(r#"{{"has_action":true,"action":"{}","id":"{}"}}"#,
-                        esc(action), esc(&job.id))
-                }
-                None => r#"{"has_action":false}"#.to_string(),
-            }
-        }
-
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session F — Telegram (replaces KiraTelegram.java)
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-        // POST /telegram/incoming — called by Java after polling getUpdates
-        // body: {"update_id":123,"chat_id":456,"user":"name","text":"hello"}
-        // Rust processes message through AI and queues reply for Java to send
-        ("POST", "/telegram/incoming") => {
-            let update_id = extract_json_num(body, "update_id").unwrap_or(0.0) as i64;
-            let chat_id   = extract_json_num(body, "chat_id").unwrap_or(0.0) as i64;
-            let user      = extract_json_str(body, "user").unwrap_or_default();
-            let text      = extract_json_str(body, "text").unwrap_or_default();
-
-            if text.is_empty() || chat_id == 0 {
-                return r#"{"ok":false,"error":"missing fields"}"#.to_string();
-            }
-
-            // Check allowed user
-            let allowed = { STATE.lock().unwrap().config.tg_allowed };
-            if allowed != 0 && chat_id != allowed {
-                return r#"{"ok":false,"error":"unauthorized"}"#.to_string();
-            }
-
-            // Store in log
-            {
-                let mut s = STATE.lock().unwrap();
-                s.tg_last_update_id = update_id;
-                s.tg_message_log.push_back(TgMessage {
-                    update_id, chat_id, ts: now_ms(),
-                    user: user.clone(), text: text.clone(),
-                });
-                if s.tg_message_log.len() > 50 { s.tg_message_log.pop_front(); }
-                push_turn_compressed(&mut s, "user", &format!("[TG @{}] {}", user, text));
-            }
-
-            // Run AI on the message
-            let chat_body = format!(
-                r#"{{"message":"[Telegram @{}] {}","session":"tg_{}","max_tool_steps":5}}"#,
-                esc(&user), esc(&text), chat_id
-            );
-            let ai_result = route_http("POST", "/ai/chat", &chat_body);
-            let reply = extract_json_str_inline(&ai_result, "content")
-                .unwrap_or_else(|| "sorry, something went wrong".into());
-
-            // Queue reply for Java to send
-            {
-                let mut s = STATE.lock().unwrap();
-                s.tg_pending_sends.push_back(TgSend {
-                    chat_id, text: reply.clone(), ts: now_ms()
-                });
-            }
-            format!(r#"{{"ok":true,"reply":"{}"}}"#, esc(&reply))
-        }
-
-        // GET /telegram/next_send — Java polls for messages to send
-        ("GET",  "/telegram/next_send") => {
-            let mut s = STATE.lock().unwrap();
-            match s.tg_pending_sends.pop_front() {
-                Some(msg) => format!(
-                    r#"{{"has_message":true,"chat_id":{},"text":"{}"}}"#,
-                    msg.chat_id, esc(&msg.text)),
-                None => r#"{"has_message":false}"#.to_string(),
-            }
-        }
-
-        // GET /telegram/last_update_id — Java uses this for getUpdates offset
-        ("GET",  "/telegram/last_update_id") => {
-            let s = STATE.lock().unwrap();
-            format!(r#"{{"update_id":{}}}"#, s.tg_last_update_id)
-        }
-
-        // GET /telegram/log — last received messages
-        ("GET",  "/telegram/log") => {
-            let s = STATE.lock().unwrap();
-            let items: Vec<String> = s.tg_message_log.iter().rev().take(20).map(|m|
-                format!(r#"{{"chat_id":{},"user":"{}","text":"{}","ts":{}}}"#,
-                    m.chat_id, esc(&m.user), esc(&m.text), m.ts)
-            ).collect();
-            format!(r#"{{"count":{},"messages":[{}]}}"#, items.len(), items.join(","))
-        }
-
-                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session J — Setup wizard data from Rust (reduces SetupActivity hardcoding)
-        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-        // GET /setup/providers — list of AI providers with base URLs + models
-        // SetupActivity calls this instead of hardcoding the list
-        ("GET",  "/setup/providers") => {
-            r#"[
-              {"id":"groq","name":"Groq (Free)","base_url":"https://api.groq.com/openai/v1","models":["llama-3.1-8b-instant","llama-3.3-70b-versatile","mixtral-8x7b-32768"],"key_url":"https://console.groq.com/keys","recommended":true},
-              {"id":"openai","name":"OpenAI","base_url":"https://api.openai.com/v1","models":["gpt-4o-mini","gpt-4o","gpt-4-turbo"],"key_url":"https://platform.openai.com/api-keys","recommended":false},
-              {"id":"anthropic","name":"Anthropic","base_url":"https://api.anthropic.com/v1","models":["claude-3-haiku-20240307","claude-3-5-sonnet-20241022","claude-3-opus-20240229"],"key_url":"https://console.anthropic.com/","recommended":false},
-              {"id":"together","name":"Together AI","base_url":"https://api.together.xyz/v1","models":["meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo","mistralai/Mixtral-8x7B-Instruct-v0.1"],"key_url":"https://api.together.ai/settings/api-keys","recommended":false},
-              {"id":"openrouter","name":"OpenRouter","base_url":"https://openrouter.ai/api/v1","models":["meta-llama/llama-3.1-8b-instruct:free","google/gemma-2-9b-it:free"],"key_url":"https://openrouter.ai/keys","recommended":false},
-              {"id":"custom","name":"Custom / Self-hosted","base_url":"","models":[],"key_url":"","recommended":false}
-            ]"#.to_string()
-        }
-
-        // POST /setup/validate — validate API key format + test connection
-        // body: {"provider":"groq","api_key":"gsk_...","model":"llama-3.1-8b-instant"}
-        ("POST", "/setup/validate") => {
-            let provider = extract_json_str(body, "provider").unwrap_or_default();
-            let api_key  = extract_json_str(body, "api_key").unwrap_or_default();
-            let model    = extract_json_str(body, "model").unwrap_or_default();
-
-            if api_key.is_empty() {
-                return r#"{"valid":false,"error":"API key is empty"}"#.to_string();
-            }
-
-            // Format validation per provider
-            let format_ok = match provider.as_str() {
-                "groq"      => api_key.starts_with("gsk_") && api_key.len() > 10,
-                "openai"    => api_key.starts_with("sk-") && api_key.len() > 10,
-                "anthropic" => api_key.starts_with("sk-ant-") && api_key.len() > 10,
-                _           => api_key.len() >= 8,
-            };
-
-            if !format_ok {
-                let hint = match provider.as_str() {
-                    "groq"      => "Groq keys start with 'gsk_'",
-                    "openai"    => "OpenAI keys start with 'sk-'",
-                    "anthropic" => "Anthropic keys start with 'sk-ant-'",
-                    _           => "Key appears invalid",
-                };
-                return format!(r#"{{"valid":false,"error":"{}"}}"#, hint);
-            }
-
-            // Quick syntax validation passed — mark as valid
-            // (actual connection test done by Java to avoid blocking)
-            format!(r#"{{"valid":true,"provider":"{}","model":"{}","hint":"Format valid. Tap Next to continue."}}"#,
-                esc(&provider), esc(&model))
-        }
-
-        // GET /setup/status — current setup completion state
-        ("GET",  "/setup/status") => {
-            let s = STATE.lock().unwrap();
-            format!(r#"{{"setup_done":{},"has_api_key":{},"provider":"{}","model":"{}","user_name":"{}"}}"#,
-                s.config.setup_done,
-                !s.config.api_key.is_empty(),
-                esc(&s.config.base_url),
-                esc(&s.config.model),
-                esc(&s.config.user_name))
-        }
-
-                // ── Session C: Crypto endpoints ───────────────────────────────────────
-
-        // POST /crypto/encrypt {"plaintext":"..","seed":"..","domain":"api_key"}
-        ("POST", "/crypto/encrypt") => {
-            let pt  = extract_json_str(body, "plaintext").unwrap_or_default();
-            let sd  = extract_json_str(body, "seed").unwrap_or_default();
-            let dm  = extract_json_str(body, "domain").unwrap_or_else(|| "default".into());
-            if pt.is_empty() || sd.is_empty() {
-                return r#"{"error":"plaintext and seed required"}"#.to_string();
-            }
-            let ct = aes_encrypt(&pt, &sd, &dm);
-            format!(r#"{{"ok":true,"ciphertext":"{}","domain":"{}"}}"#, ct, esc(&dm))
-        }
-
-        // POST /crypto/decrypt {"ciphertext":"..","seed":"..","domain":"api_key"}
-        ("POST", "/crypto/decrypt") => {
-            let ct = extract_json_str(body, "ciphertext").unwrap_or_default();
-            let sd = extract_json_str(body, "seed").unwrap_or_default();
-            let dm = extract_json_str(body, "domain").unwrap_or_else(|| "default".into());
-            if ct.is_empty() || sd.is_empty() {
-                return r#"{"error":"ciphertext and seed required"}"#.to_string();
-            }
-            let plain = aes_decrypt(&ct, &sd, &dm);
-            let ok = !plain.is_empty();
-            format!(r#"{{"ok":{},"plaintext":"{}"}}"#, ok, esc(&plain))
-        }
-
-        // GET /crypto/status — reports encryption availability
-        ("GET",  "/crypto/status") => {
-            r#"{"available":true,"algorithm":"AES-256-GCM","key_derivation":"derive_aes_key(ANDROID_ID:pkg)","nonce":"domain-derived-12-byte","tag_bits":128}"#.to_string()
-        }
-
-                // ── Session L: Security audit endpoint ───────────────────────────────────
-
-        // GET /security/audit — reports current security posture
-        ("GET",  "/security/audit") => {
-            let s = STATE.lock().unwrap();
-            let has_secret  = !s.http_secret.is_empty();
-            let has_api_key = !s.config.api_key.is_empty();
-            // Check if api_key looks encrypted (hex, even length, >32 chars)
-            let key_encrypted = has_api_key
-                && s.config.api_key.len() > 32
-                && s.config.api_key.chars().all(|c: char| c.is_ascii_hexdigit());
-            let shizuku_ok  = s.shizuku.permission_granted;
-            format!(r#"{{"http_secret_set":{},"api_key_present":{},"api_key_encrypted":{},"shizuku":{},"tls_enabled":true,"auth_coverage":"session_l","jni_safe_inputs":true,"lz4_compression":true,"aes_gcm_available":true}}"#,
-                has_secret, has_api_key, key_encrypted, shizuku_ok)
-        }
-
-        // POST /security/rotate_secret — generate and set a new random HTTP secret
-        ("POST", "/security/rotate_secret") => {
-            // Derive new secret from current time + existing key material
-            let new_secret = {
-                let s = STATE.lock().unwrap();
-                let seed = format!("{}:{}:{}", now_ms(), s.request_count, s.config.api_key.len());
-                let k = derive_aes_key(&seed);
-                k.iter().map(|b| format!("{:02x}", b)).collect::<String>()[..32].to_string()
-            };
-            STATE.lock().unwrap().http_secret = new_secret.clone();
-            format!(r#"{{"ok":true,"new_secret":"{}","note":"store this — required for all future API calls"}}"#,
-                &new_secret)
-        }
-
-                ("POST", "/crash") => {
-            let thread  = extract_json_str(body, "thread").unwrap_or_else(||"unknown".into());
-            let trace   = extract_json_str(body, "trace").unwrap_or_default();
-            let ts_val  = extract_json_num(body, "ts").unwrap_or(0.0) as u128;
-            let ts      = if ts_val > 0 { ts_val } else { now_ms() };
-            // First line = exception class/message
-            let message = trace.lines().next().unwrap_or("").to_string();
-            // Cap trace at 4KB to avoid memory bloat
-            let trace_capped = if trace.len() > 4096 {
-                format!("{}…[truncated]", &trace[..4096])
-            } else { trace };
-            let entry = CrashEntry { ts, thread, message, trace: trace_capped };
-            let mut s = STATE.lock().unwrap();
-            s.crash_log.push_back(entry);
-            if s.crash_log.len() > 50 { s.crash_log.pop_front(); }
-            r#"{"ok":true}"#.to_string()
-        }
-
-        // GET /crash/log — returns all stored crash entries as JSON array
-        ("GET",  "/crash/log") => {
-            let s = STATE.lock().unwrap();
-            let items: Vec<String> = s.crash_log.iter().map(|c| {
-                let safe_msg   = esc(&c.message);
-                let safe_trace = esc(&c.trace);
-                let safe_thr   = esc(&c.thread);
-                format!(r#"{{"ts":{},"thread":"{}","message":"{}","trace":"{}"}}"#,
-                    c.ts, safe_thr, safe_msg, safe_trace)
-            }).collect();
-            format!(r#"{{"count":{},"crashes":[{}]}}"#, items.len(), items.join(","))
-        }
-
-        // POST /crash/clear — wipe the crash log
-        ("POST", "/crash/clear") => {
-            STATE.lock().unwrap().crash_log.clear();
-            r#"{"ok":true,"cleared":true}"#.to_string()
-        }
-
-        // GET /crash/latest — just the most recent crash (fast poll)
-        ("GET",  "/crash/latest") => {
-            let s = STATE.lock().unwrap();
-            match s.crash_log.back() {
-                Some(c) => format!(
-                    r#"{{"has_crash":true,"ts":{},"thread":"{}","message":"{}"}}"#,
-                    c.ts, esc(&c.thread), esc(&c.message)),
-                None => r#"{"has_crash":false}"#.to_string(),
-            }
-        }
-
-        ("POST", "/theme/flash") => {
-            let dark = body.contains("\"dark\":true");
-            STATE.lock().unwrap().theme.is_dark = dark;
-            r#"{"ok":true}"#.to_string()
-        }
-
-        // GET /settings/automation/summary — automation engine summary for settings card
-        ("GET",  "/settings/automation/summary") => {
-            let s = STATE.lock().unwrap();
-            let enabled = s.macros.iter().filter(|m| m.enabled).count();
-            let total_runs: u64 = s.macros.iter().map(|m| m.run_count).sum();
-            let last_run_ms = s.macros.iter().map(|m| m.last_run_ms).max().unwrap_or(0);
-            let last_run_ago = if last_run_ms > 0 {
-                now_ms().saturating_sub(last_run_ms)
-            } else { 0 };
-            format!(
-                r#"{{"total":{},"enabled":{},"disabled":{},"total_runs":{},"last_run_ago_ms":{}}}"#,
-                s.macros.len(), enabled, s.macros.len().saturating_sub(enabled),
-                total_runs, last_run_ago
-            )
-        }
-
-
-        // ── Layer 5: Settings Page — Rust-backed endpoints ──────────────────────
-
-        // GET /settings/counters — live counter values for CounterAnimator
-        // Returns numbers that the UI animates from old→new over 600ms EaseOut.
-        ("GET", "/settings/counters") => {
-            let s = STATE.lock().unwrap();
-            let uptime_ms   = now_ms().saturating_sub(s.uptime_start);
-            let uptime_s    = (uptime_ms / 1000) as u64;
-            let tool_calls  = s.tool_call_count;
-            let mem_facts   = s.memory_index.len() as u64;
-            let macros_en   = s.macros.iter().filter(|m| m.enabled).count() as u64;
-            let macros_tot  = s.macros.len() as u64;
-            let macro_runs: u64 = s.macros.iter().map(|m| m.run_count).sum();
-            let sessions    = s.sessions.len() as u64;
-            let skills_en   = s.skills.values().filter(|sk| sk.enabled).count() as u64;
-            let req_count   = s.request_count;
-            let notif_count = s.notifications.len() as u64;
-            format!(
-                r#"{{"uptime_s":{},"tool_calls":{},"memory_facts":{},"macros_enabled":{},"macros_total":{},"macro_runs":{},"sessions":{},"skills_enabled":{},"requests":{},"notifications":{}}}"#,
-                uptime_s, tool_calls, mem_facts, macros_en, macros_tot,
-                macro_runs, sessions, skills_en, req_count, notif_count
-            )
-        }
-
-        // GET /settings/activity — activity stream for last 20 events
-        // Used by the settings page activity feed (Row-level visual feedback)
-        ("GET", "/settings/activity") => {
-            let s = STATE.lock().unwrap();
-            let mut items: Vec<String> = Vec::new();
-            // Last 10 macro runs
-            for r in s.macro_run_log.iter().rev().take(10) {
-                items.push(format!(
-                    r#"{{"type":"macro","name":"{}","success":{},"ts":{}}}"#,
-                    esc(&r.macro_name), r.success, r.ts));
-            }
-            // Last 5 notifications
-            for n in s.notifications.iter().rev().take(5) {
-                items.push(format!(
-                    r#"{{"type":"notif","pkg":"{}","title":"{}","ts":{}}}"#,
-                    esc(&n.pkg), esc(&n.title), n.time));
-            }
-            // Last 5 daily_log entries
-            for entry in s.daily_log.iter().rev().take(5) {
-                items.push(format!(
-                    r#"{{"type":"log","msg":"{}","ts":{}}}"#,
-                    esc(entry), now_ms()));
-            }
-            // Sort by ts descending, take 20
-            items.sort_by(|a, b| {
-                let ta = extract_json_num(a, "ts").unwrap_or(0.0);
-                let tb = extract_json_num(b, "ts").unwrap_or(0.0);
-                tb.partial_cmp(&ta).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            items.truncate(20);
-            format!(r#"{{"count":{},"items":[{}]}}"#, items.len(), items.join(","))
-        }
-
-        // GET /settings/shizuku/halo — Layer 9: God mode halo state
-        // Returns border color + animation params for the screen-edge halo
-        ("GET", "/settings/shizuku/halo") => {
-            let s = STATE.lock().unwrap();
-            let active = s.shizuku.permission_granted;
-            let partial = s.shizuku.installed && !active;
-            // God mode halo: 2dp Lavender border traces screen edge when fully active
-            // Rotation: 4s per revolution, 30dp arc length
-            let (color, width_dp, visible, revolution_ms) = if active {
-                (0xFFB4BEFEu32, 2u32, true,  4000u32)  // Lavender, full speed
-            } else if partial {
-                (0xFFFAB387u32, 1u32, true,  8000u32)  // Peach, slow
-            } else {
-                (0x00000000u32, 0u32, false, 0u32)      // invisible
-            };
-            format!(
-                r#"{{"active":{},"partial":{},"color":{},"width_dp":{},"visible":{},"revolution_ms":{},"arc_dp":30}}"#,
-                active, partial, color, width_dp, visible, revolution_ms
-            )
-        }
-
-        // POST /settings/row_interaction {"row":"api_key","action":"tap|long_press|edit"}
-        // Enhanced row analytics — tracks not just tap but interaction type
-        ("POST", "/settings/row_interaction") => {
-            let row    = extract_json_str(body, "row").unwrap_or_default();
-            let action = extract_json_str(body, "action").unwrap_or_else(|| "tap".to_string());
-            if !row.is_empty() {
-                let mut s = STATE.lock().unwrap();
-                let entry = format!("[settings_interaction] row={} action={} ts={}", 
-                    esc(&row), esc(&action), now_ms());
-                s.daily_log.push_back(entry);
-                if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
-                // Increment row-specific usage counter in variables map
-                let key = format!("_settings_tap_{}", row);
-                let count = s.variables.get(&key)
-                    .map(|v| v.value.parse::<u32>().unwrap_or(0) + 1)
-                    .unwrap_or(1);
-                s.variables.entry(key.clone()).or_insert_with(|| AutoVariable {
-                    name: key.clone(), value: "0".to_string(),
-                    var_type: "counter".to_string(),
-                    persistent: false, created_ms: now_ms(), updated_ms: now_ms(),
-                }).value = count.to_string();
-            }
-            r#"{"ok":true}"#.to_string()
-        }
-
-        // GET /settings/top_rows — most-accessed settings rows (for smart ordering)
-        ("GET", "/settings/top_rows") => {
-            let s = STATE.lock().unwrap();
-            let mut rows: Vec<(String, u32)> = s.variables.iter()
-                .filter(|(k, _v)| k.starts_with("_settings_tap_"))
-                .map(|(k, v)| {
-                    let row_name = k.trim_start_matches("_settings_tap_").to_string();
-                    let count = v.value.parse::<u32>().unwrap_or(0);
-                    (row_name, count)
-                })
-                .collect();
-            rows.sort_by(|a, b| b.1.cmp(&a.1));
-            rows.truncate(5);
-            let items: Vec<String> = rows.iter()
-                .map(|(r, c)| format!(r#"{{"row":"{}","taps":{}}}"#, esc(r), c))
-                .collect();
-            format!(r#"{{"top_rows":[{}]}}"#, items.join(","))
-        }
-
-        // GET /settings/memory/stats — detailed memory stats for memory card
-        ("GET", "/settings/memory/stats") => {
-            let s = STATE.lock().unwrap();
-            let total    = s.memory_index.len();
-            let pinned   = s.memory_index.iter().filter(|e| e.access_count > 5).count();
-            let recent   = s.memory_index.iter()
-                .filter(|_e| now_ms().saturating_sub(
-                    s.context_turns.iter().map(|_| now_ms()).next().unwrap_or(0)) < 86_400_000)
-                .count();
-            let top: Vec<String> = {
-                let mut entries: Vec<_> = s.memory_index.iter().collect();
-                entries.sort_by(|a, b| b.access_count.cmp(&a.access_count));
-                entries.iter().take(3)
-                    .map(|e| format!(r#"{{"key":"{}","access_count":{}}}"#,
-                        esc(&e.key), e.access_count))
-                    .collect()
-            };
-            format!(
-                r#"{{"total":{},"pinned":{},"recent_24h":{},"top_accessed":[{}]}}"#,
-                total, pinned, recent, top.join(",")
-            )
-        }
-
-        // GET /settings/theme/palette — full Catppuccin Mocha palette for settings
-        // Used by theme card to show all swatches
-        ("GET", "/settings/theme/palette") => {
-            // Catppuccin Mocha full palette
-            let swatches = vec![
-                ("Rosewater", 0xFFF5E0DC_u32), ("Flamingo",  0xFFF2CDCD_u32),
-                ("Pink",      0xFFF38BA8_u32), ("Mauve",     0xFFCBA6F7_u32),
-                ("Red",       0xFFEBA0AC_u32), ("Maroon",    0xFFEBA0AC_u32),
-                ("Peach",     0xFFFAB387_u32), ("Yellow",    0xFFF9E2AF_u32),
-                ("Green",     0xFFA6E3A1_u32), ("Teal",      0xFF94E2D5_u32),
-                ("Sky",       0xFF89DCEB_u32), ("Sapphire",  0xFF74C7EC_u32),
-                ("Blue",      0xFF89B4FA_u32), ("Lavender",  0xFFB4BEFE_u32),
-                ("Text",      0xFFCDD6F4_u32), ("Subtext1",  0xFFBAC2DE_u32),
-                ("Overlay2",  0xFF9399B2_u32), ("Overlay0",  0xFF6C7086_u32),
-                ("Surface2",  0xFF585B70_u32), ("Surface1",  0xFF45475A_u32),
-                ("Surface0",  0xFF313244_u32), ("Base",      0xFF1E1E2E_u32),
-                ("Mantle",    0xFF181825_u32), ("Crust",     0xFF11111B_u32),
-            ];
-            let items: Vec<String> = swatches.iter()
-                .map(|(name, color)| format!(r#"{{"name":"{}","color":{}}}"#, name, color))
-                .collect();
-            format!(r#"{{"theme":"catppuccin_mocha","swatches":[{}]}}"#, items.join(","))
-        }
-
-                // GET /layer1 — Neural Nav Bar state for Java
-        // Returns Catppuccin colour tokens + keyboard state hint
-        // Java NeuralNavBar polls this to stay in sync with Rust theme
-        ("GET",  "/layer1") => {
-            let s = STATE.lock().unwrap();
-            let uptime_ms = now_ms().saturating_sub(s.uptime_start);
-            // Nav bar pulse: subtle border alpha oscillation on heartbeat
-            let phase = (uptime_ms % 3_000) as f32 / 3_000.0;
-            let border_alpha = 0.30 + (phase * 2.0 * std::f32::consts::PI as f32).sin().abs() * 0.08;
-            format!(
-                r#"{{"mantle":{},"lavender":{},"overlay0":{},"border_alpha":{:.4},"active_tab_sp":26,"inactive_tab_sp":22,"aura_radius_dp":32,"island_height_dp":72,"island_corner_dp":24,"elevation_dp":8}}"#,
-                0xFF181825u32,  // Catppuccin Mantle
-                0xFFB4BEFEu32,  // Catppuccin Lavender
-                0xFF6C7086u32,  // Catppuccin Overlay0 (inactive)
-                border_alpha
-            )
-        }
-
-        // POST /layer0/burst — called by Java when Kira finishes replying
-        // Sets a one-shot burst flag that /layer0 will return as burst:true
-        // ── Layer 2: Chat Interface state endpoints ───────────────────────────
-
-        // GET /layer2/header — header bar state (pulse, subtitle cycle index)
-        // Java polls at 500ms to drive header border and subtitle crossfade
-        ("GET",  "/layer2/header") => {
-            let s = STATE.lock().unwrap();
-            let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
-            let phase      = (uptime_ms % 3_000) as f32 / 3_000.0;
-            // Border alpha: 12% base, pulses to 35% when thinking
-            let border_alpha = if s.theme.is_thinking {
-                0.27 + (phase * 2.0 * std::f32::consts::PI).sin().abs() * 0.08
-            } else { 0.12f32 };
-            // Subtitle index: cycles through 4 states (ready/thinking/reasoning/composing)
-            // 0=ready, 1=thinking, 2=reasoning, 3=composing — driven by request state
-            let subtitle_idx: u32 = if !s.theme.is_thinking { 0 }
-                else { ((uptime_ms / 1_800) % 3 + 1) as u32 }; // cycle 1-3 while thinking
-            format!(
-                r#"{{"border_alpha":{:.4},"subtitle_idx":{},"thinking":{},"request_count":{}}}"#,
-                border_alpha, subtitle_idx, s.theme.is_thinking, s.request_count
-            )
-        }
-
-        // GET /layer2/bubbles — bubble styling tokens for chat UI
-        // Returns Catppuccin colour tokens for user/kira bubbles + shadow specs
-        ("GET",  "/layer2/bubbles") => {
-            r#"{"user_bg":3292050, "user_bg_alpha":255, "kira_bg":2040622, "lavender":11862782, "peach":16430983, "green_dark":2023454, "shadow_color":1144397, "shadow_alpha":102, "shadow_blur_dp":8, "shadow_y_dp":2, "spring_stiffness":300, "spring_damping":28, "spring_duration_ms":320, "translate_dp":40}"#.to_string()
-            // user_bg = 0xFF313244 (Surface0), kira_bg = 0xFF1E1E2E (Base)
-            // lavender = 0xFFB4BEFE, peach = 0xFFFAB387, green_dark = 0xFF1E2E1E
-        }
-
-        // GET /layer2/typing — typing indicator animation params
-        // Three Lavender dots, sinusoidal, each offset 120ms
-        ("GET",  "/layer2/typing") => {
-            let s = STATE.lock().unwrap();
-            let uptime_ms = now_ms().saturating_sub(s.uptime_start);
-            // Each dot phase offset by 120ms within 600ms period
-            let t = uptime_ms as f32 / 600.0 * 2.0 * std::f32::consts::PI;
-            let d0 = ((t).sin() * 4.0) as i32;           // dot 0: ±4dp
-            let d1 = ((t - 0.628).sin() * 4.0) as i32;   // dot 1: 120ms offset
-            let d2 = ((t - 1.257).sin() * 4.0) as i32;   // dot 2: 240ms offset
-            format!(
-                r#"{{"visible":{},"dot0_y":{},"dot1_y":{},"dot2_y":{},"color":{},"period_ms":600,"amplitude_dp":4}}"#,
-                s.theme.is_thinking, d0, d1, d2, 0xFFB4BEFEu32
-            )
-        }
-
-        // POST /layer2/message — record that a message was sent/received
-        // Updates request_count, last_message_ts, triggers K badge rotation signal
-        ("POST", "/layer2/message") => {
-            let role = extract_json_str(body, "role").unwrap_or_else(||"user".to_string());
-            let mut s = STATE.lock().unwrap();
-            if role == "user" {
-                s.request_count += 1;
-                s.theme.is_thinking = true;
-            } else if role == "kira" {
-                s.theme.is_thinking = false;
-                s.tool_call_count += 1;
-            }
-            format!(r#"{{"ok":true,"request_count":{},"thinking":{}}}"#,
-                s.request_count, s.theme.is_thinking)
-        }
-
-                ("POST", "/layer0/burst") => {
-            // We use is_thinking flip as the burst signal — Java detects thinking→false
-            STATE.lock().unwrap().theme.is_thinking = false;
-            r#"{"ok":true}"#.to_string()
-        }
-
+        ("GET",  "/theme")             => { let s=STATE.lock().unwrap(); s.theme.to_json() }
         ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
         ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap(); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
         ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }
@@ -4889,7 +3005,7 @@ You are executing a multi-step task autonomously.
         ("GET",  "/memory")            => { let s=STATE.lock().unwrap(); format!(r#"{{"memory_md":{},"entries":{}}}"#, json_str(&s.memory_md),s.memory_index.len()) }
         ("GET",  "/memory/search")     => search_memory(path),
         ("GET",  "/memory/full")       => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.memory_index.iter().map(|e| format!(r#"{{"key":"{}","value":"{}","tags":{},"relevance":{:.2},"access_count":{}}}"#, esc(&e.key),esc(&e.value),json_str_arr(&e.tags),e.relevance,e.access_count)).collect(); format!("[{}]", items.join(",")) }
-        ("GET",  "/daily_log")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.daily_log.iter().cloned().map(|l: String| format!("\"{}\"", esc(&l))).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/daily_log")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.daily_log.iter().cloned().map(|l| format!("\"{}\"", esc(&l))).collect(); format!("[{}]", items.join(",")) }
         ("GET",  "/context")           => get_context_json(),
         ("GET",  "/soul")              => { let s=STATE.lock().unwrap(); format!(r#"{{"soul":{}}}"#, json_str(&s.soul_md)) }
         ("POST", "/soul")              => { let val=extract_json_str(body,"content").unwrap_or_default(); if !val.is_empty() { STATE.lock().unwrap().soul_md=val; } r#"{"ok":true}"#.to_string() }
@@ -5199,7 +3315,7 @@ fn search_memory(path: &str) -> String {
         if e.key.to_lowercase().contains(&ql) { score+=5.0; }
         let vl=e.value.to_lowercase();
         for w in ql.split_whitespace() { if vl.contains(w) { score+=1.0; } }
-        for tag in e.tags.iter() { let tag: &String = tag; if tag.to_lowercase().contains(&ql) { score+=2.0; } }
+        for tag in &e.tags { if tag.to_lowercase().contains(&ql) { score+=2.0; } }
         if score>0.0 { e.relevance=(e.relevance+0.1).min(5.0); e.access_count+=1; Some((score,e.key.clone(),e.value.clone(),e.ts)) } else { None }
     }).collect();
     results.sort_by(|a,b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -5439,7 +3555,7 @@ fn add_kb_entry(body: &str) {
 
 fn kb_search(path: &str) -> String {
     let query=path.find("q=").map(|i| &path[i+2..]).unwrap_or("").to_lowercase(); let s=STATE.lock().unwrap();
-    let mut results: Vec<(u32, &KbEntry)>=s.knowledge_base.iter().filter_map(|e| { let mut sc=0u32; if e.title.to_lowercase().contains(&query) { sc+=10; } if e.content.to_lowercase().contains(&query) { sc+=5; } for tag in e.tags.iter() { let tag: &String = tag; if tag.to_lowercase().contains(&query) { sc+=3; } } if sc>0 { Some((sc,e)) } else { None } }).collect();
+    let mut results: Vec<(u32, &KbEntry)>=s.knowledge_base.iter().filter_map(|e| { let mut sc=0u32; if e.title.to_lowercase().contains(&query) { sc+=10; } if e.content.to_lowercase().contains(&query) { sc+=5; } for tag in &e.tags { if tag.to_lowercase().contains(&query) { sc+=3; } } if sc>0 { Some((sc,e)) } else { None } }).collect();
     results.sort_by(|a,b| b.0.cmp(&a.0));
     let items: Vec<String>=results.iter().take(10).map(|(sc,e)| format!(r#"{{"id":"{}","title":"{}","content":"{}","score":{}}}"#, esc(&e.id),esc(&e.title),esc(&e.content[..e.content.len().min(300)]),sc)).collect();
     format!("[{}]", items.join(","))
@@ -6991,7 +5107,6 @@ fn parse_nl_condition(cond: &str) -> (String, String) {
 /// Covers ~30 most common Android apps.
 /// Map 200+ app names/aliases to their Android package names.
 /// Called by automation triggers (watch_app, if_then "app X") and tool dispatch.
-
 fn app_name_to_pkg(name: &str) -> String {
     let n = name.to_lowercase().trim().replace('-', " ").replace('_', " ");
     let pkg = match n.as_str() {
@@ -7117,7 +5232,7 @@ fn app_name_to_pkg(name: &str) -> String {
         "nykaa"                                          => "com.nykaa.app",
         "paytm"                                          => "net.one97.paytm",
         "phonepe"                                        => "com.phonepe.app",
-
+        "gpay"|"google pay upi"                          => "com.google.android.apps.nbu.paisa.user",
         "bhim"|"bhim upi"                                => "in.org.npci.upiapp",
         "paypal"                                         => "com.paypal.android.p2pmobile",
         "cash app"                                       => "com.squareup.cash",
@@ -7278,7 +5393,7 @@ fn app_name_to_pkg(name: &str) -> String {
         "samsung notes"|"s note"                         => "com.samsung.android.app.notes",
         "samsung bixby"|"bixby"                          => "com.samsung.android.bixby.agent",
         "samsung store"|"galaxy store"                   => "com.sec.android.app.samsungapps",
-
+        "samsung health"                                 => "com.sec.android.app.shealth",
         "samsung music"                                  => "com.sec.android.app.music",
         "samsung clock"                                  => "com.sec.android.app.clockpackage",
         "dex"|"samsung dex"                              => "com.samsung.android.desktopmode.uiservice",
@@ -7324,7 +5439,7 @@ fn app_name_to_pkg(name: &str) -> String {
         "chatgpt"|"chat gpt"                             => "com.openai.chatgpt",
         "claude"                                         => "com.anthropic.claude",
         "perplexity"                                     => "ai.perplexity.app.android",
-
+        "gemini"                                         => "com.google.android.apps.bard",
         "copilot"|"microsoft copilot"                    => "com.microsoft.copilot",
         "grok"                                           => "com.x.android",
         _                                                => &n,
@@ -8409,7 +6524,7 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
             let mut s = STATE.lock().unwrap();
             let kw = s.roboru_keywords.get(&name).cloned();
             if let Some(kw) = kw {
-                let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name): (usize, &String)| {
+                let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name)| {
                     let val = extract_json_str(body, &format!("arg{}", i)).unwrap_or_default();
                     (arg_name.clone(), val)
                 }).collect();
@@ -8754,7 +6869,6 @@ fn xor_crypt(data: &[u8], key: &[u8]) -> Vec<u8> {
 }
 
 // Utilities
-
 fn now_ms() -> u128 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() }
 fn gen_id()  -> String { format!("k{}", now_ms()) }
 fn estimate_tokens(s: &str) -> u32 { (s.len()/4).max(1) as u32 }
@@ -8779,225 +6893,4 @@ fn extract_json_num(json: &str, key: &str) -> Option<f64> {
 
 fn extract_json_f32(json: &str, key: &str) -> Option<f32> {
     extract_json_num(json, key).map(|v| v as f32)
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session C — AES-256-GCM authenticated encryption for secrets
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
-use aes_gcm::aead::Aead;
-
-/// Derive a stable 32-byte key from a device-specific seed string.
-/// Seed is typically: SHA256(ANDROID_ID + package_name), supplied by Java.
-/// Uses 64 rounds of XOR + rotate mixing — lightweight but sufficient
-/// as a KDF since the seed itself comes from a 256-bit random source.
-pub fn derive_aes_key(seed: &str) -> [u8; 32] {
-    let mut key = [0u8; 32];
-    let seed_bytes = seed.as_bytes();
-    // Mix seed bytes into key with rotation
-    for (i, &b) in seed_bytes.iter().enumerate() {
-        key[i % 32] ^= b.wrapping_add(i as u8);
-        key[(i + 7) % 32] = key[(i + 7) % 32].rotate_left(1) ^ b;
-    }
-    // 64 extra mixing rounds
-    for round in 0u8..64 {
-        for i in 0..32 {
-            key[i] = key[i].wrapping_add(key[(i + 1) % 32])
-                .rotate_left(3)
-                ^ round;
-        }
-    }
-    key
-}
-
-/// Derive a 12-byte deterministic nonce from the key + a domain string.
-/// Domain prevents nonce reuse across different fields (api_key, tg_token, etc).
-fn derive_nonce(key: &[u8; 32], domain: &str) -> [u8; 12] {
-    let mut nonce = [0u8; 12];
-    for (i, &b) in domain.as_bytes().iter().enumerate() {
-        nonce[i % 12] ^= b;
-    }
-    // Mix with first 12 bytes of key
-    for i in 0..12 {
-        nonce[i] ^= key[i].rotate_right(2);
-    }
-    nonce
-}
-
-/// Encrypt plaintext with AES-256-GCM. Returns hex-encoded ciphertext+tag.
-/// domain: field name ("api_key", "tg_token", etc) — prevents cross-field decryption.
-pub fn aes_encrypt(plaintext: &str, key_seed: &str, domain: &str) -> String {
-    let key_bytes  = derive_aes_key(key_seed);
-    let nonce_bytes = derive_nonce(&key_bytes, domain);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
-    let nonce  = Nonce::from_slice(&nonce_bytes);
-    match cipher.encrypt(nonce, plaintext.as_bytes()) {
-        Ok(ciphertext) => {
-            // hex-encode: ciphertext includes 16-byte GCM auth tag appended
-            ciphertext.iter().map(|b| format!("{:02x}", b)).collect()
-        }
-        Err(_) => String::new(), // should never happen
-    }
-}
-
-/// Decrypt AES-256-GCM hex ciphertext. Returns plaintext or empty string on failure.
-pub fn aes_decrypt(hex_ciphertext: &str, key_seed: &str, domain: &str) -> String {
-    if hex_ciphertext.is_empty() { return String::new(); }
-    // Decode hex
-    let bytes: Option<Vec<u8>> = (0..hex_ciphertext.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&hex_ciphertext[i..i+2], 16).ok())
-        .collect();
-    let ciphertext = match bytes {
-        Some(b) if !b.is_empty() => b,
-        _ => return String::new(),
-    };
-    let key_bytes   = derive_aes_key(key_seed);
-    let nonce_bytes = derive_nonce(&key_bytes, domain);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
-    let nonce  = Nonce::from_slice(&nonce_bytes);
-    match cipher.decrypt(nonce, ciphertext.as_slice()) {
-        Ok(plain) => String::from_utf8(plain).unwrap_or_default(),
-        Err(_)    => String::new(), // wrong key or tampered ciphertext
-    }
-}
-
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session K — Pure-Rust HTTPS client via rustls
-// Works on arm64-v8a. Falls back to plain HTTP on other ABIs (or through
-// Java bridge via /http_proxy endpoint).
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-use rustls::ClientConfig;
-use rustls::pki_types::ServerName;
-// imports already in scope from state.rs
-
-/// Send HTTPS POST and return response body.
-/// Uses rustls with webpki-roots (Mozilla CA bundle compiled in).
-pub fn https_post(
-    host:       &str,
-    port:       u16,
-    path:       &str,
-    body:       &str,
-    auth_token: &str,
-    timeout_s:  u64,
-) -> Result<String, String> {
-    // Build TLS config with Mozilla root certificates
-    let root_store = {
-        let mut store = rustls::RootCertStore::empty();
-        store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        store
-    };
-    let config = Arc::new({
-        let c = ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-        c
-    });
-
-    // Establish TCP connection
-    let addr   = format!("{}:{}", host, port);
-    let mut stream = std::net::TcpStream::connect(&addr)
-        .map_err(|e| format!("tcp connect {}: {}", addr, e))?;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(timeout_s)))
-        .map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(std::time::Duration::from_secs(15)))
-        .map_err(|e| e.to_string())?;
-
-    // TLS handshake
-    let server_name = ServerName::try_from(host.to_string())
-        .map_err(|e| format!("invalid hostname {}: {:?}", host, e))?;
-    let mut conn = rustls::ClientConnection::new(config, server_name)
-        .map_err(|e| format!("tls init: {}", e))?;
-    let mut tls_stream = rustls::Stream::new(&mut conn, &mut stream);
-
-    // Write HTTP/1.1 request
-    let request = format!(
-        "POST {} HTTP/1.1
-         Host: {}
-         Authorization: Bearer {}
-         Content-Type: application/json
-         Content-Length: {}
-         Connection: close
-         
-         {}",
-        path, host, auth_token, body.len(), body
-    );
-    tls_stream.write_all(request.as_bytes())
-        .map_err(|e| format!("write: {}", e))?;
-
-    // Read response
-    let mut response = Vec::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        match tls_stream.read(&mut buf) {
-            Ok(0)  => break,
-            Ok(n)  => response.extend_from_slice(&buf[..n]),
-            Err(e) if e.kind() == std::io::ErrorKind::ConnectionAborted => break,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof     => break,
-            Err(e) => return Err(format!("read: {}", e)),
-        }
-        if response.len() > 10 * 1024 * 1024 { break; } // 10MB cap
-    }
-
-    let resp_str = String::from_utf8_lossy(&response).into_owned();
-    // Strip HTTP headers — find blank line
-    if let Some(body_start) = resp_str.find("
-
-") {
-        Ok(resp_str[body_start + 4..].to_string())
-    } else {
-        Ok(resp_str)
-    }
-}
-
-/// GET request over HTTPS (for Telegram API, GitHub releases, etc.)
-pub fn https_get(host: &str, port: u16, path: &str, timeout_s: u64) -> Result<String, String> {
-    let root_store = {
-        let mut store = rustls::RootCertStore::empty();
-        store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        store
-    };
-    let config = Arc::new({
-        let c = ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-        c
-    });
-
-    let mut tcp = std::net::TcpStream::connect(format!("{}:{}", host, port))
-        .map_err(|e| e.to_string())?;
-    tcp.set_read_timeout(Some(std::time::Duration::from_secs(timeout_s)))
-        .map_err(|e| e.to_string())?;
-
-    let server_name = ServerName::try_from(host.to_string())
-        .map_err(|e| format!("hostname: {:?}", e))?;
-    let mut conn   = rustls::ClientConnection::new(config, server_name)
-        .map_err(|e| format!("tls: {}", e))?;
-    let mut stream = rustls::Stream::new(&mut conn, &mut tcp);
-
-    let request = format!(
-        "GET {} HTTP/1.1
-Host: {}
-Connection: close
-
-",
-        path, host
-    );
-    stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
-
-    let mut response = Vec::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        match stream.read(&mut buf) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => { response.extend_from_slice(&buf[..n]); }
-        }
-    }
-    let resp = String::from_utf8_lossy(&response).into_owned();
-    Ok(if let Some(i) = resp.find("
-
-") { resp[i+4..].to_string() } else { resp })
 }

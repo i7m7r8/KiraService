@@ -35,7 +35,6 @@ public class FloatingWindowService extends Service {
     private View bubbleView;
     private LinearLayout panelView;
     private boolean panelOpen = false;
-    private boolean isDragging = false; // L7: suppress Lissajous during drag
     private KiraAI ai;
     private Handler handler;
 
@@ -60,7 +59,6 @@ public class FloatingWindowService extends Service {
 
     @Override
     public void onDestroy() {
-        orbHandler.removeCallbacksAndMessages(null); // L7: stop Lissajous
         removeSafely(bubbleView);
         removeSafely(panelView);
         super.onDestroy();
@@ -114,34 +112,6 @@ public class FloatingWindowService extends Service {
 
         wm.addView(bubble, bubbleLP);
         bubbleView = bubble;
-        // L7: Lissajous figure-eight idle wobble (±3dp, 4s period)
-        startOrbLissajous();
-    }
-
-    // ── L7: Floating orb Lissajous figure-eight ─────────────────────────────
-    private final android.os.Handler orbHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    private final long orbBorn = System.currentTimeMillis();
-    private int orbBaseX = 20, orbBaseY = 400;
-
-    private void startOrbLissajous() {
-        orbHandler.post(new Runnable() {
-            @Override public void run() {
-                if (bubbleView == null || bubbleLP == null) return;
-                // Lissajous: x = A*sin(a*t + delta), y = B*sin(b*t)
-                // a=2, b=1 → figure-eight. Period=4s. Amplitude=3dp.
-                double t = (System.currentTimeMillis() - orbBorn) / 4000.0 * 2 * Math.PI;
-                float amp = dp(3);
-                float dx = (float)(amp * Math.sin(2 * t + Math.PI / 2));
-                float dy = (float)(amp * Math.sin(t));
-                // Only wobble when not being dragged
-                if (!isDragging) {
-                    bubbleLP.x = orbBaseX + (int) dx;
-                    bubbleLP.y = orbBaseY + (int) dy;
-                    try { wm.updateViewLayout(bubbleView, bubbleLP); } catch (Exception ignored) {}
-                }
-                orbHandler.postDelayed(this, 16); // 60fps
-            }
-        });
     }
 
     // \u2500\u2500 Panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -344,7 +314,6 @@ public class FloatingWindowService extends Service {
         view.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    isDragging = true;
                     downRawX[0] = event.getRawX();
                     downRawY[0] = event.getRawY();
                     downLpX[0]  = lp.x;
@@ -370,10 +339,6 @@ public class FloatingWindowService extends Service {
                     return true;
 
                 case MotionEvent.ACTION_UP:
-                    isDragging = false;
-                    if (bubbleLP != null && lp == bubbleLP) {
-                        orbBaseX = bubbleLP.x; orbBaseY = bubbleLP.y;
-                    }
                     if (!dragged[0] && onTap != null) {
                         onTap.run();
                     }

@@ -32,21 +32,8 @@ public class KiraForegroundService extends Service {
         } else {
             startForeground(NOTIF_ID, kn);
         }
-        // Start Rust HTTP server on background thread — must not be gated behind Accessibility
-        if (!rustStarted) {
-            rustStarted = true;
-            new Thread(() -> {
-                try {
-                    RustBridge.startServer(7070);
-                } catch (Throwable e) {
-                    android.util.Log.e("KiraService", "Rust server failed to start: " + e);
-                }
-            }, "kira-rust-server").start();
-        }
-        return START_STICKY;
+        return START_STICKY; // restart if killed
     }
-
-    private static volatile boolean rustStarted = false;
 
     @Override
     public IBinder onBind(Intent intent) { return null; }

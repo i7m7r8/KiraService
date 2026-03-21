@@ -159,29 +159,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.TAG }}
-          name: "Kira Agent v${{ steps.ver.outputs.VER }}"
+          name: "Kira Agent v${{ steps.ver.outputs.VER }} (pre-release)"
+          prerelease: true
           body: |
-            ## Kira Agent v${{ steps.ver.outputs.VER }}
+            ## Kira Agent v${{ steps.ver.outputs.VER }} — Initial Release
             **Released:** ${{ steps.ver.outputs.TS }}
 
-            ${{ steps.cl.outputs.NOTES }}
-
-            ---
-            ### Which APK to install?
-            | File | Device |
-            |------|--------|
-            | `KiraAgent-v*-arm64-v8a.apk` | **Most phones 2016+** — recommended |
-            | `KiraAgent-v*-armeabi-v7a.apk` | Older 32-bit phones |
-            | `KiraAgent-v*-x86_64.apk` | Emulators, Chromebooks |
-            | `KiraAgent-v*-universal.apk` | Any device (largest file) |
-
-            ### Install
-            1. Download the APK for your device
-            2. Enable **Install from unknown sources**
-            3. Install — same signing key every build, no uninstall needed
-            4. Grant Accessibility + Shizuku for full autonomous control
-
-            > Kira auto-checks for updates on startup via OTA engine.
+            This is the first stable public release of **Kira Agent** — an autonomous AI assistant for Android built on a Rust core engine with Java UI.
 
             ---
 

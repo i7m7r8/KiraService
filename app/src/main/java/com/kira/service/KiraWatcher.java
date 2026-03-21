@@ -94,8 +94,8 @@ public class KiraWatcher {
                 // Handle intent-based actions
                 if (action.startsWith("open_app:")) {
                     String pkg = action.substring(9);
-                    Intent i = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
-                    if (i != null) { i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(i); }
+                    Intent intent = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
+                    if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(intent); }
                 }
             } catch (Exception e) { break; }
         }
@@ -105,7 +105,7 @@ public class KiraWatcher {
 
     private int getBattery() {
         try {
-            Intent i = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            Intent intent = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
             if (i == null) return -1;
             int l = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
             int s = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1);

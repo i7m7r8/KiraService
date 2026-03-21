@@ -1142,17 +1142,11 @@ public class MainActivity extends Activity
         sendBtn.setEnabled(false);
         addSystemNotice("\uD83E\uDDE0 ReAct mode: reason + act loop");
 
-        chain.run(goal, new com.kira.service.ai.KiraChain.ChainCallback() {
-            @Override public void onThought(String t) {
-                uiHandler.post(() -> addSystemNotice("\uD83E\uDDE0 " + t));
+        chain.run(goal, 5, new com.kira.service.ai.KiraChain.ChainCallback() {
+            @Override public void onStep(String thought) {
+                uiHandler.post(() -> addSystemNotice("\uD83E\uDDE0 " + thought));
             }
-            @Override public void onAction(String tool, String args) {
-                uiHandler.post(() -> addToolBubble(new ConvTurn("tool", "\u26A1 " + tool + ": " + args.substring(0, Math.min(60, args.length())))));
-            }
-            @Override public void onObservation(String obs) {
-                uiHandler.post(() -> addSystemNotice("\uD83D\uDC41 " + obs.substring(0, Math.min(80, obs.length()))));
-            }
-            @Override public void onFinal(String answer) {
+            @Override public void onConclusion(String answer) {
                 uiHandler.post(() -> {
                     ConvTurn t2 = new ConvTurn("kira", answer);
                     conversation.add(t2);
@@ -1162,8 +1156,11 @@ public class MainActivity extends Activity
                     scrollToBottom();
                 });
             }
-            @Override public void onError(String e) {
-                uiHandler.post(() -> { addErrorBubble(new ConvTurn("error", e)); sendBtn.setEnabled(true); headerSubtitle.setText("chain error"); });
+            @Override public void onError(String error) {
+                uiHandler.post(() -> {
+                    addSystemNotice("\u274C Chain error: " + error);
+                    sendBtn.setEnabled(true);
+                });
             }
         });
     }

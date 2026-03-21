@@ -1,5 +1,8 @@
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 
+#[macro_use]
+extern crate lazy_static;
+
 // Kira Rust Core v9 \u{2014} v40 edition
 //
 // NEW in v40 (Tasker/MacroDroid automation engine \u{2014} pure Rust):
@@ -1740,7 +1743,7 @@ fn action_to_json(a: &MacroAction) -> String {
 /// Build the system prompt for the AI, including memory context
 pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
     let mem_context: String = state.memory_index.iter().take(5)
-        .map(|m| format!("- {}", m.content))
+        .map(|m| format!("- {}", m.value))
         .collect::<Vec<_>>().join("\n");
 
     let tools_list = "[get_battery, get_wifi, run_shell, read_file, write_file, \
@@ -1928,7 +1931,7 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
             let mut s = STATE.lock().unwrap();
             let idx = s.memory_index.len();
             s.memory_index.push_back(MemoryEntry {
-                id:           format!("mem_{}", idx),
+                key:          format!("mem_{}", idx),
                 content:      content.clone(),
                 tags:         vec![],
                 pinned:       false,
@@ -2657,7 +2660,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject,
     ) -> JString {
         match STATE.lock().unwrap().fired_triggers.pop_front() {
-            Some(t) => unsafe { jni_str(env, &t) },
+            Some(t) => unsafe { jni_str(env, &t.as_str()) },
             None    => std::ptr::null_mut(),
         }
     }
@@ -3500,7 +3503,7 @@ fn requires_auth(path: &str) -> bool {
 /// Constant-time comparison to prevent timing attacks on the token.
 fn check_auth(token: Option<&str>) -> bool {
     let secret = {
-        let s = match STATE.lock() { Ok(g) => g, Err(e) => e.into_inner() };
+        let s: std::sync::MutexGuard<KiraState> = match STATE.lock() { Ok(g) => g, Err(e) => e.into_inner() };
         s.http_secret.clone()
     };
     if secret.is_empty() { return true; }   // no secret set = localhost open
@@ -3809,7 +3812,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 return r#"{"error":"goal is required"}"#.to_string();
             }
 
-            let (api_key, base_url, model, persona) = {
+            let (api_key, base_url, model, persona): (String,String,String,String) = {
                 let s = STATE.lock().unwrap();
                 (s.config.api_key.clone(), s.config.base_url.clone(),
                  s.config.model.clone(),   s.config.persona.clone())
@@ -3942,7 +3945,7 @@ You are executing a multi-step task autonomously.
             if goal.is_empty() {
                 return r#"{"error":"goal is required"}"#.to_string();
             }
-            let (api_key, base_url, model) = {
+            let (api_key, base_url, model): (String,String,String) = {
                 let s = STATE.lock().unwrap();
                 (s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
             };
@@ -4016,7 +4019,7 @@ You are executing a multi-step task autonomously.
             }
 
             // Load config
-            let (api_key, base_url, model, persona, system_prompt) = {
+            let (api_key, base_url, model, persona, system_prompt): (String,String,String,String,String) = {
                 let s = STATE.lock().unwrap();
                 let cfg = &s.config;
                 let persona = if cfg.persona.is_empty() {
@@ -4216,10 +4219,11 @@ You are executing a multi-step task autonomously.
 
                     if triggered {
                         // Queue a kira_chat action for each macro
-                        let mname = s.macros.iter().find(|m| m.id == mid)
+                        let mname: String = s.macros.iter().find(|m| m.id == mid)
                             .map(|m| m.name.clone()).unwrap_or_default();
+                        let mid_str: String = mid.clone();
                         s.macro_run_log.push_back(MacroRunLog {
-                            macro_id:   mid.clone(),
+                            macro_id:   mid_str,
                             macro_name: mname,
                             trigger:    "tick".into(),
                             success:    true,
@@ -5141,7 +5145,7 @@ fn search_memory(path: &str) -> String {
         if e.key.to_lowercase().contains(&ql) { score+=5.0; }
         let vl=e.value.to_lowercase();
         for w in ql.split_whitespace() { if vl.contains(w) { score+=1.0; } }
-        for tag in e.tags.iter() { if tag.to_lowercase().contains(&ql) { score+=2.0; } }
+        for tag in e.tags.iter() { let tag: &String = tag; if tag.to_lowercase().contains(&ql) { score+=2.0; } }
         if score>0.0 { e.relevance=(e.relevance+0.1).min(5.0); e.access_count+=1; Some((score,e.key.clone(),e.value.clone(),e.ts)) } else { None }
     }).collect();
     results.sort_by(|a,b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -5381,7 +5385,7 @@ fn add_kb_entry(body: &str) {
 
 fn kb_search(path: &str) -> String {
     let query=path.find("q=").map(|i| &path[i+2..]).unwrap_or("").to_lowercase(); let s=STATE.lock().unwrap();
-    let mut results: Vec<(u32, &KbEntry)>=s.knowledge_base.iter().filter_map(|e| { let mut sc=0u32; if e.title.to_lowercase().contains(&query) { sc+=10; } if e.content.to_lowercase().contains(&query) { sc+=5; } for tag in e.tags.iter() { if tag.to_lowercase().contains(&query) { sc+=3; } } if sc>0 { Some((sc,e)) } else { None } }).collect();
+    let mut results: Vec<(u32, &KbEntry)>=s.knowledge_base.iter().filter_map(|e| { let mut sc=0u32; if e.title.to_lowercase().contains(&query) { sc+=10; } if e.content.to_lowercase().contains(&query) { sc+=5; } for tag in e.tags.iter() { let tag: &String = tag; if tag.to_lowercase().contains(&query) { sc+=3; } } if sc>0 { Some((sc,e)) } else { None } }).collect();
     results.sort_by(|a,b| b.0.cmp(&a.0));
     let items: Vec<String>=results.iter().take(10).map(|(sc,e)| format!(r#"{{"id":"{}","title":"{}","content":"{}","score":{}}}"#, esc(&e.id),esc(&e.title),esc(&e.content[..e.content.len().min(300)]),sc)).collect();
     format!("[{}]", items.join(","))
@@ -8727,7 +8731,6 @@ fn extract_json_f32(json: &str, key: &str) -> Option<f32> {
 // Session C — AES-256-GCM authenticated encryption for secrets
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-use aes_gcm::{Aes256Gcm, Key, Nonce};
 use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
 use aes_gcm::aead::Aead;
 
@@ -8854,7 +8857,7 @@ pub fn https_post(
         .map_err(|e| format!("invalid hostname {}: {:?}", host, e))?;
     let mut conn = rustls::ClientConnection::new(config, server_name)
         .map_err(|e| format!("tls init: {}", e))?;
-    let mut tls_stream = rustls::Stream::new(&mut conn, stream);
+    let mut tls_stream = rustls::Stream::new(&mut conn, &mut stream);
 
     // Write HTTP/1.1 request
     let request = format!(
@@ -8919,7 +8922,7 @@ pub fn https_get(host: &str, port: u16, path: &str, timeout_s: u64) -> Result<St
         .map_err(|e| format!("hostname: {:?}", e))?;
     let mut conn   = rustls::ClientConnection::new(config, server_name)
         .map_err(|e| format!("tls: {}", e))?;
-    let mut stream = rustls::Stream::new(&mut conn, tcp);
+    let mut stream = rustls::Stream::new(&mut conn, &mut tcp);
 
     let request = format!(
         "GET {} HTTP/1.1

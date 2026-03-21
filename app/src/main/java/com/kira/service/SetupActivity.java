@@ -414,7 +414,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
         for (int i = 0; i < providers.length; i++) {
             final String label = providers[i][0];
             final String url   = providers[i][1];
-            final boolean isCustom = url.equals("custom");
+            final boolean isCustom = url.isEmpty() || url.equals("custom") || label.toLowerCase().contains("custom");
             TextView tv = new TextView(this);
             tv.setText(label);
             tv.setTextSize(12);

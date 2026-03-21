@@ -35,8 +35,16 @@ public class KiraTelegram {
     public KiraTelegram(Context ctx, Object unused) { this(ctx); }
 
     public void start() {
-        KiraConfig cfg = KiraConfig.load(ctx);
-        if (cfg.tgToken == null || cfg.tgToken.isEmpty()) return;
+        try {
+            KiraConfig cfg = KiraConfig.load(ctx);
+            if (cfg.tgToken == null || cfg.tgToken.isEmpty()) return;
+        } catch (Exception e) {
+            Log.w(TAG, "config load failed, deferring telegram start: " + e.getMessage());
+            // Retry after 5s — Rust may not be loaded yet
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                .postDelayed(this::start, 5000);
+            return;
+        }
         if (!running.compareAndSet(false, true)) return;
         pollThread = new Thread(this::pollLoop, "kira-telegram");
         pollThread.setDaemon(true);
@@ -52,7 +60,9 @@ public class KiraTelegram {
     private void pollLoop() {
         while (running.get()) {
             try {
-                KiraConfig cfg = KiraConfig.load(ctx);
+                KiraConfig cfg;
+                try { cfg = KiraConfig.load(ctx); }
+                catch (Exception ex) { Thread.sleep(5000); continue; }
                 if (cfg.tgToken.isEmpty()) { Thread.sleep(5000); continue; }
 
                 // Get last update id from Rust

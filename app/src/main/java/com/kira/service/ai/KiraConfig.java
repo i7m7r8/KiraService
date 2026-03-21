@@ -90,16 +90,18 @@ public class KiraConfig {
         // Sensitive: decrypt from encrypted storage, fall back to plain key
         String encKey       = p.getString("apiKey_enc",  "");
         String plainKey     = p.getString("apiKey",      "");
-        c.apiKey            = !encKey.isEmpty() ? decrypt(encKey, seed, "api_key")
-                                                : plainKey;
+        try {
+            c.apiKey = !encKey.isEmpty() ? decrypt(encKey, seed, "api_key") : plainKey;
+        } catch (Throwable ignored) { c.apiKey = plainKey; }
         c.baseUrl           = p.getString("baseUrl",     "https://api.groq.com/openai/v1");
         c.model             = p.getString("model",       "llama-3.1-8b-instant");
         c.visionModel       = p.getString("visionModel", "");
         c.persona           = p.getString("persona",     "");
         String encTg        = p.getString("tgToken_enc", "");
         String plainTg      = p.getString("tgToken",     "");
-        c.tgToken           = !encTg.isEmpty() ? decrypt(encTg, seed, "tg_token")
-                                               : plainTg;
+        try {
+            c.tgToken = !encTg.isEmpty() ? decrypt(encTg, seed, "tg_token") : plainTg;
+        } catch (Throwable ignored) { c.tgToken = plainTg; }
         c.tgAllowed         = p.getLong  ("tgAllowed",   0);
         c.agentMaxSteps     = p.getInt   ("agentMaxSteps",  25);
         c.agentAutoApprove  = p.getBoolean("agentAutoApprove", true);
@@ -114,14 +116,18 @@ public class KiraConfig {
         SharedPreferences.Editor e = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
         e.putString("userName",         userName);
         // Encrypt sensitive fields
-        e.putString("apiKey_enc",       encrypt(apiKey, seed, "api_key"));
-        e.remove("apiKey");             // remove old plain-text key
+        if (!apiKey.isEmpty()) {
+            e.putString("apiKey_enc", encrypt(apiKey, seed, "api_key"));
+            e.remove("apiKey");         // remove old plain-text key
+        }
         e.putString("baseUrl",          baseUrl);
         e.putString("model",            model);
         e.putString("visionModel",      visionModel);
         e.putString("persona",          persona);
-        e.putString("tgToken_enc",      encrypt(tgToken, seed, "tg_token"));
-        e.remove("tgToken");            // remove old plain-text token
+        if (!tgToken.isEmpty()) {
+            e.putString("tgToken_enc", encrypt(tgToken, seed, "tg_token"));
+            e.remove("tgToken");        // remove old plain-text token
+        }
         e.putLong  ("tgAllowed",        tgAllowed);
         e.putInt   ("agentMaxSteps",    agentMaxSteps);
         e.putBoolean("agentAutoApprove",agentAutoApprove);

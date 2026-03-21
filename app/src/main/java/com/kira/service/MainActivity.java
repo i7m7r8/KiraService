@@ -2385,7 +2385,7 @@ public class MainActivity extends Activity
                     float perimeter = 2f * (w + h);
                     float arcFraction = dp(30) / perimeter * 360f;
                     canvas.drawArc(rect, rotation, arcFraction, false, haloPaint);
-                    postInvalidateDelayed(16);
+                    // ObjectAnimator handles redraw via invalidation
                 }
 
                 private int dp(int v) {

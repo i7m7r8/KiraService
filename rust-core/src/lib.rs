@@ -950,7 +950,6 @@ struct CrashEntry {
     trace:   String,   // full stack trace (capped at 4KB)
 }
 
-#[derive(Default)]
 #[derive(Default, Clone)]
 pub struct ShellJob {
     pub id:      String,
@@ -986,6 +985,7 @@ pub struct AgentTask {
 }
 
 
+#[derive(Default)]
 struct KiraState {
     // Device
     screen_nodes:      String,
@@ -1930,15 +1930,7 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
             if content.is_empty() { return "error: content required".into(); }
             let mut s = STATE.lock().unwrap();
             let idx = s.memory_index.len();
-            s.memory_index.push_back(MemoryEntry {
-                key:          format!("mem_{}", idx),
-                content:      content.clone(),
-                tags:         vec![],
-                pinned:       false,
-                access_count: 0,
-                created_ms:   now_ms(),
-                last_used_ms: now_ms(),
-            });
+            s.memory_index.push(MemoryEntry { key: format!("mem_{}", idx), value: content.clone(), tags: vec![], ts: now_ms(), relevance: 1.0, access_count: 0 });
             format!("memory added: {}", &content[..content.len().min(50)])
         }
         "search_memory" => {
@@ -1948,23 +1940,28 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         "get_variable" => {
             let key = params.get("key").cloned().unwrap_or_default();
             let s = STATE.lock().unwrap();
-            s.variables.get(&key).cloned().unwrap_or_else(|| "not found".into())
+            s.variables.get(&key).map(|v| v.value.clone()).unwrap_or_else(|| "not found".into())
         }
         "set_variable" => {
             let key = params.get("key").cloned().unwrap_or_default();
             let val = params.get("value").cloned().unwrap_or_default();
-            STATE.lock().unwrap().variables.insert(key.clone(), val.clone());
+            { let mut s = STATE.lock().unwrap();
+                let ts = now_ms();
+                s.variables.entry(key.clone()).and_modify(|v| v.value = val.clone())
+                    .or_insert(AutoVariable { name: key.clone(), value: val.clone(),
+                        var_type: "string".to_string(), ts, last_modified_ms: ts });
+            }
             format!("set {} = {}", key, val)
         }
         "get_battery" => {
             let s = STATE.lock().unwrap();
-            format!("{}% {}", s.device.battery_pct,
-                if s.device.charging { "charging" } else { "not charging" })
+            format!("{}% {}", s.battery_pct,
+                if s.battery_charging { "charging" } else { "not charging" })
         }
         "get_wifi" => {
             let s = STATE.lock().unwrap();
-            if s.device.wifi_connected {
-                format!("connected: {}", s.device.wifi_ssid)
+            if !s.sig_wifi_ssid.is_empty() {
+                format!("connected: {}", s.sig_wifi_ssid)
             } else { "disconnected".into() }
         }
         // Shell, file, and intent tools: queue for Java
@@ -4240,9 +4237,9 @@ You are executing a multi-step task autonomously.
                 // Screen watch rules from memory
                 if !screen_hash.is_empty() {
                     for mem in s.memory_index.iter() {
-                        if !mem.content.starts_with("watch_screen_") { continue; }
-                        if let Some(colon) = mem.content.find(':') {
-                            let rule = &mem.content[colon+1..];
+                        if !mem.value.starts_with("watch_screen_") { continue; }
+                        if let Some(colon) = mem.value.find(':') {
+                            let rule = &mem.value[colon+1..];
                             let parts: Vec<&str> = rule.splitn(2, '|').collect();
                             if parts.len() == 2 {
                                 let keyword = parts[0].trim();
@@ -4666,8 +4663,8 @@ You are executing a multi-step task autonomously.
         ("GET", "/settings/top_rows") => {
             let s = STATE.lock().unwrap();
             let mut rows: Vec<(String, u32)> = s.variables.iter()
-                .filter(|(k, _): &(String, _)| k.starts_with("_settings_tap_"))
-                .map(|(k, v): (&String, &_)| {
+                .filter(|(k, _v): &(&String, &AutoVariable)| k.starts_with("_settings_tap_"))
+                .map(|(k, v): (&(&String, &AutoVariable))| { let k = k; let v = v;
                     let row_name = k.trim_start_matches("_settings_tap_").to_string();
                     let count = v.value.parse::<u32>().unwrap_or(0);
                     (row_name, count)
@@ -4835,7 +4832,7 @@ You are executing a multi-step task autonomously.
         ("GET",  "/memory")            => { let s=STATE.lock().unwrap(); format!(r#"{{"memory_md":{},"entries":{}}}"#, json_str(&s.memory_md),s.memory_index.len()) }
         ("GET",  "/memory/search")     => search_memory(path),
         ("GET",  "/memory/full")       => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.memory_index.iter().map(|e| format!(r#"{{"key":"{}","value":"{}","tags":{},"relevance":{:.2},"access_count":{}}}"#, esc(&e.key),esc(&e.value),json_str_arr(&e.tags),e.relevance,e.access_count)).collect(); format!("[{}]", items.join(",")) }
-        ("GET",  "/daily_log")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.daily_log.iter().cloned().map(|l: &String| format!("\"{}\"", esc(&l))).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/daily_log")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.daily_log.iter().cloned().map(|l: String| format!("\"{}\"", esc(&l))).collect(); format!("[{}]", items.join(",")) }
         ("GET",  "/context")           => get_context_json(),
         ("GET",  "/soul")              => { let s=STATE.lock().unwrap(); format!(r#"{{"soul":{}}}"#, json_str(&s.soul_md)) }
         ("POST", "/soul")              => { let val=extract_json_str(body,"content").unwrap_or_default(); if !val.is_empty() { STATE.lock().unwrap().soul_md=val; } r#"{"ok":true}"#.to_string() }
@@ -8837,7 +8834,7 @@ pub fn https_post(
         store
     };
     let config = Arc::new({
-        let mut c = ClientConfig::builder()
+        let c = ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
         c
@@ -8845,7 +8842,7 @@ pub fn https_post(
 
     // Establish TCP connection
     let addr   = format!("{}:{}", host, port);
-    let stream = std::net::TcpStream::connect(&addr)
+    let mut stream = std::net::TcpStream::connect(&addr)
         .map_err(|e| format!("tcp connect {}: {}", addr, e))?;
     stream.set_read_timeout(Some(std::time::Duration::from_secs(timeout_s)))
         .map_err(|e| e.to_string())?;
@@ -8907,13 +8904,13 @@ pub fn https_get(host: &str, port: u16, path: &str, timeout_s: u64) -> Result<St
         store
     };
     let config = Arc::new({
-        let mut c = ClientConfig::builder()
+        let c = ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
         c
     });
 
-    let tcp = std::net::TcpStream::connect(format!("{}:{}", host, port))
+    let mut tcp = std::net::TcpStream::connect(format!("{}:{}", host, port))
         .map_err(|e| e.to_string())?;
     tcp.set_read_timeout(Some(std::time::Duration::from_secs(timeout_s)))
         .map_err(|e| e.to_string())?;

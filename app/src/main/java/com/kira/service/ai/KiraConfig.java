@@ -9,7 +9,7 @@ import android.content.SharedPreferences;
  */
 public class KiraConfig {
     private static final String PREFS   = "kira_config";
-    private static final int    VERSION = 4; // v4: isAscii check on baseUrl // v3: clear encrypted prefs on all existing installs
+    private static final int    VERSION = 5; // v5: nuke entire prefs to clear all corrupt data // v3: clear encrypted prefs on all existing installs
 
     public String  userName          = "User";
     public String  apiKey            = "";
@@ -40,21 +40,18 @@ public class KiraConfig {
 
         // One-time migration: wipe old encrypted keys that cause "unknown scheme" crash
         if (p.getInt("config_version", 0) < VERSION) {
-            // Wipe encrypted/corrupt keys
-            SharedPreferences.Editor wipe = p.edit();
-            wipe.remove("apiKey_enc");
-            wipe.remove("tgToken_enc");
-            wipe.remove("seed");
-            // Also fix baseUrl if it looks corrupt
-            String storedUrl = p.getString("baseUrl", "");
-            if (!storedUrl.isEmpty() && (!isAscii(storedUrl) || !storedUrl.startsWith("http")))
-                wipe.putString("baseUrl", "https://api.groq.com/openai/v1");
-            // Also fix apiKey if it contains binary garbage
-            String storedKey = p.getString("apiKey", "");
-            if (!isAscii(storedKey)) wipe.putString("apiKey", "");
-            wipe.putInt("config_version", VERSION).commit();
-            // After wipe, user re-enters apiKey in Settings once
-            // setupDone stays true — no re-setup needed
+            // v5: nuke entire prefs — old encrypted values corrupt baseUrl/apiKey
+            boolean wasDone = p.getBoolean("setupDone", false);
+            String savedName = p.getString("userName", "User");
+            String savedModel = p.getString("model", "llama-3.1-8b-instant");
+            p.edit().clear()
+                .putBoolean("setupDone", wasDone)
+                .putString("userName",   savedName)
+                .putString("model",      savedModel)
+                .putString("baseUrl",    "https://api.groq.com/openai/v1")
+                .putInt("config_version", VERSION)
+                .commit();
+            // apiKey is intentionally cleared — user re-enters once in Settings
         }
 
         KiraConfig c = new KiraConfig();

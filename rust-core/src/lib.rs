@@ -1782,8 +1782,14 @@ pub fn call_llm_sync(
         esc(model), messages_json
     );
 
+    // Sanitize base_url — reject binary garbage, fall back to Groq
+    let fallback = "https://api.groq.com/openai/v1";
+    let safe_url: &str = if base_url.is_ascii()
+        && (base_url.starts_with("http://") || base_url.starts_with("https://"))
+        && base_url.len() < 512
+    { base_url } else { fallback };
     // Parse base_url → host, port, path
-    let url_clean = base_url.trim_end_matches('/');
+    let url_clean = safe_url.trim_end_matches('/');
     let (host, port, base_path) = parse_api_url(url_clean)?;
     let path = format!("{}/chat/completions", base_path.trim_end_matches('/'));
 
@@ -1831,7 +1837,8 @@ fn parse_api_url(url: &str) -> Result<(String, u16, String), String> {
     } else if url.starts_with("http://") {
         ("http", &url[7..])
     } else {
-        return Err(format!("invalid base_url (go to Settings and fix API URL): {:.40}", url));
+        // Corrupt URL (likely old encrypted data) — silently use Groq default
+        return parse_api_url("https://api.groq.com/openai/v1");
     };
     let (host_port, path) = match rest.find('/') {
         Some(i) => (&rest[..i], &rest[i..]),
@@ -2081,6 +2088,14 @@ mod jni_bridge {
             let mut s = STATE.lock().unwrap();
             s.uptime_start = now_ms();
             s.providers    = make_providers();
+            // Heal corrupt base_url from old encrypted storage (survives APK updates)
+            if !s.config.base_url.is_ascii()
+                || (!s.config.base_url.starts_with("http://") && !s.config.base_url.starts_with("https://")) {
+                s.config.base_url = "https://api.groq.com/openai/v1".to_string();
+            }
+            if !s.config.api_key.is_ascii() {
+                s.config.api_key = String::new();
+            }
             let sess = Session { id:"default".into(), channel:"kira".into(), created:now_ms(), last_msg:now_ms(), ..Default::default() };
             s.sessions.insert("default".into(), sess);
             // Default profiles
@@ -3873,6 +3888,15 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             if api_key.is_empty() {
                 return r#"{"error":"no API key","success":false}"#.to_string();
             }
+            let base_url = if base_url.is_ascii()
+                && (base_url.starts_with("http://") || base_url.starts_with("https://")) {
+                base_url
+            } else {
+                let mut s2 = STATE.lock().unwrap();
+                s2.config.base_url = "https://api.groq.com/openai/v1".to_string();
+                drop(s2);
+                "https://api.groq.com/openai/v1".to_string()
+            };
 
             let persona_str = if persona.is_empty() {
                 "You are Kira, an autonomous AI agent on Android.".into()
@@ -4005,6 +4029,9 @@ You are executing a multi-step task autonomously.
             if api_key.is_empty() {
                 return r#"{"error":"no API key"}"#.to_string();
             }
+            let base_url = if base_url.is_ascii()
+                && (base_url.starts_with("http://") || base_url.starts_with("https://")) {
+                base_url } else { "https://api.groq.com/openai/v1".to_string() };
 
             let chain_system = "You are a step-by-step reasoning engine.                 Think through each step carefully before proceeding to the next.                 Format each reasoning step as: STEP N: <thought>.                 End with CONCLUSION: <answer>.";
 
@@ -4086,6 +4113,16 @@ You are executing a multi-step task autonomously.
             if api_key.is_empty() {
                 return r#"{"error":"no API key — go to settings and add one","done":true}"#.to_string();
             }
+            // Validate and auto-heal corrupt base_url from old encrypted storage
+            let base_url = if base_url.is_ascii()
+                && (base_url.starts_with("http://") || base_url.starts_with("https://")) {
+                base_url
+            } else {
+                let mut s2 = STATE.lock().unwrap();
+                s2.config.base_url = "https://api.groq.com/openai/v1".to_string();
+                drop(s2);
+                "https://api.groq.com/openai/v1".to_string()
+            };
 
             // Push user message to compressed history
             {

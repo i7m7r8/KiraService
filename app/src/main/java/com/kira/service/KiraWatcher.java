@@ -106,9 +106,9 @@ public class KiraWatcher {
     private int getBattery() {
         try {
             Intent intent = ctx.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-            if (i == null) return -1;
-            int l = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-            int s = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            if (intent == null) return -1;
+            int l = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int s = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
             return s > 0 ? l * 100 / s : -1;
         } catch (Exception e) { return -1; }
     }

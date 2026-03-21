@@ -9,7 +9,7 @@ import android.content.SharedPreferences;
  */
 public class KiraConfig {
     private static final String PREFS   = "kira_config";
-    private static final int    VERSION = 3; // v3: clear encrypted prefs on all existing installs
+    private static final int    VERSION = 4; // v4: isAscii check on baseUrl // v3: clear encrypted prefs on all existing installs
 
     public String  userName          = "User";
     public String  apiKey            = "";
@@ -47,7 +47,7 @@ public class KiraConfig {
             wipe.remove("seed");
             // Also fix baseUrl if it looks corrupt
             String storedUrl = p.getString("baseUrl", "");
-            if (!storedUrl.isEmpty() && !storedUrl.startsWith("http"))
+            if (!storedUrl.isEmpty() && (!isAscii(storedUrl) || !storedUrl.startsWith("http")))
                 wipe.putString("baseUrl", "https://api.groq.com/openai/v1");
             // Also fix apiKey if it contains binary garbage
             String storedKey = p.getString("apiKey", "");
@@ -62,7 +62,7 @@ public class KiraConfig {
         String rawKey = p.getString("apiKey", "");
         c.apiKey = isAscii(rawKey) ? rawKey : "";
         String rawUrl = p.getString("baseUrl", "https://api.groq.com/openai/v1");
-        c.baseUrl = (rawUrl.startsWith("http://") || rawUrl.startsWith("https://"))
+        c.baseUrl = (isAscii(rawUrl) && (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")))
             ? rawUrl : "https://api.groq.com/openai/v1";
         c.model             = p.getString ("model",             "llama-3.1-8b-instant");
         c.visionModel       = p.getString ("visionModel",       "");

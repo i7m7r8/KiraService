@@ -352,7 +352,8 @@ mod jni_bridge {
         if !raw_key.is_empty() {
             s.config.api_key = if raw_key.chars().all(|c| c.is_ascii()) { raw_key } else { String::new() };
         }
-        let is_valid_url = raw_url.starts_with("http://") || raw_url.starts_with("https://");
+        let is_valid_url = (raw_url.starts_with("http://") || raw_url.starts_with("https://"))
+            && raw_url.is_ascii() && raw_url.len() < 256;
         s.config.base_url = if is_valid_url { raw_url } else { "https://api.groq.com/openai/v1".to_string() };
         s.config.model              = cs(model);
         s.config.vision_model       = cs(vision_model);

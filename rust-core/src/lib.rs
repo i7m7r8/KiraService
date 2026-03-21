@@ -1,10 +1,4 @@
-use lz4_flex::{compress_prepend_size, decompress_size_prepended            pending_shell:     std::collections::VecDeque::new(),
-            shell_results:     std::collections::HashMap::new(),
-            agent_tasks:       std::collections::VecDeque::new(),
-            tg_last_update_id: 0,
-            tg_pending_sends:  std::collections::VecDeque::new(),
-            tg_message_log:    std::collections::VecDeque::new(),
-        };
+use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 
 // Kira Rust Core v9 \u{2014} v40 edition
 //
@@ -1245,7 +1239,14 @@ lazy_static! {
         setup:   SetupState::default(),
         shizuku: ShizukuStatus::default(),
         ..Default::default()
-    }));
+    
+            pending_shell:     std::collections::VecDeque::new(),
+            shell_results:     std::collections::HashMap::new(),
+            agent_tasks:       std::collections::VecDeque::new(),
+            tg_last_update_id: 0,
+            tg_pending_sends:  std::collections::VecDeque::new(),
+            tg_message_log:    std::collections::VecDeque::new(),
+        }));
 }
 
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}

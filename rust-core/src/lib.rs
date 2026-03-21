@@ -1805,7 +1805,7 @@ pub fn call_llm_sync(
         );
         stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
         let mut reader = BufReader::new(stream);
-        let mut buf = String::new();
+        let _buf = String::new();
         let mut in_body = false; let mut body_buf = String::new();
         loop {
             let mut line = String::new();
@@ -1949,7 +1949,7 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
                 let ts = now_ms();
                 s.variables.entry(key.clone()).and_modify(|v| v.value = val.clone())
                     .or_insert(AutoVariable { name: key.clone(), value: val.clone(),
-                        var_type: "string".to_string(), ts, last_modified_ms: ts });
+                        var_type: "string".to_string(), persistent: false, created_ms: ts, updated_ms: ts });
             }
             format!("set {} = {}", key, val)
         }
@@ -4663,8 +4663,8 @@ You are executing a multi-step task autonomously.
         ("GET", "/settings/top_rows") => {
             let s = STATE.lock().unwrap();
             let mut rows: Vec<(String, u32)> = s.variables.iter()
-                .filter(|(k, _v): &(&String, &AutoVariable)| k.starts_with("_settings_tap_"))
-                .map(|(k, v): (&(&String, &AutoVariable))| { let k = k; let v = v;
+                .filter(|(k, _v)| k.starts_with("_settings_tap_"))
+                .map(|(k, v)| {
                     let row_name = k.trim_start_matches("_settings_tap_").to_string();
                     let count = v.value.parse::<u32>().unwrap_or(0);
                     (row_name, count)

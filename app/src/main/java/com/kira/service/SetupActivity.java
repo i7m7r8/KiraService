@@ -803,12 +803,12 @@ public class SetupActivity extends Activity implements SensorEventListener {
             // Parse JSON array of {name, base_url} objects
             java.util.List<String[]> result = new java.util.ArrayList<>();
             int pos = 0;
-            while ((pos = json.indexOf(""name":", pos)) >= 0) {
+            while ((pos = json.indexOf("\"name\":", pos)) >= 0) {
                 pos += 7;
                 int ns = json.indexOf('"', pos) + 1;
                 int ne = json.indexOf('"', ns);
                 String name = json.substring(ns, ne);
-                int us = json.indexOf(""base_url":"", pos) + 12;
+                int us = json.indexOf("\"base_url\":\"", pos) + 12;
                 int ue = json.indexOf('"', us);
                 String url  = json.substring(us, ue);
                 result.add(new String[]{name, url});

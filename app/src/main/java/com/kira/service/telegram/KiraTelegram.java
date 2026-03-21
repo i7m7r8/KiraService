@@ -96,7 +96,7 @@ public class KiraTelegram {
             // POST to Rust — Rust runs AI, queues reply
             String body = String.format(
                 "{\"update_id\":%d,\"chat_id\":%d,\"user\":\"%s\",\"text\":\"%s\"}",
-                updateId, chatId, text.replace("\"","\\\""), text.replace("\"","\\""));
+                updateId, chatId, user.replace("\"","\\\""), text.replace("\"","\\\""));
             httpPost("http://localhost:7070/telegram/incoming", body, 10_000);
         }
     }

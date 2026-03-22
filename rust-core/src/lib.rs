@@ -1746,56 +1746,84 @@ pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
         .map(|m| format!("• {}", m.value))
         .collect();
     let mem_context = if mem_lines.is_empty() {
-        "(none yet — use add_memory to remember things)".to_string()
+        "(none yet)".to_string()
     } else {
         mem_lines.join("\n")
     };
 
-    // Include variable state if any exist
     let var_context: String = if state.variables.is_empty() {
         String::new()
     } else {
         let vars: Vec<String> = state.variables.iter().take(10)
             .map(|(k, v)| format!("  {} = {}", k, v.value))
             .collect();
-        format!("\n\nVariables:\n{}", vars.join("\n"))
+        format!("\n\nSession variables:\n{}", vars.join("\n"))
     };
 
-    let tools = r#"TOOLS — output XML anywhere in your reply to execute them:
+    // Show live device snapshot in every prompt so LLM knows real state
+    let device_snapshot = format!(
+        "Battery: {}%{} | WiFi: {} | Foreground: {} | Notifications in queue: {}",
+        state.battery_pct,
+        if state.battery_charging { " (charging)" } else { "" },
+        if state.sig_wifi_ssid.is_empty() { "disconnected".to_string() } else { format!("connected to {}", state.sig_wifi_ssid) },
+        if state.screen_pkg.is_empty() { "unknown".to_string() } else { state.screen_pkg.clone() },
+        state.notifications.len()
+    );
 
-<tool name="open_app"><param k="package" v="com.google.android.youtube"/></tool>
-<tool name="http_get"><param k="url" v="https://wttr.in/London?format=3"/></tool>
-<tool name="web_search"><param k="query" v="search terms"/></tool>
-<tool name="run_shell"><param k="cmd" v="shell command"/></tool>
-<tool name="read_file"><param k="path" v="/sdcard/file.txt"/></tool>
-<tool name="write_file"><param k="path" v="/sdcard/file.txt"/><param k="content" v="text"/></tool>
-<tool name="list_files"><param k="path" v="/sdcard/"/></tool>
-<tool name="send_message"><param k="to" v="name_or_number"/><param k="message" v="text"/></tool>
-<tool name="add_memory"><param k="content" v="fact to remember forever"/></tool>
-<tool name="search_memory"><param k="query" v="what to recall"/></tool>
-<tool name="get_battery"/><tool name="get_wifi"/>
-<tool name="set_variable"><param k="key" v="k"/><param k="value" v="v"/></tool>
-<tool name="get_variable"><param k="key" v="k"/></tool>
-<tool name="think"><param k="thoughts" v="your step-by-step reasoning"/></tool>
+    let tools_block = r#"AVAILABLE TOOLS — use XML syntax to call them:
 
-TOOL NOTES:
-- web_search: searches DuckDuckGo, returns results. Use for current events, facts, weather.
-- weather: use http_get url="https://wttr.in/CITY?format=3" (no API key needed)
-- think: use this to reason through complex problems before answering. NOT shown to user.
-- open_app: use exact package name (e.g. com.google.android.youtube, com.whatsapp)
-- You can use MULTIPLE tools in one response — just include multiple <tool> tags
-- After tool results come back, synthesize them into a final answer"#;
+INFORMATION tools (answer from REAL device data, not guesswork):
+  <tool name="get_device_state"/>                     → battery, wifi, foreground app, notification count
+  <tool name="get_notifications"/>                    → list of recent real notifications
+  <tool name="get_battery"/>                          → exact battery % and charging state
+  <tool name="get_wifi"/>                             → wifi connection status and SSID
+  <tool name="get_foreground_app"/>                   → which app is currently open
+  <tool name="search_memory"><param k="query" v="..."/></tool>   → search long-term memory
+  <tool name="get_variable"><param k="key" v="..."/></tool>       → get a stored variable
+  <tool name="web_search"><param k="query" v="..."/></tool>       → search the web (DuckDuckGo)
+  <tool name="http_get"><param k="url" v="https://wttr.in/Dhaka?format=3"/></tool>  → fetch URL (weather works!)
+
+ACTION tools (actually do things on the device):
+  <tool name="open_app"><param k="package" v="com.google.android.youtube"/></tool>
+  <tool name="run_shell"><param k="cmd" v="command"/></tool>
+  <tool name="read_file"><param k="path" v="/sdcard/file.txt"/></tool>
+  <tool name="write_file"><param k="path" v="/sdcard/file.txt"/><param k="content" v="text"/></tool>
+  <tool name="list_files"><param k="path" v="/sdcard/"/></tool>
+  <tool name="send_message"><param k="to" v="name"/><param k="message" v="text"/></tool>
+
+MEMORY tools (persist information across conversations):
+  <tool name="add_memory"><param k="content" v="user's name is X"/></tool>
+  <tool name="set_variable"><param k="key" v="k"/><param k="value" v="v"/></tool>
+
+REASONING tool (think before answering complex questions):
+  <tool name="think"><param k="thoughts" v="step by step reasoning here..."/></tool>"#;
 
     format!(
-        "{}\n\n{}\n\nLong-term memory:\n{}{}\n\nGuidelines:\n\
-        • Think deeply before responding. Use the 'think' tool for complex questions.\n\
-        • Use tools proactively — if asked about weather, get it. If asked to open an app, open it.\n\
-        • Remember important things the user tells you using add_memory.\n\
-        • Be thorough but concise. Show your work when solving problems.\n\
-        • You have persistent memory across conversations — use it.",
-        persona, tools, mem_context, var_context
+        "{}\n\n\
+        LIVE DEVICE STATE RIGHT NOW:\n{}\n\n\
+        {}\n\n\
+        ════════════════════════════════════════\n\
+        CRITICAL RULES — NEVER BREAK THESE:\n\
+        ════════════════════════════════════════\n\
+        1. NEVER make up information. If you don't know → use a tool or say \"I don't know\".\n\
+        2. If asked about notifications/battery/wifi → ALWAYS call the tool. NEVER guess.\n\
+        3. If asked to open an app → call open_app tool. Don't just say \"Opening...\".\n\
+        4. If asked about the weather → use http_get with wttr.in. Never invent forecasts.\n\
+        5. If a tool gives you data → use THAT data in your reply. Don't add fake data.\n\
+        6. You CAN say \"I don't have access to [X]\" — that is honest. Hallucinating is not.\n\
+        7. Respond in the same language the user writes in.\n\
+        ════════════════════════════════════════\n\n\
+        Long-term memory:\n{}{}\n\n\
+        Capabilities you DO have: check real device state, open apps, search web, get weather, remember things, run shell commands (with Shizuku).\n\
+        Capabilities you DON'T have: read SMS without permission, access calendar without permission, control other apps' UI without accessibility permission.",
+        persona,
+        device_snapshot,
+        tools_block,
+        mem_context,
+        var_context
     )
 }
+
 
 
 /// Synchronous LLM call via std::net::TcpStream (OpenAI-compatible).
@@ -2066,6 +2094,44 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
                 format!("connected: {}", s.sig_wifi_ssid)
             } else { "disconnected".into() }
         }
+        "get_notifications" => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if s.notifications.is_empty() {
+                "No notifications currently. (Notifications appear here when apps send them while Kira is running.)".to_string()
+            } else {
+                let items: Vec<String> = s.notifications.iter().rev().take(10)
+                    .map(|n| format!("[{}] {}: {}", n.pkg.split('.').last().unwrap_or(&n.pkg), n.title, &n.text[..n.text.len().min(80)]))
+                    .collect();
+                format!("{} recent notifications:
+{}", items.len(), items.join("
+"))
+            }
+        }
+        "get_foreground_app" => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if s.screen_pkg.is_empty() {
+                "Unknown (accessibility service may not be running)".to_string()
+            } else {
+                format!("Current app: {}", s.screen_pkg)
+            }
+        }
+        "get_device_state" => {
+            // One-shot tool: battery + wifi + foreground app + notifications count
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            format!(
+                "Battery: {}% {}
+Wifi: {}
+Foreground app: {}
+Pending notifications: {}
+Memories stored: {}",
+                s.battery_pct,
+                if s.battery_charging { "(charging)" } else { "" },
+                if s.sig_wifi_ssid.is_empty() { "disconnected".to_string() } else { format!("connected to {}", s.sig_wifi_ssid) },
+                if s.screen_pkg.is_empty() { "unknown".to_string() } else { s.screen_pkg.clone() },
+                s.notifications.len(),
+                s.memory_index.len()
+            )
+        }
         // Shell, file, and intent tools: queue for Java
         // "think" tool: chain-of-thought. Not shown to user, just returns ack.
         "think" => {
@@ -2115,7 +2181,7 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
 pub fn build_llm_request_json(state: &KiraState) -> String {
     let cfg = &state.config;
     let persona = if cfg.persona.is_empty() {
-        "You are Kira, an AI agent on Android. Be concise and helpful.".to_string()
+        "You are Kira, a smart AI assistant running on Android. You have tools to check real device information and take actions. Always use tools to get real data — never guess or make up information.".to_string()
     } else {
         cfg.persona.clone()
     };
@@ -4233,7 +4299,7 @@ You are executing a multi-step task autonomously.
                 let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 let cfg = &s.config;
                 let persona = if cfg.persona.is_empty() {
-                    "You are Kira, an AI agent on Android. Be concise and helpful.".to_string()
+                    "You are Kira, a smart AI assistant on Android. Always use tools to get real data — never guess or make up information.".to_string()
                 } else { cfg.persona.clone() };
                 let sys = build_system_prompt(&s, &persona);
                 (cfg.api_key.clone(), cfg.base_url.clone(), cfg.model.clone(),

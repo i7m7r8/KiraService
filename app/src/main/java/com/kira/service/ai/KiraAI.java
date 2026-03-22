@@ -106,7 +106,14 @@ public class KiraAI {
                         if (toolsUsed.contains("add_memory") || toolsUsed.contains("search_memory")) {
                             saveMemory();
                         }
-                        if (cb != null) cb.onReply(reply.isEmpty() ? "done." : reply);
+                        // Clean up empty or whitespace-only replies
+                        if (reply == null || reply.trim().isEmpty() || reply.equals("done.")) {
+                            // If we executed tools, give a better default
+                            if (!toolsUsed.isEmpty() && !toolsUsed.equals("[]")) {
+                                reply = "Done.";
+                            }
+                        }
+                        if (cb != null) cb.onReply(reply.isEmpty() ? "Done." : reply);
                         return;
                     }
 

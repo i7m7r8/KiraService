@@ -179,3 +179,78 @@ Added `RustBridge.isLoaded()` pre-flight check with clear error message.
   `dispatch_for_runner` and `llm_call_for_runner` into runner module
 
 ### No breaking changes — POST /ai/chat continues to work unchanged
+
+## v58 — Sessions 3-6, 9-10: Sub-agents, Persistence, Memory, Skills, Cron, Webhooks (2026-03-22)
+
+### Session 3 — Sub-Agent Spawning
+- `ai/subagents.rs` — Full implementation: `SUBAGENT_REGISTRY` global, `spawn_subagent()`,
+  depth-limit enforcement (max 5), isolated ReAct loop per agent, kill support
+- Routes: `POST /agents/spawn`, `POST /agents/kill`, `GET /agents/list`,
+  `GET /agents/running`, `GET /agents/:id/status`
+
+### Session 4 — Persistent Sessions
+- `gateway/persistence.rs` — New module: LZ4-compressed session transcripts on disk
+- Routes: `GET /sessions/persist/list`, `POST /sessions/persist/save`,
+  `POST /sessions/persist/load`, `DELETE /sessions/persist`
+
+### Session 5 — Memory Persistence + Add/Delete
+- `gateway/persistence.rs` — Memory index save/load (LZ4), embeddings save/load
+- Routes: `POST /memory/add`, `DELETE /memory`,
+  `POST /memory/persist/save`, `POST /memory/persist/load`
+
+### Session 6 — Skills from Disk
+- `gateway/persistence.rs` — Skill .md file load/save/delete
+- Routes: `POST /skills/install`, `DELETE /skills`, `POST /skills/reload`
+
+### Session 9 — Full Cron Scheduler
+- `lib.rs` `run_cron_scheduler()` — Now actually runs isolated AI agent per job
+- Routes: `POST /cron/create`, `POST /cron/run_now`, `GET /cron/log`
+- Sub-agent pruning every 60s in cron loop
+- Cron run log persisted to disk as JSONL
+
+### Session 10 — Webhooks
+- Routes: `POST /webhooks/register` (returns token + URL),
+  `GET /webhooks`, `DELETE /webhooks`
+- `POST /webhook/:token` — inbound trigger: runs AI agent with payload as goal
+- HMAC token generation, fire count tracking
+
+### Internal
+- `register_subagent_shims()` called at startServer
+- `get_llm_config_snapshot()` helper shared across cron, sub-agents, webhooks
+- `push_event_feed()` refactored to delegate to `s_push_event()`
+
+## v59 — Sessions 7+8: Telegram + WhatsApp (2026-03-22)
+
+### Session 7 — Telegram Full Parity
+- `channels/telegram.rs` — Full Rust Telegram Bot API client (509 lines)
+  - `start_polling_loop()` — background thread, long-polling getUpdates
+  - `send_message()` / `edit_message()` — send and streaming-edit
+  - `send_with_keyboard()` — inline keyboard buttons (approval flow)
+  - `answer_callback()` — dismiss button spinner
+  - `send_typing()` — typing indicator
+  - `markdown_to_md_v2()` — convert Markdown to MarkdownV2 format
+  - `escape_md_v2()` — escape special characters
+  - `parse_updates()` — robust JSON parser for getUpdates response
+  - DM policy: pairing codes for unknown senders, open mode
+  - `TG_STATE` global — config, last_update_id, pending_sends, log
+- Routes: `POST /telegram/configure`, `POST /telegram/send`,
+  `GET /telegram/status`, `POST /telegram/pairing/approve`
+- Auto-starts polling at startServer if tg_token is configured
+
+### Session 8 — WhatsApp
+- `channels/whatsapp.rs` — Dual-mode WhatsApp adapter (345 lines)
+  - Mode A (Cloud API): direct Meta Graph API calls, no Java needed
+  - Mode B (bridge): Java Baileys bridge POSTs to Rust
+  - `cloud_send_text()` — Cloud API send
+  - `cloud_mark_read()` — mark message read
+  - `parse_cloud_webhook()` — parse Meta webhook payloads
+  - `process_inbound()` — DM policy + allowlist + AI dispatch
+  - Pairing codes for unauthorized senders
+- Routes: `POST /whatsapp/configure`, `POST /whatsapp/send`,
+  `GET|POST /whatsapp/webhook` (Cloud API verification + inbound),
+  `POST /whatsapp/bridge/incoming`, `GET /whatsapp/bridge/next_send`,
+  `GET /whatsapp/status`, `POST /whatsapp/pairing/approve`
+
+### Internal
+- `register_channel_shims()` called at startServer
+- `channel_ai_reply_tg()` / `channel_ai_reply_wa()` — wired to full ReAct loop

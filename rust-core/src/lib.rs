@@ -2324,6 +2324,10 @@ mod jni_bridge {
         install_builtin_templates(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
         // Session 2: register runner shims (dispatch + LLM call function pointers)
         register_runner_shims();
+        // Session 3: register sub-agent shims
+        register_subagent_shims();
+        // Session 7+8: register channel shims + start Telegram polling
+        register_channel_shims();
         thread::spawn(move || run_http(p));
         thread::spawn(run_trigger_watcher);
         thread::spawn(run_cron_scheduler);
@@ -5342,6 +5346,8 @@ You are executing a multi-step task autonomously.
         _ => {
 // ── Session 1: OpenClaw module routes ────────────────────────────────────────
             if let Some(r) = route_openclaw_modules(method, path_clean, body) { r }
+            // ── Sessions 7+8: Channel routes
+            else if let Some(r) = route_channels(method, path_clean, body) { r }
             else if let Some(r) = route_openclaw_v3(method, path_clean, body) { r }
             else if let Some(r) = route_vlm_agent(method, path_clean, body) { r }
             else if let Some(r) = route_roboru(method, path_clean, body) { r }
@@ -5349,6 +5355,353 @@ You are executing a multi-step task autonomously.
             else { queue_to_java(path_clean.trim_start_matches('/'), body) }
         }
     }
+}
+
+/// Session 9: serialize cron jobs to JSON for persistence
+fn cron_jobs_to_json() -> String {
+    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let items: Vec<String> = s.cron_jobs.iter().map(|j| {
+        format!(r#"{{"id":"{}","expression":"{}","action":"{}","last_run":{},"interval_ms":{},"enabled":{}}}"#,
+            esc(&j.id), esc(&j.expression), esc(&j.action), j.last_run, j.interval_ms, j.enabled)
+    }).collect();
+    format!("[{}]", items.join(","))
+}
+
+/// Session 10: serialize webhook registrations to JSON for persistence
+fn webhooks_to_json() -> String {
+    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let items: Vec<String> = s.checkpoints.iter()
+        .filter(|(k,_)| k.starts_with("webhook:"))
+        .map(|(_,v)| v.clone())
+        .collect();
+    format!("[{}]", items.join(","))
+}
+
+/// Session 5: parse memory index JSON back into MemoryEntry vec
+fn parse_memory_json(json: &str) -> Vec<MemoryEntry> {
+    let mut entries = Vec::new();
+    let mut pos = 0;
+    let bytes = json.as_bytes();
+    let mut depth = 0i32;
+    let mut obj_start = None;
+    while pos < bytes.len() {
+        match bytes[pos] {
+            b'{' => { depth += 1; if depth == 1 { obj_start = Some(pos); } }
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    if let Some(start) = obj_start {
+                        let fragment = &json[start..=pos];
+                        if let (Some(key), Some(value)) = (
+                            extract_json_str(fragment, "key"),
+                            extract_json_str(fragment, "value"),
+                        ) {
+                            let ts = extract_json_num(fragment, "ts").unwrap_or(0.0) as u128;
+                            let relevance = extract_json_f32(fragment, "relevance").unwrap_or(1.0);
+                            let access_count = extract_json_num(fragment, "access_count").unwrap_or(0.0) as u32;
+                            entries.push(MemoryEntry { key, value, tags: vec![], ts, relevance, access_count });
+                        }
+                    }
+                    obj_start = None;
+                }
+            }
+            _ => {}
+        }
+        pos += 1;
+    }
+    entries
+}
+
+/// Session 7+8: AI reply function for channel messages
+fn channel_ai_reply_tg(text: &str, chat_id: i64, username: &str) -> String {
+    let session = format!("tg_{}", chat_id);
+    let (api_key, base_url, model, sys, history) = get_llm_config_snapshot();
+    if api_key.is_empty() { return "API key not configured.".to_string(); }
+    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+    let cfg = crate::ai::runner::AgentRunConfig {
+        api_key, base_url, model,
+        system_prompt: sys,
+        session_id: session.clone(),
+        user_message: format!("[Telegram @{}] {}", username, text),
+        history, max_steps: 10, tools_json,
+    };
+    // Push user msg to compressed history
+    { let mut s=STATE.lock().unwrap_or_else(|e|e.into_inner()); push_turn_compressed(&mut s,"user",&format!("[Telegram @{}] {}",username,text)); }
+    let result = crate::ai::runner::run_agent(cfg);
+    if !result.content.is_empty() {
+        let mut s=STATE.lock().unwrap_or_else(|e|e.into_inner());
+        push_turn_compressed(&mut s,"assistant",&result.content);
+    }
+    result.content
+}
+
+fn channel_ai_reply_wa(text: &str, from: &str, name: &str) -> String {
+    let session = format!("wa_{}", from.replace(['+','-',' '], ""));
+    let (api_key, base_url, model, sys, history) = get_llm_config_snapshot();
+    if api_key.is_empty() { return String::new(); }
+    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+    let cfg = crate::ai::runner::AgentRunConfig {
+        api_key, base_url, model,
+        system_prompt: sys,
+        session_id: session,
+        user_message: format!("[WhatsApp {}] {}", name, text),
+        history, max_steps: 10, tools_json,
+    };
+    crate::ai::runner::run_agent(cfg).content
+}
+
+fn register_channel_shims() {
+    // Telegram
+    crate::channels::register_tg_fns(
+        https_post,
+        https_get,
+        channel_ai_reply_tg,
+    );
+    // WhatsApp
+    crate::channels::register_wa_fns(
+        https_post,
+        channel_ai_reply_wa,
+    );
+
+    // Apply Telegram config from KiraConfig and start polling if token is set
+    let (tg_token, tg_allowed) = {
+        let s = STATE.lock().unwrap_or_else(|e|e.into_inner());
+        (s.config.tg_token.clone(), s.config.tg_allowed)
+    };
+    if !tg_token.is_empty() {
+        {
+            let mut tg = crate::channels::TG_STATE.lock().unwrap_or_else(|e|e.into_inner());
+            tg.config.bot_token      = tg_token;
+            tg.config.allowed_chat_id = tg_allowed;
+            tg.config.polling_timeout = 30;
+            tg.config.stream_reply   = true;
+        }
+        crate::channels::start_polling_loop();
+    }
+}
+
+/// Session 7+8: Channel management routes
+fn route_channels(method: &str, path: &str, body: &str) -> Option<String> {
+    match (method, path) {
+
+        // ── Telegram ─────────────────────────────────────────────────────────
+        ("POST", "/telegram/configure") => {
+            let token   = extract_json_str(body, "token").unwrap_or_default();
+            let allowed = extract_json_num(body, "allowed_chat_id").unwrap_or(0.0) as i64;
+            if token.is_empty() { return Some(r#"{"error":"token required"}"#.to_string()); }
+            // Update KiraConfig
+            { let mut s=STATE.lock().unwrap_or_else(|e|e.into_inner()); s.config.tg_token=token.clone(); s.config.tg_allowed=allowed; }
+            // Update TG_STATE and (re)start polling
+            {
+                let mut tg = crate::channels::TG_STATE.lock().unwrap_or_else(|e|e.into_inner());
+                tg.config.bot_token       = token;
+                tg.config.allowed_chat_id = allowed;
+                tg.config.polling_timeout = 30;
+                tg.config.stream_reply    = true;
+                if !tg.running {
+                    drop(tg);
+                    crate::channels::start_polling_loop();
+                    crate::channels::TG_STATE.lock().unwrap_or_else(|e|e.into_inner()).running = true;
+                }
+            }
+            Some(r#"{"ok":true,"polling":"started"}"#.to_string())
+        }
+
+        ("POST", "/telegram/send") => {
+            let chat_id = extract_json_num(body, "chat_id").unwrap_or(0.0) as i64;
+            let text    = extract_json_str(body, "text").unwrap_or_default();
+            let parse   = extract_json_str(body, "parse_mode").unwrap_or_default();
+            if chat_id == 0 || text.is_empty() {
+                return Some(r#"{"error":"chat_id and text required"}"#.to_string());
+            }
+            match crate::channels::tg_send(chat_id, &text, &parse) {
+                Ok(mid)  => Some(format!(r#"{{"ok":true,"message_id":{}}}"#, mid)),
+                Err(e)   => Some(format!(r#"{{"error":"{}"}}"#, esc(&e))),
+            }
+        }
+
+        ("GET", "/telegram/status") => {
+            let tg = crate::channels::TG_STATE.lock().unwrap_or_else(|e|e.into_inner());
+            Some(format!(
+                r#"{{"configured":{},"running":{},"last_update_id":{},"pending_sends":{},"log_count":{}}}"#,
+                tg.config.is_configured(), tg.running,
+                tg.last_update_id, tg.pending_sends.len(), tg.message_log.len()
+            ))
+        }
+
+        ("POST", "/telegram/pairing/approve") => {
+            let chat_id = extract_json_num(body, "chat_id").unwrap_or(0.0) as i64;
+            let code    = extract_json_str(body, "code").unwrap_or_default();
+            let mut tg  = crate::channels::TG_STATE.lock().unwrap_or_else(|e|e.into_inner());
+            let stored  = tg.pairing_codes.get(&chat_id).cloned();
+            match stored {
+                Some(c) if c == code => {
+                    tg.config.allowed_chat_id = chat_id;
+                    tg.pairing_codes.remove(&chat_id);
+                    drop(tg);
+                    STATE.lock().unwrap_or_else(|e|e.into_inner()).config.tg_allowed = chat_id;
+                    let _ = crate::channels::tg_send(chat_id, "✅ Pairing approved! You can now chat with Kira.", "");
+                    Some(format!(r#"{{"ok":true,"chat_id":{}}}"#, chat_id))
+                }
+                _ => Some(r#"{"error":"invalid or expired code"}"#.to_string()),
+            }
+        }
+
+        // ── WhatsApp ──────────────────────────────────────────────────────────
+        ("POST", "/whatsapp/configure") => {
+            let token    = extract_json_str(body, "cloud_api_token").unwrap_or_default();
+            let phone_id = extract_json_str(body, "phone_number_id").unwrap_or_default();
+            let bridge   = extract_json_str(body, "bridge_token").unwrap_or_default();
+            let verify   = extract_json_str(body, "webhook_verify_token").unwrap_or_default();
+            {
+                let mut wa = crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner());
+                if !token.is_empty()    { wa.config.cloud_api_token     = token; }
+                if !phone_id.is_empty() { wa.config.phone_number_id     = phone_id; }
+                if !bridge.is_empty()   { wa.config.bridge_token        = bridge; }
+                if !verify.is_empty()   { wa.config.webhook_verify_token = verify; }
+            }
+            Some(r#"{"ok":true}"#.to_string())
+        }
+
+        ("POST", "/whatsapp/send") => {
+            let to   = extract_json_str(body, "to").unwrap_or_default();
+            let text = extract_json_str(body, "text").unwrap_or_default();
+            if to.is_empty() || text.is_empty() {
+                return Some(r#"{"error":"to and text required"}"#.to_string());
+            }
+            let mode_a = crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner()).config.mode_a();
+            if mode_a {
+                let result = crate::channels::cloud_send_text(&to, &text);
+                Some(result.to_json())
+            } else {
+                crate::channels::bridge_queue_send(&to, &text);
+                Some(r#"{"ok":true,"mode":"bridge"}"#.to_string())
+            }
+        }
+
+        // WhatsApp Cloud API webhook — GET for verification, POST for messages
+        ("GET", "/whatsapp/webhook") => {
+            // Meta sends: ?hub.mode=subscribe&hub.verify_token=xxx&hub.challenge=yyy
+            let challenge = path.split("hub.challenge=").nth(1)
+                .and_then(|s| s.split('&').next())
+                .unwrap_or("");
+            let verify = path.contains("hub.mode=subscribe");
+            let token_match = {
+                let wa = crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner());
+                path.contains(&wa.config.webhook_verify_token)
+            };
+            if verify && token_match {
+                Some(challenge.to_string())
+            } else {
+                Some("Forbidden".to_string())
+            }
+        }
+
+        ("POST", "/whatsapp/webhook") => {
+            // Cloud API inbound messages
+            let msgs = crate::channels::parse_cloud_webhook(body);
+            let count = msgs.len();
+            for msg in msgs {
+                crate::channels::wa_process_inbound(msg);
+            }
+            // Meta requires 200 OK immediately
+            Some(format!(r#"{{"ok":true,"processed":{}}}"#, count))
+        }
+
+        ("POST", "/whatsapp/bridge/incoming") => {
+            // Mode B: Java Baileys bridge POSTs here
+            let bridge_token = extract_json_str(body, "bridge_token").unwrap_or_default();
+            let expected = { crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner()).config.bridge_token.clone() };
+            if !expected.is_empty() && bridge_token != expected {
+                return Some(r#"{"error":"unauthorized"}"#.to_string());
+            }
+            let from   = extract_json_str(body, "from").unwrap_or_default();
+            let name   = extract_json_str(body, "name").unwrap_or_else(|| from.clone());
+            let text   = extract_json_str(body, "text").unwrap_or_default();
+            let msg_id = extract_json_str(body, "msg_id").unwrap_or_else(|| format!("m_{}", now_ms()));
+            if from.is_empty() { return Some(r#"{"error":"from required"}"#.to_string()); }
+            let msg = crate::channels::WaInbound {
+                from: from.clone(), name, text, msg_id,
+                chat_id: from, is_group: false,
+                ts: now_ms(), media_type: None, media_id: None,
+            };
+            crate::channels::wa_process_inbound(msg);
+            Some(r#"{"ok":true}"#.to_string())
+        }
+
+        ("GET", "/whatsapp/bridge/next_send") => {
+            // Mode B: Java polls this to get queued messages to send
+            let mut wa = crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner());
+            match wa.pending_sends.pop_front() {
+                Some(m) => Some(format!(r#"{{"has_message":true,"to":"{}","text":"{}"}}"#,
+                    esc(&m.to), esc(&m.text))),
+                None => Some(r#"{"has_message":false}"#.to_string()),
+            }
+        }
+
+        ("GET", "/whatsapp/status") => {
+            let wa = crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner());
+            Some(format!(
+                r#"{{"configured":{},"mode":"{}","pending_sends":{},"log_count":{}}}"#,
+                wa.config.is_configured(),
+                if wa.config.mode_a() { "cloud_api" } else { "bridge" },
+                wa.pending_sends.len(),
+                wa.message_log.len()
+            ))
+        }
+
+        ("POST", "/whatsapp/pairing/approve") => {
+            let from = extract_json_str(body, "from").unwrap_or_default();
+            let code = extract_json_str(body, "code").unwrap_or_default();
+            let mut wa = crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner());
+            let stored = wa.pairing_codes.get(&from).cloned();
+            match stored {
+                Some(c) if c == code => {
+                    wa.config.allowlist.push(from.clone());
+                    wa.pairing_codes.remove(&from);
+                    drop(wa);
+                    let _ = crate::channels::cloud_send_text(&from, "✅ Approved! You can now chat with Kira.");
+                    Some(format!(r#"{{"ok":true,"from":"{}"}}"#, from))
+                }
+                _ => Some(r#"{"error":"invalid code"}"#.to_string()),
+            }
+        }
+
+        _ => None,
+    }
+}
+    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    s.event_feed.push_back(EventFeedEntry {
+        event: event.to_string(),
+        data: data[..data.len().min(500)].to_string(),
+        ts: now_ms(),
+    });
+    if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
+}
+
+/// Session 3+9: snapshot LLM config from STATE for spawning threads
+fn get_llm_config_snapshot() -> (String, String, String, String, Vec<(String, String)>) {
+    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let cfg = &s.config;
+    let persona = if cfg.persona.is_empty() {
+        "You are Kira, a powerful Android AI agent. Use tools to get real data — never guess.".to_string()
+    } else { cfg.persona.clone() };
+    let sys = build_system_prompt(&s, &persona);
+    let hist = decompress_context(&s);
+    (cfg.api_key.clone(), cfg.base_url.clone(), cfg.model.clone(), sys, hist)
+}
+
+/// Register sub-agent function pointers at startup
+fn register_subagent_shims() {
+    crate::ai::register_subagent_fns(
+        llm_call_for_runner,
+        dispatch_for_runner,
+        get_llm_config_snapshot,
+        || {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            build_kira_tools_schema(&s.tool_allowlist)
+        },
+    );
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -5690,12 +6043,411 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
             ))
         }
 
-        // ── Module health — confirm all modules loaded ────────────────────────
+        // ── Module health ─────────────────────────────────────────────────────
         ("GET", "/modules/health") => {
-            Some(r#"{"modules":{"ai":"ok","channels":"ok","memory":"ok","scheduling":"ok","skills":"ok","gateway":"ok","tools":"ok","automation":"ok"},"session":1}"#.to_string())
+            Some(r#"{"modules":{"ai":"ok","channels":"ok","memory":"ok","scheduling":"ok","skills":"ok","gateway":"ok","tools":"ok","automation":"ok"},"sessions":"3-10"}"#.to_string())
         }
 
-        _ => None,
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 3 — Sub-agents
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/agents/spawn") => {
+            let req = crate::ai::SpawnRequest::from_json(body);
+            match crate::ai::spawn_subagent(req) {
+                Ok(id)  => Some(format!(r#"{{"ok":true,"id":"{}","status":"spawning"}}"#, id)),
+                Err(e)  => Some(format!(r#"{{"error":"{}"}}"#, esc(&e))),
+            }
+        }
+
+        ("POST", "/agents/kill") => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            let killed = crate::ai::SUBAGENT_REGISTRY.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .kill(&id);
+            Some(format!(r#"{{"ok":{},"id":"{}"}}"#, killed, id))
+        }
+
+        ("GET", "/agents/list") => {
+            Some(crate::ai::SUBAGENT_REGISTRY.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .list_json())
+        }
+
+        ("GET", "/agents/running") => {
+            let count = crate::ai::SUBAGENT_REGISTRY.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .running_count();
+            Some(format!(r#"{{"running":{}}}"#, count))
+        }
+
+        // /agents/:id/status handled below via prefix match
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 4 — Persistent Sessions
+        // ════════════════════════════════════════════════════════════════════
+
+        ("GET", "/sessions/persist/list") => {
+            let ids = crate::gateway::list_session_ids();
+            let items: Vec<String> = ids.iter().map(|id| format!("\"{}\"", id)).collect();
+            Some(format!(r#"{{"sessions":[{}],"count":{}}}"#, items.join(","), ids.len()))
+        }
+
+        ("POST", "/sessions/persist/save") => {
+            let sid = extract_json_str(body, "session").unwrap_or_else(|| "default".into());
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let turns: Vec<String> = decompress_context(&s).iter()
+                .map(|(r,c)| format!(r#"{{"role":"{}","content":"{}"}}"#, r, esc(c)))
+                .collect();
+            drop(s);
+            let json = format!("[{}]", turns.join(","));
+            let ok = crate::gateway::save_session_transcript(&sid, &json);
+            Some(format!(r#"{{"ok":{},"session":"{}","turns":{}}}"#, ok, sid, turns.len()))
+        }
+
+        ("POST", "/sessions/persist/load") => {
+            let sid = extract_json_str(body, "session").unwrap_or_else(|| "default".into());
+            match crate::gateway::load_session_transcript(&sid) {
+                Some(json) => Some(format!(r#"{{"ok":true,"session":"{}","data":{}}}"#, sid, json)),
+                None       => Some(format!(r#"{{"ok":false,"error":"not found","session":"{}"}}"#, sid)),
+            }
+        }
+
+        ("DELETE", "/sessions/persist") => {
+            let sid = extract_json_str(body, "session")
+                .or_else(|| path.split('/').last().map(|s| s.to_string()))
+                .unwrap_or_default();
+            let ok = crate::gateway::delete_session(&sid);
+            Some(format!(r#"{{"ok":{},"session":"{}"}}"#, ok, sid))
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 5 — Memory: embeddings + vector search
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/memory/add") => {
+            let content = extract_json_str(body, "content").unwrap_or_default();
+            let key     = extract_json_str(body, "key")
+                .unwrap_or_else(|| format!("mem_{}", now_ms()));
+            let tags_str = extract_json_str(body, "tags").unwrap_or_default();
+            let tags: Vec<String> = tags_str.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect();
+            if content.is_empty() {
+                return Some(r#"{"error":"content required"}"#.to_string());
+            }
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.memory_index.retain(|e| e.key != key);
+                s.memory_index.push(MemoryEntry {
+                    key: key.clone(), value: content.clone(),
+                    tags, ts: now_ms(), relevance: 1.0, access_count: 0,
+                });
+            }
+            // Persist asynchronously
+            let mem_json = {
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                let items: Vec<String> = s.memory_index.iter()
+                    .map(|e| format!(r#"{{"key":"{}","value":"{}","tags":{},"ts":{},"relevance":{:.2},"access_count":{}}}"#,
+                        esc(&e.key), esc(&e.value),
+                        json_str_arr(&e.tags), e.ts, e.relevance, e.access_count))
+                    .collect();
+                format!("[{}]", items.join(","))
+            };
+            thread::spawn(move || { crate::gateway::save_memory_index(&mem_json); });
+            Some(format!(r#"{{"ok":true,"key":"{}"}}"#, key))
+        }
+
+        ("DELETE", "/memory") => {
+            let key = extract_json_str(body, "key").unwrap_or_default();
+            if key.is_empty() {
+                return Some(r#"{"error":"key required"}"#.to_string());
+            }
+            let before = {
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.memory_index.len()
+            };
+            STATE.lock().unwrap_or_else(|e| e.into_inner())
+                .memory_index.retain(|e| e.key != key);
+            let after = STATE.lock().unwrap_or_else(|e| e.into_inner()).memory_index.len();
+            Some(format!(r#"{{"ok":{},"deleted":{}}}"#, before > after, before - after))
+        }
+
+        ("POST", "/memory/persist/save") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.memory_index.iter()
+                .map(|e| format!(r#"{{"key":"{}","value":"{}","tags":{},"ts":{},"relevance":{:.2},"access_count":{}}}"#,
+                    esc(&e.key), esc(&e.value),
+                    json_str_arr(&e.tags), e.ts, e.relevance, e.access_count))
+                .collect();
+            let json = format!("[{}]", items.join(","));
+            drop(s);
+            let ok = crate::gateway::save_memory_index(&json);
+            Some(format!(r#"{{"ok":{}}}"#, ok))
+        }
+
+        ("POST", "/memory/persist/load") => {
+            match crate::gateway::load_memory_index() {
+                Some(json) => {
+                    // Parse and merge into STATE
+                    let loaded = parse_memory_json(&json);
+                    let count = loaded.len();
+                    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    for e in loaded { s.memory_index.retain(|x| x.key != e.key); s.memory_index.push(e); }
+                    Some(format!(r#"{{"ok":true,"loaded":{}}}"#, count))
+                }
+                None => Some(r#"{"ok":false,"error":"no saved memory"}"#.to_string()),
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 6 — Skills from disk
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/skills/install") => {
+            // body: {"name":"..","content":"---\nfrontmatter\n---\nbody"}
+            let name    = extract_json_str(body, "name").unwrap_or_default();
+            let content = extract_json_str(body, "content").unwrap_or_default();
+            if name.is_empty() || content.is_empty() {
+                return Some(r#"{"error":"name and content required"}"#.to_string());
+            }
+            // Save to disk
+            let ok = crate::gateway::save_skill_file(&name, &content);
+            // Register in STATE
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.skills.entry(name.clone()).and_modify(|sk| {
+                    sk.content = content.clone();
+                }).or_insert(Skill {
+                    name: name.clone(), description: String::new(),
+                    trigger: String::new(), content: content.clone(),
+                    enabled: true, usage_count: 0,
+                });
+            }
+            Some(format!(r#"{{"ok":{},"name":"{}"}}"#, ok, name))
+        }
+
+        ("DELETE", "/skills") => {
+            let name = extract_json_str(body, "name").unwrap_or_default();
+            if name.is_empty() { return Some(r#"{"error":"name required"}"#.to_string()); }
+            let disk_ok = crate::gateway::delete_skill_file(&name);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).skills.remove(&name);
+            Some(format!(r#"{{"ok":{},"name":"{}"}}"#, disk_ok, name))
+        }
+
+        ("POST", "/skills/reload") => {
+            // Reload all skill files from disk into STATE
+            let files = crate::gateway::load_skill_files();
+            let count = files.len();
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                for (name, content) in files {
+                    s.skills.entry(name.clone()).and_modify(|sk| {
+                        sk.content = content.clone();
+                    }).or_insert(Skill {
+                        name: name.clone(), description: String::new(),
+                        trigger: String::new(), content,
+                        enabled: true, usage_count: 0,
+                    });
+                }
+            }
+            Some(format!(r#"{{"ok":true,"loaded":{}}}"#, count))
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 9 — Cron v2 (full AI-firing scheduler)
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/cron/create") => {
+            let id   = extract_json_str(body, "id")
+                .unwrap_or_else(|| format!("cron_{}", now_ms()));
+            let name = extract_json_str(body, "name").unwrap_or_else(|| id.clone());
+            let expr = extract_json_str(body, "expression")
+                .or_else(|| extract_json_str(body, "schedule"))
+                .unwrap_or_else(|| "every 1h".into());
+            let action = extract_json_str(body, "action")
+                .or_else(|| extract_json_str(body, "goal"))
+                .unwrap_or_default();
+            if action.is_empty() {
+                return Some(r#"{"error":"action/goal required"}"#.to_string());
+            }
+            let sched = crate::scheduling::cron::CronSchedule::parse(&expr);
+            let interval_ms = sched.interval_ms.unwrap_or(3_600_000);
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.cron_jobs.retain(|j| j.id != id);
+                s.cron_jobs.push(CronJob {
+                    id: id.clone(), expression: expr.clone(),
+                    action: action.clone(), last_run: 0,
+                    interval_ms, enabled: true,
+                });
+            }
+            // Persist
+            let jobs_json = cron_jobs_to_json();
+            thread::spawn(move || { crate::gateway::save_cron_jobs(&jobs_json); });
+            Some(format!(r#"{{"ok":true,"id":"{}","expression":"{}","next_run_in_ms":{}}}"#,
+                id, expr, interval_ms))
+        }
+
+        ("POST", "/cron/run_now") => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            let job = STATE.lock().unwrap_or_else(|e| e.into_inner())
+                .cron_jobs.iter().find(|j| j.id == id)
+                .map(|j| (j.action.clone(), j.id.clone()));
+            match job {
+                None => Some(format!(r#"{{"error":"job {} not found"}}"#, id)),
+                Some((action, jid)) => {
+                    let jid2 = jid.clone();
+                    thread::spawn(move || {
+                        let (api_key, base_url, model, sys, _) = get_llm_config_snapshot();
+                        if api_key.is_empty() { return; }
+                        let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                        let cfg = crate::ai::runner::AgentRunConfig {
+                            api_key, base_url, model,
+                            system_prompt: format!("{}\n\nAutomated cron task — complete and stop.", sys),
+                            session_id: format!("cron_{}", jid2),
+                            user_message: action,
+                            history: vec![], max_steps: 15, tools_json,
+                        };
+                        let result = crate::ai::runner::run_agent(cfg);
+                        crate::gateway::append_cron_run_log(&jid2, &result.content[..result.content.len().min(200)], now_ms());
+                    });
+                    Some(format!(r#"{{"ok":true,"id":"{}","status":"running"}}"#, jid))
+                }
+            }
+        }
+
+        ("GET", "/cron/log") => {
+            let path = std::path::Path::new(crate::gateway::persistence::DATA_DIR)
+                .join("scheduling").join("cron_run_log.jsonl");
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    let lines: Vec<&str> = content.lines().rev().take(50).collect();
+                    Some(format!(r#"{{"ok":true,"entries":[{}]}}"#, lines.join(",")))
+                }
+                Err(_) => Some(r#"{"ok":true,"entries":[]}"#.to_string()),
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 10 — Webhooks
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/webhooks/register") => {
+            let id     = extract_json_str(body, "id")
+                .unwrap_or_else(|| format!("wh_{}", now_ms()));
+            let secret = extract_json_str(body, "secret").unwrap_or_default();
+            let goal   = extract_json_str(body, "goal")
+                .or_else(|| extract_json_str(body, "action"))
+                .unwrap_or_else(|| "Process the incoming webhook payload.".into());
+            let target = extract_json_str(body, "delivery_target");
+
+            // Generate a URL token (not the secret — the token is in the URL)
+            let token = format!("{:x}", {
+                let mut h: u64 = 0x_dead_beef_u64;
+                for b in id.bytes().chain(secret.bytes()).chain(now_ms().to_le_bytes()) {
+                    h = h.wrapping_mul(6364136223846793005).wrapping_add(b as u64);
+                }
+                h
+            });
+
+            // Store in STATE
+            let created = now_ms() as u64;
+            let wh = serde_json::json!({
+                "id": id, "token": token, "secret": secret,
+                "goal": goal, "delivery_target": target,
+                "enabled": true, "created_ms": created, "fire_count": 0u64
+            }).to_string();
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.webhook_events.push_back(format!(r#"{{"type":"registered","id":"{}"}}"#, id));
+                // Store webhook registrations in checkpoints map
+                s.checkpoints.insert(format!("webhook:{}", id), wh.clone());
+            }
+            let whs = webhooks_to_json();
+            thread::spawn(move || { crate::gateway::save_webhooks(&whs); });
+            Some(format!(r#"{{"ok":true,"id":"{}","token":"{}","url":"/webhook/{}"}}"#, id, token, token))
+        }
+
+        ("GET", "/webhooks") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.checkpoints.iter()
+                .filter(|(k,_)| k.starts_with("webhook:"))
+                .map(|(_,v)| v.clone())
+                .collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+
+        ("DELETE", "/webhooks") => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.checkpoints.remove(&format!("webhook:{}", id));
+            }
+            Some(format!(r#"{{"ok":true,"id":"{}"}}"#, id))
+        }
+
+        _ => {
+            // Prefix-match: /agents/:id/status  and  /webhook/:token (inbound)
+            if path.starts_with("/agents/") && path.ends_with("/status") {
+                let id: String = path.trim_start_matches("/agents/")
+                    .trim_end_matches("/status").to_string();
+                let reg = crate::ai::SUBAGENT_REGISTRY.lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                return match reg.get(&id) {
+                    Some(a) => Some(a.to_json()),
+                    None    => Some(format!(r#"{{"error":"not found","id":"{}"}}"#, id)),
+                };
+            }
+            if method == "POST" && path.starts_with("/webhook/") {
+                let token = path.trim_start_matches("/webhook/");
+                // Find webhook registration by token
+                let wh = {
+                    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    s.checkpoints.values()
+                        .find(|v| v.contains(&format!("\"token\":\"{}\"", token)))
+                        .cloned()
+                };
+                match wh {
+                    None => return Some(r#"{"error":"unknown webhook token"}"#.to_string()),
+                    Some(wh_json) => {
+                        let goal_tmpl = extract_json_str_inline(&wh_json, "goal")
+                            .unwrap_or_else(|| "Process this webhook payload.".into());
+                        let wh_id = extract_json_str_inline(&wh_json, "id")
+                            .unwrap_or_default();
+                        let payload = if body.is_empty() { "{}".to_string() } else { body.to_string() };
+                        let goal = goal_tmpl.replace("{body}", &payload);
+
+                        // Increment fire count
+                        {
+                            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                            s.webhook_events.push_back(
+                                format!(r#"{{"id":"{}","token":"{}","ts":{}}}"#,
+                                    wh_id, token, now_ms())
+                            );
+                        }
+
+                        // Spawn AI run for webhook
+                        thread::spawn(move || {
+                            let (api_key, base_url, model, sys, _) = get_llm_config_snapshot();
+                            if api_key.is_empty() { return; }
+                            let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                            let cfg = crate::ai::runner::AgentRunConfig {
+                                api_key, base_url, model,
+                                system_prompt: format!("{}\n\nYou are processing an inbound webhook.", sys),
+                                session_id: format!("webhook_{}", wh_id),
+                                user_message: goal,
+                                history: vec![], max_steps: 10, tools_json,
+                            };
+                            crate::ai::runner::run_agent(cfg);
+                        });
+                        return Some(r#"{"ok":true,"status":"queued"}"#.to_string());
+                    }
+                }
+            }
+            None
+        }
     }
 }
 
@@ -5760,14 +6512,83 @@ fn run_trigger_watcher() {
 }
 
 fn run_cron_scheduler() {
+    // Session 9: upgraded cron scheduler — fires AI agent runs for each due job
     loop {
-        thread::sleep(Duration::from_secs(5));
+        std::thread::sleep(std::time::Duration::from_secs(10));
         let now = now_ms();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        let jobs: Vec<CronJob> = s.cron_jobs.iter().filter(|j| j.enabled && now-j.last_run>=j.interval_ms).cloned().collect();
-        for job in jobs {
-            s.fired_triggers.push_back(format!(r#"{{"trigger":"cron_{}","action":"{}","type":"cron"}}"#, job.id,esc(&job.action)));
-            if let Some(j) = s.cron_jobs.iter_mut().find(|x| x.id==job.id) { j.last_run=now; }
+
+        // Collect due jobs without holding lock during AI call
+        let due_jobs: Vec<(String, String, String, u32)> = {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.cron_jobs.iter()
+                .filter(|j| j.enabled && now.saturating_sub(j.last_run) >= j.interval_ms)
+                .map(|j| (j.id.clone(), j.action.clone(), j.expression.clone(), 15u32))
+                .collect()
+        };
+
+        for (job_id, action, _expr, max_steps) in due_jobs {
+            // Update last_run immediately to prevent double-fire
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(j) = s.cron_jobs.iter_mut().find(|x| x.id == job_id) {
+                    j.last_run = now;
+                }
+            }
+
+            // Log the fire
+            s_push_event(&format!("cron_fire:{}", job_id), &action);
+            crate::gateway::persistence::append_cron_run_log(&job_id, "fired", now);
+
+            // Spawn isolated AI session for this cron job
+            let jid = job_id.clone();
+            let goal = action.clone();
+            std::thread::spawn(move || {
+                let (api_key, base_url, model, system_prompt, history) =
+                    get_llm_config_snapshot();
+
+                if api_key.is_empty() { return; }
+
+                let tools_json = {
+                    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    build_kira_tools_schema(&s.tool_allowlist)
+                };
+
+                let cfg = crate::ai::runner::AgentRunConfig {
+                    api_key, base_url, model,
+                    system_prompt: format!(
+                        "{}\n\nYou are running an automated cron task. Complete it and stop.",
+                        system_prompt
+                    ),
+                    session_id: format!("cron_{}", jid),
+                    user_message: goal.clone(),
+                    history: vec![], // isolated session
+                    max_steps,
+                    tools_json,
+                };
+
+                let result = crate::ai::runner::run_agent(cfg);
+                crate::gateway::persistence::append_cron_run_log(
+                    &jid,
+                    &result.content[..result.content.len().min(200)],
+                    now_ms()
+                );
+
+                // Push cron result to event feed
+                s_push_event(
+                    &format!("cron_done:{}", jid),
+                    &result.content[..result.content.len().min(500)]
+                );
+            });
+        }
+
+        // Prune old sub-agents every minute
+        static PRUNE_COUNTER: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
+        let c = PRUNE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if c % 6 == 0 {
+            crate::ai::SUBAGENT_REGISTRY.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .prune(now_ms(), 3_600_000); // keep 1h
         }
     }
 }
@@ -6069,9 +6890,7 @@ fn get_event_feed() -> String {
 }
 
 fn push_event_feed(event: &str, data: &str) {
-    let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner());
-    s.event_feed.push_back(EventFeedEntry { event:event.to_string(), data:data.to_string(), ts:now_ms() });
-    if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
+    s_push_event(event, data);
 }
 
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}

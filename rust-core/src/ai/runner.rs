@@ -626,6 +626,11 @@ fn compact_turns_inplace(turns: &mut Vec<Turn>, keep: usize) {
 }
 
 /// Build tool_calls JSON array from parsed JsonToolCalls (for re-injection)
+/// Public alias used by subagents module
+pub fn build_tool_calls_array_json_pub(calls: &[JsonToolCall]) -> String {
+    build_tool_calls_array_json(calls)
+}
+
 fn build_tool_calls_array_json(calls: &[JsonToolCall]) -> String {
     let items: Vec<String> = calls.iter().map(|c| {
         format!(

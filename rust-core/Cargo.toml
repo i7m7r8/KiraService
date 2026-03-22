@@ -1,6 +1,6 @@
 [package]
 name    = "kira-core"
-version = "0.1.3"          # Session 2: ReAct loop
+version = "0.1.5"          # Sessions 7-8: Telegram + WhatsApp
 edition = "2021"
 
 [lib]

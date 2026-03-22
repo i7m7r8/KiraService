@@ -30,5 +30,9 @@ pub use runner::{
 };
 pub use models::{ModelConfig, ModelProvider, FailoverChain};
 pub use tools::{ToolCall, ToolResult, ToolRegistry};
-pub use subagents::{SubAgentState, SubAgentRegistry};
+pub use subagents::{
+    SubAgentState, SubAgentRegistry, SubAgentPhase,
+    SpawnRequest, SUBAGENT_REGISTRY,
+    spawn_subagent, register_subagent_fns,
+};
 pub use compaction::compact_turns;

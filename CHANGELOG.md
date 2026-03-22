@@ -136,3 +136,23 @@ subclasses — they bypass `Exception` catches and propagate to `UncaughtExcepti
 which then can't show CrashActivity (see above).
 **Fix:** Changed to `catch (Throwable e)` — catches both `Exception` and `Error`.
 Added `RustBridge.isLoaded()` pre-flight check with clear error message.
+
+## v56 — Session 1: OpenClaw Module Split (2026-03-22)
+
+### Added
+- `rust-core/src/ai/` — AI module: `runner.rs` (AiRunStatus, AiRunRequest, Turn, LoopDetector), `models.rs` (ModelConfig, FailoverChain), `tools.rs` (ToolCall, ToolResult, ToolRegistry), `subagents.rs` (SubAgentRegistry), `compaction.rs` (compact_turns)
+- `rust-core/src/channels/` — Channel module: `shared.rs` (InboundMessage, OutboundMessage, DmPolicy), `telegram.rs` (TelegramConfig, escape_md_v2, update parser)
+- `rust-core/src/memory/` — Memory module: `index.rs` (MemoryStore, cosine_similarity, temporal decay), `search.rs` (MMR re-ranking)
+- `rust-core/src/scheduling/` — Scheduling module: `cron.rs` (CronSchedule, interval parser, is_due), `webhooks.rs` (WebhookRegistration)
+- `rust-core/src/skills/` — Skills module: full registry + YAML frontmatter parser
+- `rust-core/src/gateway/` — Gateway module: `sessions.rs` (SessionStore, TranscriptTurn), `routing.rs` (RouteKey, AgentConfig), `security.rs` (PairingRequest, pairing code generator)
+- `rust-core/src/tools/` — Tool implementations: system (read_file, write_file, list_files, run_shell), memory (add_memory, search_memory, list_memories), device (get_notifications, get_location, send_sms, list_contacts, list_calendar, take_photo)
+- `rust-core/src/automation/` — Automation module boundary (logic still in lib.rs)
+- New routes: GET /ai/run/status, GET /ai/tools/schema, GET /sessions/v2, GET /memory/v2/search, GET /skills/v2, GET /cron/v2, GET /agents/v2, GET /channels/status, GET /modules/health
+
+### Changed
+- `lib.rs` — Added `pub mod` declarations for all 8 new modules at top of file
+- `lib.rs` — Added `route_openclaw_modules()` function wired into catch-all chain
+- `Cargo.toml` — Bumped version to 0.1.2
+
+### No breaking changes — all existing functionality preserved

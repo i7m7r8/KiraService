@@ -1742,19 +1742,16 @@ fn action_to_json(a: &MacroAction) -> String {
 
 /// Build the system prompt for the AI, including memory context
 pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
-    let mem_context: String = state.memory_index.iter().take(5)
+    let mem_context: String = state.memory_index.iter().take(8)
         .map(|m| format!("- {}", m.value))
         .collect::<Vec<_>>().join("\n");
 
-    let tools_list = "[get_battery, get_wifi, run_shell, read_file, write_file, \
-        list_files, add_memory, search_memory, http_get, http_post, \
-        open_app, send_message, set_variable, get_variable, run_macro]";
+    let tools = "Tools (output XML to use them):\nopen_app:     <tool name=\"open_app\"><param k=\"package\" v=\"com.package.name\"/></tool>\nhttp_get:     <tool name=\"http_get\"><param k=\"url\" v=\"https://...\"/></tool>\nrun_shell:    <tool name=\"run_shell\"><param k=\"cmd\" v=\"shell command\"/></tool>\nread_file:    <tool name=\"read_file\"><param k=\"path\" v=\"/sdcard/file\"/></tool>\nwrite_file:   <tool name=\"write_file\"><param k=\"path\" v=\"/sdcard/f\"/><param k=\"content\" v=\"...\"/></tool>\nlist_files:   <tool name=\"list_files\"><param k=\"path\" v=\"/sdcard/\"/></tool>\nsend_message: <tool name=\"send_message\"><param k=\"to\" v=\"name_or_number\"/></tool>\nadd_memory:   <tool name=\"add_memory\"><param k=\"content\" v=\"fact\"/></tool>\nsearch_memory:<tool name=\"search_memory\"><param k=\"query\" v=\"...\"/></tool>\nget_battery:  <tool name=\"get_battery\"/>\nget_wifi:     <tool name=\"get_wifi\"/>\nset_variable: <tool name=\"set_variable\"><param k=\"key\" v=\"k\"/><param k=\"value\" v=\"v\"/></tool>\nget_variable: <tool name=\"get_variable\"><param k=\"key\" v=\"k\"/></tool>";
 
     format!(
-        "{}\n\nAvailable tools (call with <tool name=\"x\"><param k=\"v\"/></tool>):\n{}\
-        \n\nUser memories:\n{}\n\nBe concise. Use tools when helpful.",
-        persona, tools_list,
-        if mem_context.is_empty() { "(none yet)".into() } else { mem_context }
+        "{}\n\n{}\n\nMemory:\n{}\n\nUse tools when the user asks you to DO something (open apps, search web, get info). Respond in the user's language.",
+        persona, tools,
+        if mem_context.is_empty() { "(none)".to_string() } else { mem_context }
     )
 }
 
@@ -2028,14 +2025,62 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         }
         // Shell, file, and intent tools: queue for Java
         "run_shell" | "open_app" | "read_file" | "write_file" | "list_files" |
-        "http_get"  | "http_post" => {
-            // Return a sentinel — /ai/chat will queue a ShellJob
-            // Java executes and result comes back via /shell/result
-            format!("__shell__:{}", name)
+        "http_get"  | "http_post" | "send_message" => {
+            // Queue for Java execution — Java handles network/intents/shell
+            // The cmd field in ShellJob is "tool_name:argument"
+            let arg = params.get("cmd")
+                .or_else(|| params.get("package"))
+                .or_else(|| params.get("url"))
+                .or_else(|| params.get("to"))
+                .or_else(|| params.get("number"))
+                .or_else(|| params.get("path"))
+                .or_else(|| params.get("query"))
+                .cloned()
+                .unwrap_or_default();
+            format!("__shell__:{}:{}", name, arg)
         }
         _ => format!("unknown tool: {}", name),
     }
 }
+
+
+/// Build the JSON payload Java sends to the LLM API.
+/// Format: {api_key, base_url, model, messages:[{role,content},...]}
+/// The messages array includes system prompt as first message + history.
+pub fn build_llm_request_json(state: &KiraState) -> String {
+    let cfg = &state.config;
+    let persona = if cfg.persona.is_empty() {
+        "You are Kira, an AI agent on Android. Be concise and helpful.".to_string()
+    } else {
+        cfg.persona.clone()
+    };
+    let system_prompt = build_system_prompt(state, &persona);
+    let history = decompress_context(state);
+
+    let mut msgs = Vec::new();
+    if !system_prompt.is_empty() {
+        msgs.push(format!(r#"{{"role":"system","content":"{}"}}"#, esc(&system_prompt)));
+    }
+    for (role, content) in &history {
+        msgs.push(format!(r#"{{"role":"{}","content":"{}"}}"#, esc(role), esc(content)));
+    }
+
+    format!(
+        r#"{{"api_key":"{}","base_url":"{}","model":"{}","messages":[{}]}}"#,
+        esc(&cfg.api_key),
+        esc(&cfg.base_url),
+        esc(&cfg.model),
+        msgs.join(",")
+    )
+}
+
+/// Escape a string to be safely embedded as a JSON string value.
+/// Different from esc() which escapes for embedding inside a JSON string.
+/// This wraps the entire value in quotes for use as a JSON string literal.
+pub fn serde_json_str_escape(s: &str) -> String {
+    format!(""{}"", esc(s))
+}
+
 
 mod jni_bridge {
     use super::*;

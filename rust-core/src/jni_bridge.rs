@@ -403,9 +403,10 @@ mod jni_bridge {
     }
 
 
-    /// Returns everything Java needs to make the LLM HTTP call itself.
-    /// Java calls OkHttp directly — no rustls, no Rust networking, no crash.
-    /// Returns JSON: {api_key, base_url, model, system_prompt, messages:[{role,content},...]}
+    /// Step 1: Prepare a chat turn. Pushes user message to history,
+    /// returns JSON with everything Java needs to call the LLM:
+    /// {api_key, base_url, model, messages:[{role,content},...]}
+    /// Java calls OkHttp with this, then passes raw LLM response to processLlmReply.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getChatContext(
         env: JNIEnv, _c: JObject,
@@ -413,46 +414,159 @@ mod jni_bridge {
     ) -> JString {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let user_msg = cs_safe(user_message, 16384);
-
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-
             if s.config.api_key.is_empty() {
                 return r#"{"error":"no_api_key"}"#.to_string();
             }
-
-            // Push user turn
             s.request_count += 1;
+            s.theme.is_thinking = true;
             push_turn_compressed(&mut s, "user", &user_msg);
-
-            // Build system prompt
-            let persona = if s.config.persona.is_empty() {
-                "You are Kira, a helpful AI agent on Android. Be concise.".to_string()
-            } else {
-                s.config.persona.clone()
-            };
-            let system_prompt = build_system_prompt(&s, &persona);
-
-            // Decompress history for messages array
-            let history = decompress_context(&s);
-
-            // Build messages JSON array
-            let mut msgs = Vec::new();
-            for (role, content) in &history {
-                msgs.push(format!(r#"{{"role":"{}","content":"{}"}}"#,
-                    esc(role), esc(content)));
-            }
-
-            format!(
-                r#"{{"api_key":"{}","base_url":"{}","model":"{}","system_prompt":"{}","messages":[{}]}}"#,
-                esc(&s.config.api_key),
-                esc(&s.config.base_url),
-                esc(&s.config.model),
-                esc(&system_prompt),
-                msgs.join(",")
-            )
+            build_llm_request_json(&s)
         })).unwrap_or_else(|_| r#"{"error":"panic_in_get_context"}"#.to_string());
-
         unsafe { jni_str(env, &result) }
+    }
+
+    /// Step 2: Process raw LLM response. Handles tool calls, memory, multi-step loops.
+    /// Returns JSON:
+    ///   {done:true,  reply:"...", tools_used:"[...]"} — send reply to user
+    ///   {done:false, messages:[...]}                  — call LLM again with these messages
+    ///   {done:true,  error:"..."}                     — show error
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_processLlmReply(
+        env: JNIEnv, _c: JObject,
+        raw_response: *const c_char,
+        step: i32,
+    ) -> JString {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let raw = cs_safe(raw_response, 131072);
+            let step_n = step as usize;
+            let max_steps = {
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.config.agent_max_steps.max(3) as usize
+            };
+
+            let tool_calls = parse_tool_calls(&raw);
+            let reply      = clean_reply(&raw);
+
+            if tool_calls.is_empty() || step_n >= max_steps {
+                // Done — no tools or step limit hit
+                let final_reply = if reply.is_empty() { "done.".to_string() } else { reply };
+                {
+                    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    push_turn_compressed(&mut s, "assistant", &final_reply);
+                    s.theme.is_thinking = false;
+                }
+                format!(r#"{{"done":true,"reply":"{}","tools_used":"[]"}}"#, esc(&final_reply))
+            } else {
+                // Execute tools, build follow-up context
+                let mut tool_results_lines: Vec<String> = Vec::new();
+                let mut tools_used: Vec<String>          = Vec::new();
+
+                for (tname, targs) in &tool_calls {
+                    let res = dispatch_tool(tname, targs);
+
+                    // Queue shell/app/http jobs for Java
+                    if res.starts_with("__shell__") {
+                        // Build the command string Java expects: "tool_name:argument"
+                        let arg = targs.get("package")
+                            .or_else(|| targs.get("cmd"))
+                            .or_else(|| targs.get("url"))
+                            .or_else(|| targs.get("app"))
+                            .cloned()
+                            .unwrap_or_default();
+                        let java_cmd = format!("{}:{}", tname, arg);
+                        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                        s.pending_shell.push_back(ShellJob {
+                            id:      format!("tool_{}_{}", step_n, tname),
+                            cmd:     java_cmd,
+                            timeout: 15_000,
+                            created: now_ms(),
+                        });
+                    }
+
+                    tool_results_lines.push(format!("[{}]: {}", tname, res));
+                    tools_used.push(tname.clone());
+                }
+
+                // Build follow-up prompt with tool results
+                let tool_results_str = tool_results_lines.join("\n");
+                let follow_up = format!(
+                    "Tool results:\n{}\n\nNow respond to the user based on these results.",
+                    tool_results_str
+                );
+
+                // Build full message list for next LLM call:
+                // [system, ...history, user_msg, assistant_with_tools, tool_results]
+                let next_messages: Vec<String> = {
+                    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    let cfg = &s.config;
+                    let persona = if cfg.persona.is_empty() {
+                        "You are Kira, an AI agent on Android. Be concise and helpful.".to_string()
+                    } else { cfg.persona.clone() };
+                    let sys = build_system_prompt(&s, &persona);
+                    let hist = decompress_context(&s);
+
+                    let mut msgs = Vec::new();
+                    if !sys.is_empty() {
+                        msgs.push(format!(r#"{{"role":"system","content":"{}"}}"#, esc(&sys)));
+                    }
+                    for (role, content) in &hist {
+                        msgs.push(format!(r#"{{"role":"{}","content":"{}"}}"#,
+                            esc(role), esc(content)));
+                    }
+                    // Append assistant's tool-call response
+                    msgs.push(format!(r#"{{"role":"assistant","content":"{}"}}"#, esc(&raw)));
+                    // Append tool results as user message
+                    msgs.push(format!(r#"{{"role":"user","content":"{}"}}"#, esc(&follow_up)));
+                    msgs
+                };
+
+                let (api_key, base_url, model) = {
+                    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    (s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
+                };
+
+                let next_req = format!(
+                    r#"{{"api_key":"{}","base_url":"{}","model":"{}","messages":[{}]}}"#,
+                    esc(&api_key), esc(&base_url), esc(&model),
+                    next_messages.join(",")
+                );
+
+                let tools_json: String = tools_used.iter()
+                    .map(|t| format!(r#""{}""#, esc(t)))
+                    .collect::<Vec<_>>().join(",");
+
+                format!(
+                    r#"{{"done":false,"messages_json":"{}","tools_used":"[{}]"}}"#,
+                    esc(&next_req),
+                    tools_json
+                )
+            }
+        })).unwrap_or_else(|_| {
+            if let Ok(mut s) = STATE.lock() { s.theme.is_thinking = false; }
+            r#"{"done":true,"reply":"Error processing response — please try again","tools_used":"[]"}"#.to_string()
+        });
+        unsafe { jni_str(env, &result) }
+    })).unwrap_or_else(|_| {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.theme.is_thinking = false;
+            r#"{"done":true,"reply":"Internal error processing response","tools_used":"[]"}"#.to_string()
+        });
+        unsafe { jni_str(env, &result) }
+    }
+
+    /// Store assistant reply in compressed history (called externally if needed).
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_pushAssistantTurn(
+        _e: JNIEnv, _c: JObject,
+        content: *const c_char,
+    ) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let text = cs_safe(content, 32768);
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            push_turn_compressed(&mut s, "assistant", &text);
+            s.theme.is_thinking = false;
+        }));
     }
 
     /// Store the assistant's reply in compressed history.

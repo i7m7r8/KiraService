@@ -417,4 +417,14 @@ public class RustBridge {
     /** Store assistant reply in Rust compressed history. Call after successful HTTP. */
     public static native void pushAssistantTurn(String content);
 
+
+    /**
+     * Process a raw LLM response through Kira's full intelligence layer.
+     * Handles tool calls (open_app, http_get, etc.), memory, multi-step loops.
+     * @param rawResponse  the raw content string from the LLM
+     * @param step         current step counter (starts at 0)
+     * @return JSON: {done:true, reply:"..."} or {done:false, messages_json:"..."}
+     */
+    public static native String processLlmReply(String rawResponse, int step);
+
 }

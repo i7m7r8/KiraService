@@ -1982,7 +1982,7 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         "add_memory" => {
             let content = params.get("content").cloned().unwrap_or_default();
             if content.is_empty() { return "error: content required".into(); }
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let idx = s.memory_index.len();
             s.memory_index.push(MemoryEntry { key: format!("mem_{}", idx), value: content.clone(), tags: vec![], ts: now_ms(), relevance: 1.0, access_count: 0 });
             format!("memory added: {}", &content[..content.len().min(50)])
@@ -1993,13 +1993,13 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         }
         "get_variable" => {
             let key = params.get("key").cloned().unwrap_or_default();
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.variables.get(&key).map(|v| v.value.clone()).unwrap_or_else(|| "not found".into())
         }
         "set_variable" => {
             let key = params.get("key").cloned().unwrap_or_default();
             let val = params.get("value").cloned().unwrap_or_default();
-            { let mut s = STATE.lock().unwrap();
+            { let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 let ts = now_ms();
                 s.variables.entry(key.clone()).and_modify(|v| v.value = val.clone())
                     .or_insert(AutoVariable { name: key.clone(), value: val.clone(),
@@ -2008,12 +2008,12 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
             format!("set {} = {}", key, val)
         }
         "get_battery" => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!("{}% {}", s.battery_pct,
                 if s.battery_charging { "charging" } else { "not charging" })
         }
         "get_wifi" => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if !s.sig_wifi_ssid.is_empty() {
                 format!("connected: {}", s.sig_wifi_ssid)
             } else { "disconnected".into() }
@@ -2085,7 +2085,7 @@ mod jni_bridge {
     ) {
         let p = port as u16;
         {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.uptime_start = now_ms();
             s.providers    = make_providers();
             // Heal corrupt base_url from old encrypted storage (survives APK updates)
@@ -2107,7 +2107,7 @@ mod jni_bridge {
                 AutoProfile { id:"car".into(),     name:"Car".into(),     active:false, auto_activate_trigger:"bt_connected".into(),   auto_activate_value:String::new() },
             ];
         }
-        install_builtin_templates(&mut STATE.lock().unwrap());
+        install_builtin_templates(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
         thread::spawn(move || run_http(p));
         thread::spawn(run_trigger_watcher);
         thread::spawn(run_cron_scheduler);
@@ -2120,54 +2120,54 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOn(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap().sig_screen_on = true; }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_screen_on = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOff(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap().sig_screen_off = true; }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_screen_off = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalUnlocked(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap().sig_device_unlocked = true; }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_device_unlocked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocked(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap().sig_device_locked = true; }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_device_locked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalShake(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap().sig_shake = true; }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_shake = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeUp(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap().sig_vol_up = true; }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_vol_up = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeDown(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap().sig_vol_down = true; }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_vol_down = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalWifi(
         _e: JNIEnv, _c: JObject, ssid: *const c_char,
-    ) { STATE.lock().unwrap().sig_wifi_ssid = cs(ssid); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_wifi_ssid = cs(ssid); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalBluetooth(
         _e: JNIEnv, _c: JObject, device: *const c_char,
-    ) { STATE.lock().unwrap().sig_bt_device = cs(device); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_bt_device = cs(device); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalSms(
         _e: JNIEnv, _c: JObject,
         sender: *const c_char, text: *const c_char,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.sig_sms_sender = cs(sender);
         s.sig_sms_text   = cs(text);
     }
@@ -2175,33 +2175,33 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalCall(
         _e: JNIEnv, _c: JObject, number: *const c_char,
-    ) { STATE.lock().unwrap().sig_call_number = cs(number); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_call_number = cs(number); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalNfc(
         _e: JNIEnv, _c: JObject, tag_id: *const c_char,
-    ) { STATE.lock().unwrap().sig_nfc_tag = cs(tag_id); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_nfc_tag = cs(tag_id); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalClipboard(
         _e: JNIEnv, _c: JObject, text: *const c_char,
-    ) { STATE.lock().unwrap().sig_clipboard = cs(text); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_clipboard = cs(text); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppLaunched(
         _e: JNIEnv, _c: JObject, pkg: *const c_char,
-    ) { STATE.lock().unwrap().sig_app_launched = cs(pkg); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_app_launched = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppClosed(
         _e: JNIEnv, _c: JObject, pkg: *const c_char,
-    ) { STATE.lock().unwrap().sig_app_closed = cs(pkg); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_app_closed = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocation(
         _e: JNIEnv, _c: JObject, lat: f64, lon: f64, geofence: *const c_char,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.sig_lat      = lat;
         s.sig_lon      = lon;
         s.sig_geofence = cs(geofence);
@@ -2210,7 +2210,7 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalKiraEvent(
         _e: JNIEnv, _c: JObject, event: *const c_char,
-    ) { STATE.lock().unwrap().sig_kira_event = cs(event); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_kira_event = cs(event); }
 
     // \u{2500}\u{2500} v40: Macro management JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
@@ -2221,7 +2221,7 @@ mod jni_bridge {
     ) -> JString {
         let body = cs(json);
         let m = parse_macro_from_json(&body);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.macros.retain(|x| x.id != m.id);
         let id = m.id.clone();
         s.macros.push(m);
@@ -2233,7 +2233,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, id: *const c_char,
     ) {
         let id = cs(id);
-        STATE.lock().unwrap().macros.retain(|m| m.id != id);
+        STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.retain(|m| m.id != id);
     }
 
     #[no_mangle]
@@ -2241,7 +2241,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, id: *const c_char, enabled: bool,
     ) {
         let id = cs(id);
-        if let Some(m) = STATE.lock().unwrap().macros.iter_mut().find(|m| m.id == id) {
+        if let Some(m) = STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.iter_mut().find(|m| m.id == id) {
             m.enabled = enabled;
         }
     }
@@ -2250,7 +2250,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacros(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let items: Vec<String> = s.macros.iter().map(macro_to_json).collect();
         unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
@@ -2260,7 +2260,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject, id: *const c_char,
     ) -> JString {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let actions: Vec<MacroAction> = s.macros.iter()
             .find(|m| m.id == id)
             .map(|m| m.actions.clone())
@@ -2285,7 +2285,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_nextMacroAction(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        match STATE.lock().unwrap().pending_actions.pop_front() {
+        match STATE.lock().unwrap_or_else(|e| e.into_inner()).pending_actions.pop_front() {
             Some(pa) => {
                 let params_json: Vec<String> = pa.params.iter()
                     .map(|(k,v)| format!("\"{}\":\"{}\"", esc(k), esc(v))).collect();
@@ -2308,7 +2308,7 @@ mod jni_bridge {
     ) {
         let name = cs(name); let value = cs(value); let vt = cs(var_type);
         let ts = now_ms();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.variables.entry(name.clone()).and_modify(|v| { v.value = value.clone(); v.updated_ms = ts; })
             .or_insert(AutoVariable { name, value, var_type: if vt.is_empty(){"string".to_string()}else{vt}, persistent:false, created_ms:ts, updated_ms:ts });
     }
@@ -2318,7 +2318,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject, name: *const c_char,
     ) -> JString {
         let name = cs(name);
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let json = match s.variables.get(&name) {
             Some(v) => format!(r#"{{"name":"{}","value":"{}","type":"{}"}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type)),
             None    => r#"{"error":"not_found"}"#.to_string(),
@@ -2330,7 +2330,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getVariables(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let items: Vec<String> = s.variables.values().map(|v|
             format!(r#"{{"name":"{}","value":"{}","type":"{}","updated_ms":{}}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type), v.updated_ms)
         ).collect();
@@ -2344,7 +2344,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, id: *const c_char,
     ) {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.active_profile = id.clone();
         for p in s.profiles.iter_mut() { p.active = p.id == id; }
         s.sig_kira_event = format!("profile_changed:{}", id);
@@ -2354,7 +2354,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getProfiles(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let items: Vec<String> = s.profiles.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","active":{}}}"#, esc(&p.id), esc(&p.name), p.active)
         ).collect();
@@ -2365,7 +2365,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacroRunLog(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let items: Vec<String> = s.macro_run_log.iter().skip(s.macro_run_log.len().saturating_sub(100)).map(|r|
             format!(r#"{{"macro_id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"duration_ms":{},"ts":{}}}"#,
                 esc(&r.macro_id), esc(&r.macro_name), esc(&r.trigger), r.success, r.steps_run, r.duration_ms, r.ts)
@@ -2383,7 +2383,7 @@ mod jni_bridge {
         tg_token:*const c_char, tg_allowed:i64, max_steps:i32, auto_approve:bool,
         heartbeat:i32, setup_done:bool,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         // Only overwrite non-empty values — prevents cold-start race where
         // Java reads prefs before Rust has loaded and wipes the stored key.
         let v_user   = cs(user_name);
@@ -2413,7 +2413,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getConfig(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let json = config_to_json(&s.config);
         unsafe { jni_str(env, &json) }
     }
@@ -2424,7 +2424,7 @@ mod jni_bridge {
         page:i32, api_key:*const c_char, base_url:*const c_char,
         model:*const c_char, user_name:*const c_char, tg_token:*const c_char, tg_id:i64,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.setup.current_page = page as u8;
         let ak=cs(api_key);   if !ak.is_empty()  { s.setup.api_key   =ak.clone();  s.config.api_key  =ak; }
         let bu=cs(base_url);  if !bu.is_empty()  { s.setup.base_url  =bu.clone();  s.config.base_url =bu; }
@@ -2437,19 +2437,19 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_completeSetup(
         _e: JNIEnv, _c: JObject,
-    ) { let mut s = STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; }
+    ) { let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner()); s.setup.done=true; s.config.setup_done=true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_isSetupDone(
         _e: JNIEnv, _c: JObject,
-    ) -> bool { STATE.lock().unwrap().config.setup_done }
+    ) -> bool { STATE.lock().unwrap_or_else(|e| e.into_inner()).config.setup_done }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setCustomProvider(
         _e: JNIEnv, _c: JObject, url:*const c_char, model:*const c_char,
     ) {
         let url=cs(url); let model=cs(model);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.setup.custom_url=url.clone(); s.setup.selected_provider_id="custom".to_string();
         s.config.base_url=url.clone(); if !model.is_empty() { s.config.model=model.clone(); }
         if let Some(p) = s.providers.iter_mut().find(|p| p.id=="custom") {
@@ -2463,7 +2463,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject, provider_id:*const c_char,
     ) -> JString {
         let id=cs(provider_id);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let found=s.providers.iter().find(|p| p.id==id).cloned();
         let result = if let Some(p)=found {
             s.active_provider=id; s.config.base_url=p.base_url.clone(); s.config.model=p.model.clone();
@@ -2476,7 +2476,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getProviders(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let items: Vec<String> = s.providers.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)
         ).collect();
@@ -2488,7 +2488,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject,
         installed:bool, permission_granted:bool, error_msg:*const c_char,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.shizuku.installed=installed; s.shizuku.permission_granted=permission_granted;
         s.shizuku.error_msg=cs(error_msg); s.shizuku.last_checked_ms=now_ms();
     }
@@ -2497,7 +2497,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getShizukuJson(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { jni_str(env, &shizuku_to_json(&s.shizuku)) }
     }
 
@@ -2505,7 +2505,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_updateTilt(
         _e: JNIEnv, _c: JObject, ax:f32, ay:f32,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay;
         let tx=-ax*s.theme.star_speed; let ty=ay*s.theme.star_speed;
         s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08;
@@ -2516,7 +2516,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getStarParallax(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { jni_str(env, &format!(r#"{{"px":{:.6},"py":{:.6},"ax":{:.4},"ay":{:.4}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y,s.theme.star_tilt_x,s.theme.star_tilt_y)) }
     }
 
@@ -2524,7 +2524,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getTheme(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { jni_str(env, &s.theme.to_json()) }
     }
 
@@ -2534,7 +2534,7 @@ mod jni_bridge {
         name: *const c_char,
     ) {
         let name = unsafe { std::ffi::CStr::from_ptr(name).to_str().unwrap_or("catppuccin_mocha") };
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.theme = match name {
             "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(),
             "material_light" | "material_neo_light"       => ThemeConfig::material_light(),
@@ -2548,7 +2548,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getStatsJson(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         { let _s = format!(
             r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"profiles":{},"active_profile":"{}","variables":{}}}"#,
             s.memory_index.len(), s.context_turns.len(),
@@ -2570,7 +2570,7 @@ mod jni_bridge {
     ) {
         let (pkg,title,text) = (cs(pkg),cs(title),cs(text));
         let ts = now_ms();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         fire_notif_triggers(&mut s, &pkg, &title, &text);
         s.daily_log.push_back(format!("[{}] notif {}:{}", ts, pkg, &title[..title.len().min(40)]));
         if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
@@ -2581,14 +2581,14 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenNodes(
         _e: JNIEnv, _c: JObject, json:*const c_char,
-    ) { STATE.lock().unwrap().screen_nodes = cs(json); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).screen_nodes = cs(json); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenPackage(
         _e: JNIEnv, _c: JObject, pkg:*const c_char,
     ) {
         let pkg = cs(pkg);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let prev = s.screen_pkg.clone();
         if prev != pkg {
             s.sig_app_launched = pkg.clone();
@@ -2601,7 +2601,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_updateBattery(
         _e: JNIEnv, _c: JObject, pct:i32, charging:bool,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let prev = s.battery_pct;
         s.battery_pct=pct; s.battery_charging=charging;
         fire_battery_triggers(&mut s, pct, prev);
@@ -2610,7 +2610,7 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateAgentContext(
         _e: JNIEnv, _c: JObject, ctx:*const c_char,
-    ) { STATE.lock().unwrap().agent_context = cs(ctx); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).agent_context = cs(ctx); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushContextTurn(
@@ -2620,7 +2620,7 @@ mod jni_bridge {
         let role=cs(role); let content=cs(content);
         let tokens=estimate_tokens(&content);
         let ts=now_ms();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let sess_id = s.active_session.clone();
         s.total_tokens += tokens as u64;
         s.daily_log.push_back(format!("[{}] {}: {}", ts, role, &content[..content.len().min(80)]));
@@ -2637,7 +2637,7 @@ mod jni_bridge {
     ) {
         let (key,value,tags_raw) = (cs(key),cs(value),cs(tags));
         let tags: Vec<String> = tags_raw.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.memory_index.retain(|e| e.key != key);
         let fact = format!("- {}: {}", key, value);
         if !s.memory_md.contains(&fact) { s.memory_md.push_str(&format!("\n{}", fact)); }
@@ -2655,7 +2655,7 @@ mod jni_bridge {
     ) {
         let name=cs(name); let value=cs(value);
         let enc=xor_crypt(value.as_bytes(), derive_key(&name).as_slice());
-        STATE.lock().unwrap().credentials.insert(name, enc);
+        STATE.lock().unwrap_or_else(|e| e.into_inner()).credentials.insert(name, enc);
     }
 
     #[no_mangle]
@@ -2664,7 +2664,7 @@ mod jni_bridge {
         name:*const c_char, desc:*const c_char, trigger:*const c_char, content:*const c_char,
     ) {
         let name=cs(name);
-        STATE.lock().unwrap().skills.insert(name.clone(), Skill { name, description:cs(desc), trigger:cs(trigger), content:cs(content), enabled:true, usage_count:0 });
+        STATE.lock().unwrap_or_else(|e| e.into_inner()).skills.insert(name.clone(), Skill { name, description:cs(desc), trigger:cs(trigger), content:cs(content), enabled:true, usage_count:0 });
     }
 
     #[no_mangle]
@@ -2673,7 +2673,7 @@ mod jni_bridge {
         id:*const c_char, check:*const c_char, action:*const c_char, interval_ms:i64,
     ) {
         let item = HeartbeatItem { id:cs(id), check:cs(check), action:cs(action), enabled:true, last_run:0, interval_ms:interval_ms as u128 };
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.heartbeat_items.retain(|i| i.id!=item.id);
         s.heartbeat_items.push(item);
     }
@@ -2683,7 +2683,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, session_id:*const c_char,
     ) -> i32 {
         let id=cs(session_id);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let count = { let c=s.tool_iterations.entry(id).or_insert(0); *c+=1; *c };
         s.tool_call_count += 1;
         let max = s.max_tool_iters;
@@ -2693,7 +2693,7 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_resetToolIter(
         _e: JNIEnv, _c: JObject, session_id:*const c_char,
-    ) { STATE.lock().unwrap().tool_iterations.remove(&cs(session_id)); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).tool_iterations.remove(&cs(session_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_logTaskStep(
@@ -2702,7 +2702,7 @@ mod jni_bridge {
     ) {
         let (tid,act,res) = (cs(task_id),cs(action),cs(result));
         let ts=now_ms();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         do_audit(&mut s, &tid, &act, &act, &res, success, false);
         s.task_log.push_back(TaskStep { task_id:tid, step:step as u32, action:act, result:res, time:ts, success });
         if s.task_log.len() > 2000 { s.task_log.pop_front(); }
@@ -2712,7 +2712,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_nextCommand(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        match STATE.lock().unwrap().pending_cmds.pop_front() {
+        match STATE.lock().unwrap_or_else(|e| e.into_inner()).pending_cmds.pop_front() {
             Some((id,body)) => unsafe { jni_str(env, &format!(r#"{{"id":"{}","body":{}}}"#, id, body)) },
             None => std::ptr::null_mut(),
         }
@@ -2721,13 +2721,13 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushResult(
         _e: JNIEnv, _c: JObject, id:*const c_char, result:*const c_char,
-    ) { STATE.lock().unwrap().results.insert(cs(id), cs(result)); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).results.insert(cs(id), cs(result)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextFiredTrigger(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        match STATE.lock().unwrap().fired_triggers.pop_front() {
+        match STATE.lock().unwrap_or_else(|e| e.into_inner()).fired_triggers.pop_front() {
             Some(t) => unsafe { jni_str(env, &t.as_str()) },
             None    => std::ptr::null_mut(),
         }
@@ -2737,12 +2737,12 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_addTrigger(
         _e: JNIEnv, _c: JObject,
         id:*const c_char, ttype:*const c_char, value:*const c_char, action:*const c_char, repeat:bool,
-    ) { STATE.lock().unwrap().triggers.push(Trigger { id:cs(id), trigger_type:cs(ttype), value:cs(value), action:cs(action), fired:false, repeat }); }
+    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).triggers.push(Trigger { id:cs(id), trigger_type:cs(ttype), value:cs(value), action:cs(action), fired:false, repeat }); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_removeTrigger(
         _e: JNIEnv, _c: JObject, id:*const c_char,
-    ) { let id=cs(id); STATE.lock().unwrap().triggers.retain(|t| t.id!=id); }
+    ) { let id=cs(id); STATE.lock().unwrap_or_else(|e| e.into_inner()).triggers.retain(|t| t.id!=id); }
 
     // \u{2500}\u{2500} OpenClaw v3 JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
@@ -2751,7 +2751,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject,
         macro_id: *const c_char, script: *const c_char,
     ) -> JString {
-        let log = execute_dsl_script(&mut STATE.lock().unwrap(), &cs(macro_id), &cs(script));
+        let log = execute_dsl_script(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(macro_id), &cs(script));
         let log_json: Vec<String> = log.iter().map(|l| format!(r#""{}""#, esc(l))).collect();
         unsafe { jni_str(env, &format!(r#"{{"ok":true,"log":[{}]}}"#, log_json.join(","))) }
     }
@@ -2774,7 +2774,7 @@ mod jni_bridge {
             enabled: true, fired_count: 0, last_fired: 0, debounce_last: 0, throttle_last: 0,
             take_count: 0, skip_count: 0, last_value: String::new(), buffer: Vec::new(),
         };
-        STATE.lock().unwrap().rx_subscriptions.push(sub);
+        STATE.lock().unwrap_or_else(|e| e.into_inner()).rx_subscriptions.push(sub);
         unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
     }
 
@@ -2784,7 +2784,7 @@ mod jni_bridge {
         kind: *const c_char, data: *const c_char,
     ) {
         let event = RxEvent { kind: cs(kind), data: cs(data), ts: now_ms(), source: "jni".to_string() };
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let subs: Vec<RxSubscription> = s.rx_subscriptions.iter().cloned().collect();
         for mut sub in subs {
             if !sub.enabled { continue; }
@@ -2802,20 +2802,20 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_channelPost(
         _e: JNIEnv, _c: JObject,
         channel: *const c_char, message: *const c_char,
-    ) { channel_post(&mut STATE.lock().unwrap(), &cs(channel), &cs(message)); }
+    ) { channel_post(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(channel), &cs(message)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_batteryDefer(
         _e: JNIEnv, _c: JObject,
         macro_id: *const c_char, min_pct: i32,
-    ) { defer_until_charged(&mut STATE.lock().unwrap(), &cs(macro_id), min_pct); }
+    ) { defer_until_charged(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(macro_id), min_pct); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_exportBundle(
         env: JNIEnv, _c: JObject, tag_filter: *const c_char,
     ) -> JString {
         let tag = cs(tag_filter);
-        let result = export_bundle(&STATE.lock().unwrap(), if tag.is_empty() { None } else { Some(&tag) });
+        let result = export_bundle(&STATE.lock().unwrap_or_else(|e| e.into_inner()), if tag.is_empty() { None } else { Some(&tag) });
         unsafe { jni_str(env, &result) }
     }
 
@@ -2823,7 +2823,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_fsmEvent(
         _e: JNIEnv, _c: JObject,
         machine_id: *const c_char, event: *const c_char,
-    ) { fsm_process_event(&mut STATE.lock().unwrap(), &cs(machine_id), &cs(event)); }
+    ) { fsm_process_event(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(machine_id), &cs(event)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_freeString(
@@ -2836,25 +2836,25 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_exportMacros(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let json = export_macros_json(&STATE.lock().unwrap());
+        let json = export_macros_json(&STATE.lock().unwrap_or_else(|e| e.into_inner()));
         unsafe { jni_str(env, &json) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_importMacros(
         _e: JNIEnv, _c: JObject, json: *const c_char,
-    ) { import_macros_json(&mut STATE.lock().unwrap(), &cs(json)); }
+    ) { import_macros_json(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(json)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_chainMacro(
         _e: JNIEnv, _c: JObject, target_id: *const c_char,
-    ) { chain_macro(&mut STATE.lock().unwrap(), &cs(target_id)); }
+    ) { chain_macro(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(target_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_evalExpr(
         env: JNIEnv, _c: JObject, expr: *const c_char,
     ) -> JString {
-        let result = eval_expr(&STATE.lock().unwrap(), &cs(expr));
+        let result = eval_expr(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(expr));
         unsafe { jni_str(env, &result) }
     }
 
@@ -2862,7 +2862,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_expandVars(
         env: JNIEnv, _c: JObject, text: *const c_char,
     ) -> JString {
-        let result = expand_vars(&STATE.lock().unwrap(), &cs(text));
+        let result = expand_vars(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(text));
         unsafe { jni_str(env, &result) }
     }
 
@@ -2877,7 +2877,7 @@ mod jni_bridge {
         let goal = cs(goal);
         let max_s = if max_steps > 0 { max_steps as u32 } else { 20 };
         let task_id = gen_id();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let plan_prompt = build_task_plan_prompt(&goal, &s.agent_context);
         s.pending_actions.push_back(PendingMacroAction {
             macro_id: task_id.clone(), action_id: gen_id(),
@@ -2907,7 +2907,7 @@ mod jni_bridge {
         task_id: *const c_char, vlm_response: *const c_char,
     ) -> JString {
         let task_id = cs(task_id); let vlm_resp = cs(vlm_response);
-        let done = execute_vlm_step(&mut STATE.lock().unwrap(), &task_id, &vlm_resp);
+        let done = execute_vlm_step(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &task_id, &vlm_resp);
         unsafe { jni_str(env, &format!(r#"{{"ok":true,"done":{}}}"#, done)) }
     }
 
@@ -2917,7 +2917,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject,
         task_id: *const c_char, step: i32, vlm_desc: *const c_char,
     ) {
-        record_screen_observation(&mut STATE.lock().unwrap(), &cs(task_id), step as u32, &cs(vlm_desc));
+        record_screen_observation(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(task_id), step as u32, &cs(vlm_desc));
     }
 
     /// Set the AI-generated plan for a task
@@ -2932,7 +2932,7 @@ mod jni_bridge {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == task_id) {
             t.plan = plan;
             t.state = VlmTaskState::Observing;
@@ -2947,7 +2947,7 @@ mod jni_bridge {
         task_id: *const c_char,
     ) -> JString {
         let task_id = cs(task_id);
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let result = match s.phone_agent_tasks.iter().find(|t| t.id == task_id) {
             Some(t) => {
                 let sub_task = t.plan.get(t.plan_idx).cloned().unwrap_or_else(|| t.goal.clone());
@@ -2971,7 +2971,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAgentTasks(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let items: Vec<String> = s.phone_agent_tasks.iter().map(|t| format!(
             r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"result":"{}"}}"#,
             esc(&t.id), esc(&t.goal),
@@ -2996,7 +2996,7 @@ Context: {}",
         let body = cs(json);
         if let Some(flow) = parse_flow_from_json(&body) {
             let id = flow.id.clone();
-            STATE.lock().unwrap().roboru_flows.insert(id.clone(), flow);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_flows.insert(id.clone(), flow);
             unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
         } else {
             unsafe { jni_str(env, &r#"{"error":"invalid flow"}"#) }
@@ -3008,7 +3008,7 @@ Context: {}",
         env: JNIEnv, _c: JObject, id: *const c_char,
     ) -> JString {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let flow = s.roboru_flows.get(&id).cloned();
         let result = if let Some(flow) = flow {
             let steps = execute_flow(&mut s, &flow, None);
@@ -3025,7 +3025,7 @@ Context: {}",
         let body = cs(json);
         let result = if let Some(kw) = parse_keyword_from_json(&body) {
             let name = kw.name.clone();
-            STATE.lock().unwrap().roboru_keywords.insert(name.clone(), kw);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_keywords.insert(name.clone(), kw);
             format!(r#"{{"ok":true,"name":"{}"}}"#, esc(&name))
         } else { r#"{"error":"invalid keyword"}"#.to_string() };
         unsafe { jni_str(env, &result) }
@@ -3037,7 +3037,7 @@ Context: {}",
         name: *const c_char, args_json: *const c_char,
     ) -> JString {
         let name = cs(name); let args_body = cs(args_json);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let kw = s.roboru_keywords.get(&name).cloned();
         let result = if let Some(kw) = kw {
             let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name): (usize, &String)| {
@@ -3057,7 +3057,7 @@ Context: {}",
         let body = cs(json);
         let result = if let Some(p) = parse_pipeline_from_json(&body) {
             let id = p.id.clone();
-            STATE.lock().unwrap().roboru_pipelines.insert(id.clone(), p);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_pipelines.insert(id.clone(), p);
             format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))
         } else { r#"{"error":"invalid pipeline"}"#.to_string() };
         unsafe { jni_str(env, &result) }
@@ -3068,7 +3068,7 @@ Context: {}",
         env: JNIEnv, _c: JObject, id: *const c_char,
     ) -> JString {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let pipeline = s.roboru_pipelines.get(&id).cloned();
         let result = if let Some(pipeline) = pipeline {
             let (steps, errors) = execute_pipeline(&mut s, &pipeline);
@@ -3083,7 +3083,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationAnalytics(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let json = get_automation_analytics(&STATE.lock().unwrap());
+        let json = get_automation_analytics(&STATE.lock().unwrap_or_else(|e| e.into_inner()));
         unsafe { jni_str(env, &json) }
     }
 
@@ -3091,7 +3091,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationReport(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let report = get_automation_report(&STATE.lock().unwrap());
+        let report = get_automation_report(&STATE.lock().unwrap_or_else(|e| e.into_inner()));
         unsafe { jni_str(env, &report) }
     }
 
@@ -3102,7 +3102,7 @@ Context: {}",
     ) {
         let id = cs(macro_id); let time = cs(time_hhmm);
         if !id.is_empty() && !time.is_empty() {
-            schedule_macro_daily(&mut STATE.lock().unwrap(), &id, &time);
+            schedule_macro_daily(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &id, &time);
         }
     }
 
@@ -3111,7 +3111,7 @@ Context: {}",
         env: JNIEnv, _c: JObject,
         name: *const c_char,
     ) -> JString {
-        let result = find_macro_by_name(&STATE.lock().unwrap(), &cs(name));
+        let result = find_macro_by_name(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(name));
         let json = match result {
             Some(id) => format!(r#"{{"found":true,"id":"{}"}}"#, esc(&id)),
             None     => r#"{"found":false}"#.to_string(),
@@ -3124,7 +3124,7 @@ Context: {}",
         env: JNIEnv, _c: JObject,
         param: *const c_char,
     ) -> JString {
-        let result = resolve_param(&STATE.lock().unwrap(), &cs(param));
+        let result = resolve_param(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(param));
         unsafe { jni_str(env, &result) }
     }
 
@@ -3132,7 +3132,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationStatus(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap();
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let enabled = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
         let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
         let json = format!(
@@ -3152,7 +3152,7 @@ Context: {}",
         _e: JNIEnv, _c: JObject,
         version: *const c_char, code: i64,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let v = cs(version);
         if !v.is_empty() { s.ota.current_version = v; }
         if code > 0 { s.ota.current_code = code; }
@@ -3166,7 +3166,7 @@ Context: {}",
         repo: *const c_char,
     ) {
         let r = cs(repo);
-        if !r.is_empty() { STATE.lock().unwrap().ota.repo = r; }
+        if !r.is_empty() { STATE.lock().unwrap_or_else(|e| e.into_inner()).ota.repo = r; }
     }
 
     /// Java feeds parsed GitHub release. Rust decides: prompt_user | up_to_date | skipped.
@@ -3182,7 +3182,7 @@ Context: {}",
         apk_bytes: i64,
     ) -> JString {
         let (tag, url, log, date, sha) = (cs(tag), cs(url), cs(changelog), cs(date), cs(sha256));
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         if s.ota.skipped_versions.contains(&tag) {
             s.ota.phase = OtaPhase::Idle;
             return unsafe { jni_str(env, &r#"{"action":"skipped"}"#) };
@@ -3215,7 +3215,7 @@ Context: {}",
         _e: JNIEnv, _c: JObject,
         bytes_done: i64, bytes_total: i64,
     ) {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.ota.download_bytes = bytes_done as u64;
         s.ota.download_total = bytes_total as u64;
         s.ota.download_pct   = if bytes_total > 0 {
@@ -3244,7 +3244,7 @@ Context: {}",
         if !path_ok {
             return unsafe { jni_str(env, r#"{"ok":false,"error":"invalid_apk_path"}"#) };
         }
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.ota.apk_local_path = path.clone();
         let expected = s.ota.apk_sha256.clone();
         let ok = expected.is_empty() || expected == sha;
@@ -3272,7 +3272,7 @@ Context: {}",
         new_version: *const c_char,
     ) {
         let ver = cs(new_version);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.ota.phase = OtaPhase::Installed;
         if !ver.is_empty() { s.ota.current_version = ver; }
     }
@@ -3284,7 +3284,7 @@ Context: {}",
         error: *const c_char,
     ) {
         let err = cs(error);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.ota.install_error = err.clone();
         s.ota.phase = OtaPhase::Failed(err);
     }
@@ -3296,7 +3296,7 @@ Context: {}",
         version: *const c_char,
     ) {
         let ver = cs(version);
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         if !ver.is_empty() && !s.ota.skipped_versions.contains(&ver) {
             s.ota.skipped_versions.push(ver);
         }
@@ -3308,7 +3308,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_otaGetStatus(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        unsafe { jni_str(env, &STATE.lock().unwrap().ota.to_json()) }
+        unsafe { jni_str(env, &STATE.lock().unwrap_or_else(|e| e.into_inner()).ota.to_json()) }
     }
 
 
@@ -3431,7 +3431,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getNextShellJob(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         match s.pending_shell.pop_front() {
             Some(job) => {
                 let r = format!(r#"{{"id":"{}","cmd":"{}","timeout":{}}}"#,
@@ -3451,7 +3451,7 @@ Context: {}",
         stdout: *const c_char,
     ) {
         let (id, out) = (cs(job_id), cs(stdout));
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         s.shell_results.insert(id, out);
     }
 
@@ -3538,7 +3538,7 @@ fn handle_http(mut stream: TcpStream) {
     let resp = route_http_with_raw(parts[0], parts[1], &body, &req.to_string());
     let http = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nX-Kira-Engine: rust-v9\r\n\r\n{}", resp.len(), resp);
     let _ = stream.write_all(http.as_bytes());
-    STATE.lock().unwrap().request_count += 1;
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).request_count += 1;
 }
 
 fn get_http_header<'a>(req: &'a str, name: &str) -> Option<&'a str> {
@@ -3613,19 +3613,19 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("POST", "/auth/set_secret") => {
             let secret = extract_json_str(body, "secret").unwrap_or_default();
             if secret.len() >= 16 {
-                STATE.lock().unwrap().http_secret = secret;
+                STATE.lock().unwrap_or_else(|e| e.into_inner()).http_secret = secret;
                 r#"{"ok":true}"#.to_string()
             } else {
                 r#"{"error":"secret must be at least 16 characters"}"#.to_string()
             }
         }
         ("DELETE", "/auth/secret") => {
-            STATE.lock().unwrap().http_secret = String::new();
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).http_secret = String::new();
             r#"{"ok":true,"warning":"auth disabled — all endpoints open"}"#.to_string()
         }
 
         ("GET", "/health") | ("GET", "/status") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!(r#"{{"status":"ok","version":"9.0","uptime_ms":{},"requests":{},"tool_calls":{},"battery":{},"charging":{},"notifications":{},"skills":{},"triggers":{},"memory_entries":{},"total_tokens":{},"sessions":{},"setup_done":{},"macros":{},"active_profile":"{}","variables":{}}}"#,
                 now_ms()-s.uptime_start, s.request_count, s.tool_call_count,
                 s.battery_pct, s.battery_charging, s.notifications.len(), s.skills.len(),
@@ -3634,7 +3634,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 s.macros.len(), esc(&s.active_profile), s.variables.len())
         }
         ("GET",  "/stats") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!(r#"{{"notifications":{},"pending_cmds":{},"task_steps":{},"audit_entries":{},"context_turns":{},"daily_log_entries":{},"skills":{},"memory_entries":{},"cron_jobs":{},"tool_calls":{},"total_tokens":{},"uptime_ms":{},"macros":{},"macro_runs":{},"pending_actions":{},"variables":{}}}"#,
                 s.notifications.len(), s.pending_cmds.len(), s.task_log.len(),
                 s.audit_log.len(), s.context_turns.len(), s.daily_log.len(),
@@ -3645,13 +3645,13 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         }
 
         // v40: Automation engine endpoints
-        ("GET",  "/macros")            => { let s=STATE.lock().unwrap(); format!("[{}]", s.macros.iter().map(macro_to_json).collect::<Vec<_>>().join(",")) }
-        ("POST", "/macros/add")        => { let m=parse_macro_from_json(body); let id=m.id.clone(); let mut s=STATE.lock().unwrap(); s.macros.retain(|x| x.id!=m.id); s.macros.push(m); format!(r#"{{"ok":true,"id":"{}"}}"#, id) }
-        ("POST", "/macros/remove")     => { let id=extract_json_str(body,"id").unwrap_or_default(); STATE.lock().unwrap().macros.retain(|m| m.id!=id); r#"{"ok":true}"#.to_string() }
-        ("POST", "/macros/enable")     => { let id=extract_json_str(body,"id").unwrap_or_default(); let en=!body.contains("\"enabled\":false"); if let Some(m)=STATE.lock().unwrap().macros.iter_mut().find(|m| m.id==id) { m.enabled=en; } r#"{"ok":true}"#.to_string() }
+        ("GET",  "/macros")            => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!("[{}]", s.macros.iter().map(macro_to_json).collect::<Vec<_>>().join(",")) }
+        ("POST", "/macros/add")        => { let m=parse_macro_from_json(body); let id=m.id.clone(); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.macros.retain(|x| x.id!=m.id); s.macros.push(m); format!(r#"{{"ok":true,"id":"{}"}}"#, id) }
+        ("POST", "/macros/remove")     => { let id=extract_json_str(body,"id").unwrap_or_default(); STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.retain(|m| m.id!=id); r#"{"ok":true}"#.to_string() }
+        ("POST", "/macros/enable")     => { let id=extract_json_str(body,"id").unwrap_or_default(); let en=!body.contains("\"enabled\":false"); if let Some(m)=STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.iter_mut().find(|m| m.id==id) { m.enabled=en; } r#"{"ok":true}"#.to_string() }
         ("POST", "/macros/run")        => {
             let id=extract_json_str(body,"id").unwrap_or_default();
-            let mut s=STATE.lock().unwrap();
+            let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner());
             let actions=s.macros.iter().find(|m| m.id==id).map(|m| m.actions.clone()).unwrap_or_default();
             let name=s.macros.iter().find(|m| m.id==id).map(|m| m.name.clone()).unwrap_or_default();
             let start=now_ms();
@@ -3660,37 +3660,37 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             s.macro_run_log.push_back(MacroRunLog { macro_id:id, macro_name:name, trigger:"api".to_string(), success:true, steps_run:steps, duration_ms:now_ms()-start, ts:start, error:String::new() });
             format!(r#"{{"ok":true,"steps":{}}}"#, steps)
         }
-        ("GET",  "/macros/log")        => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.macro_run_log.iter().skip(s.macro_run_log.len().saturating_sub(100)).map(|r| format!(r#"{{"macro_id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"duration_ms":{},"ts":{}}}"#, esc(&r.macro_id),esc(&r.macro_name),esc(&r.trigger),r.success,r.steps_run,r.duration_ms,r.ts)).collect(); format!("[{}]", items.join(",")) }
-        ("GET",  "/macros/pending")    => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.pending_actions.iter().map(|pa| { let pk: Vec<String>=pa.params.iter().map(|(k,v)| format!("\"{}\":\"{}\"",esc(k),esc(v))).collect(); format!(r#"{{"macro_id":"{}","action_id":"{}","kind":"{}","params":{{{}}}}}"#, esc(&pa.macro_id),esc(&pa.action_id),esc(&pa.kind),pk.join(",")) }).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/macros/log")        => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.macro_run_log.iter().skip(s.macro_run_log.len().saturating_sub(100)).map(|r| format!(r#"{{"macro_id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"duration_ms":{},"ts":{}}}"#, esc(&r.macro_id),esc(&r.macro_name),esc(&r.trigger),r.success,r.steps_run,r.duration_ms,r.ts)).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/macros/pending")    => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.pending_actions.iter().map(|pa| { let pk: Vec<String>=pa.params.iter().map(|(k,v)| format!("\"{}\":\"{}\"",esc(k),esc(v))).collect(); format!(r#"{{"macro_id":"{}","action_id":"{}","kind":"{}","params":{{{}}}}}"#, esc(&pa.macro_id),esc(&pa.action_id),esc(&pa.kind),pk.join(",")) }).collect(); format!("[{}]", items.join(",")) }
 
         // v40: Variables
-        ("GET",  "/variables")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.variables.values().map(|v| format!(r#"{{"name":"{}","value":"{}","type":"{}","updated_ms":{}}}"#, esc(&v.name),esc(&v.value),esc(&v.var_type),v.updated_ms)).collect(); format!("[{}]", items.join(",")) }
-        ("POST", "/variables/set")     => { let name=extract_json_str(body,"name").unwrap_or_default(); let value=extract_json_str(body,"value").unwrap_or_default(); let vt=extract_json_str(body,"type").unwrap_or_else(||"string".to_string()); let ts=now_ms(); let mut s=STATE.lock().unwrap(); s.variables.entry(name.clone()).and_modify(|v|{v.value=value.clone();v.updated_ms=ts;}).or_insert(AutoVariable{name,value,var_type:vt,persistent:false,created_ms:ts,updated_ms:ts}); r#"{"ok":true}"#.to_string() }
-        ("POST", "/variables/delete")  => { let name=extract_json_str(body,"name").unwrap_or_default(); STATE.lock().unwrap().variables.remove(&name); r#"{"ok":true}"#.to_string() }
-        ("GET",  "/variables/get")     => { let name=path.find("name=").map(|i| &path[i+5..]).unwrap_or("").split('&').next().unwrap_or(""); let s=STATE.lock().unwrap(); match s.variables.get(name) { Some(v) => format!(r#"{{"name":"{}","value":"{}","type":"{}"}}"#, esc(&v.name),esc(&v.value),esc(&v.var_type)), None => r#"{"error":"not_found"}"#.to_string() } }
+        ("GET",  "/variables")         => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.variables.values().map(|v| format!(r#"{{"name":"{}","value":"{}","type":"{}","updated_ms":{}}}"#, esc(&v.name),esc(&v.value),esc(&v.var_type),v.updated_ms)).collect(); format!("[{}]", items.join(",")) }
+        ("POST", "/variables/set")     => { let name=extract_json_str(body,"name").unwrap_or_default(); let value=extract_json_str(body,"value").unwrap_or_default(); let vt=extract_json_str(body,"type").unwrap_or_else(||"string".to_string()); let ts=now_ms(); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.variables.entry(name.clone()).and_modify(|v|{v.value=value.clone();v.updated_ms=ts;}).or_insert(AutoVariable{name,value,var_type:vt,persistent:false,created_ms:ts,updated_ms:ts}); r#"{"ok":true}"#.to_string() }
+        ("POST", "/variables/delete")  => { let name=extract_json_str(body,"name").unwrap_or_default(); STATE.lock().unwrap_or_else(|e| e.into_inner()).variables.remove(&name); r#"{"ok":true}"#.to_string() }
+        ("GET",  "/variables/get")     => { let name=path.find("name=").map(|i| &path[i+5..]).unwrap_or("").split('&').next().unwrap_or(""); let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); match s.variables.get(name) { Some(v) => format!(r#"{{"name":"{}","value":"{}","type":"{}"}}"#, esc(&v.name),esc(&v.value),esc(&v.var_type)), None => r#"{"error":"not_found"}"#.to_string() } }
 
         // v40: Profiles
-        ("GET",  "/profiles")          => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.profiles.iter().map(|p| format!(r#"{{"id":"{}","name":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),p.active)).collect(); format!("[{}]", items.join(",")) }
-        ("POST", "/profiles/set")      => { let id=extract_json_str(body,"id").unwrap_or_default(); let mut s=STATE.lock().unwrap(); s.active_profile=id.clone(); for p in s.profiles.iter_mut() { p.active=p.id==id; } format!(r#"{{"ok":true,"active":"{}"}}"#, esc(&id)) }
+        ("GET",  "/profiles")          => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.profiles.iter().map(|p| format!(r#"{{"id":"{}","name":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),p.active)).collect(); format!("[{}]", items.join(",")) }
+        ("POST", "/profiles/set")      => { let id=extract_json_str(body,"id").unwrap_or_default(); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.active_profile=id.clone(); for p in s.profiles.iter_mut() { p.active=p.id==id; } format!(r#"{{"ok":true,"active":"{}"}}"#, esc(&id)) }
 
         // v40: Device signals via HTTP (for testing / external tools)
-        ("POST", "/signal/screen_on")  => { STATE.lock().unwrap().sig_screen_on=true;      r#"{"ok":true}"#.to_string() }
-        ("POST", "/signal/screen_off") => { STATE.lock().unwrap().sig_screen_off=true;     r#"{"ok":true}"#.to_string() }
-        ("POST", "/signal/shake")      => { STATE.lock().unwrap().sig_shake=true;           r#"{"ok":true}"#.to_string() }
-        ("POST", "/signal/kira_event") => { let ev=extract_json_str(body,"event").unwrap_or_default(); STATE.lock().unwrap().sig_kira_event=ev; r#"{"ok":true}"#.to_string() }
-        ("POST", "/signal/app")        => { let pkg=extract_json_str(body,"package").unwrap_or_default(); STATE.lock().unwrap().sig_app_launched=pkg; r#"{"ok":true}"#.to_string() }
-        ("POST", "/signal/wifi")       => { let ssid=extract_json_str(body,"ssid").unwrap_or_default(); STATE.lock().unwrap().sig_wifi_ssid=ssid; r#"{"ok":true}"#.to_string() }
-        ("POST", "/signal/sms")        => { let sender=extract_json_str(body,"sender").unwrap_or_default(); let text=extract_json_str(body,"text").unwrap_or_default(); let mut s=STATE.lock().unwrap(); s.sig_sms_sender=sender; s.sig_sms_text=text; r#"{"ok":true}"#.to_string() }
+        ("POST", "/signal/screen_on")  => { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_screen_on=true;      r#"{"ok":true}"#.to_string() }
+        ("POST", "/signal/screen_off") => { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_screen_off=true;     r#"{"ok":true}"#.to_string() }
+        ("POST", "/signal/shake")      => { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_shake=true;           r#"{"ok":true}"#.to_string() }
+        ("POST", "/signal/kira_event") => { let ev=extract_json_str(body,"event").unwrap_or_default(); STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_kira_event=ev; r#"{"ok":true}"#.to_string() }
+        ("POST", "/signal/app")        => { let pkg=extract_json_str(body,"package").unwrap_or_default(); STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_app_launched=pkg; r#"{"ok":true}"#.to_string() }
+        ("POST", "/signal/wifi")       => { let ssid=extract_json_str(body,"ssid").unwrap_or_default(); STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_wifi_ssid=ssid; r#"{"ok":true}"#.to_string() }
+        ("POST", "/signal/sms")        => { let sender=extract_json_str(body,"sender").unwrap_or_default(); let text=extract_json_str(body,"text").unwrap_or_default(); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.sig_sms_sender=sender; s.sig_sms_text=text; r#"{"ok":true}"#.to_string() }
 
         // v38: Config + setup
-        ("GET",  "/config")            => { let s=STATE.lock().unwrap(); config_to_json(&s.config) }
+        ("GET",  "/config")            => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); config_to_json(&s.config) }
         ("POST", "/config")            => update_config_from_http(body),
-        ("GET",  "/setup")             => { let s=STATE.lock().unwrap(); format!(r#"{{"page":{},"done":{},"user_name":"{}","model":"{}","base_url":"{}","selected_provider":"{}","custom_url":"{}","quote_index":{}}}"#, s.setup.current_page,s.setup.done,esc(&s.setup.user_name),esc(&s.setup.model),esc(&s.setup.base_url),esc(&s.setup.selected_provider_id),esc(&s.setup.custom_url),s.setup.quote_index) }
-        ("POST", "/setup/page")        => { if let Some(page)=extract_json_num(body,"page") { STATE.lock().unwrap().setup.current_page=page as u8; } r#"{"ok":true}"#.to_string() }
-        ("POST", "/setup/complete")    => { let mut s=STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; r#"{"ok":true}"#.to_string() }
+        ("GET",  "/setup")             => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!(r#"{{"page":{},"done":{},"user_name":"{}","model":"{}","base_url":"{}","selected_provider":"{}","custom_url":"{}","quote_index":{}}}"#, s.setup.current_page,s.setup.done,esc(&s.setup.user_name),esc(&s.setup.model),esc(&s.setup.base_url),esc(&s.setup.selected_provider_id),esc(&s.setup.custom_url),s.setup.quote_index) }
+        ("POST", "/setup/page")        => { if let Some(page)=extract_json_num(body,"page") { STATE.lock().unwrap_or_else(|e| e.into_inner()).setup.current_page=page as u8; } r#"{"ok":true}"#.to_string() }
+        ("POST", "/setup/complete")    => { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.setup.done=true; s.config.setup_done=true; r#"{"ok":true}"#.to_string() }
         ("GET",  "/theme")             => {
             // Update animation state before returning
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
             let phase_secs = (uptime_ms % 3000) as f32 / 3000.0; // 3s cycle
             s.theme.animation_phase = phase_secs;
@@ -3711,7 +3711,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         //          hue_shift(-12 to +12 degrees, sine-driven),
         //          vortex_intensity(0-1), burst(true once then reset)
         ("GET",  "/layer0") => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
             // 3-second heartbeat phase (0.0 → 1.0 → 0.0 → ...)
             let phase      = (uptime_ms % 3_000) as f32 / 3_000.0;
@@ -3743,7 +3743,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
 
         // Legacy alias for older Java pollers
         ("GET",  "/theme/anim") => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime_ms = now_ms().saturating_sub(s.uptime_start);
             let phase = (uptime_ms % 3_000) as f32 / 3_000.0;
             s.theme.animation_phase = phase;
@@ -3757,7 +3757,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         // POST /theme/thinking {"active":true}  — set thinking state
         ("POST", "/theme/thinking")     => {
             let active = body.contains(r#""active":true"#);
-            STATE.lock().unwrap().theme.is_thinking = active;
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).theme.is_thinking = active;
             r#"{"ok":true}"#.to_string()
         }
 
@@ -3767,7 +3767,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         // Returns: {shizuku, setup, api_key_set, model, automation_count, memory_count,
         //           uptime_ms, tool_calls, pulse_bpm, activity}
         ("GET",  "/settings/health") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime = now_ms().saturating_sub(s.uptime_start);
             let tools_60s = s.macro_run_log.iter()
                 .filter(|r| now_ms().saturating_sub(r.ts) < 60_000).count();
@@ -3789,7 +3789,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         // GET /settings/shizuku — Shizuku status with Layer 5 border color token
         // Returns: {installed, running, permission, border_color, border_name, pulse}
         ("GET",  "/settings/shizuku") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let (border_color, border_name) = if s.shizuku.permission_granted {
                 (0xFFB4BEFEu32, "lavender")   // god mode — Lavender
             } else if s.shizuku.installed {
@@ -3810,7 +3810,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("POST", "/settings/row_tap") => {
             let row = extract_json_str(body, "row").unwrap_or_default();
             if !row.is_empty() {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 // Store in daily_log for usage analytics
                 let entry = format!("[settings_tap] row={} ts={}", esc(&row), now_ms());
                 s.daily_log.push_back(entry);
@@ -3840,7 +3840,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         // Called by KiraApp crash handler to persist crashes in Rust memory
         // GET /memory/compression — LZ4 compression stats (Session B)
         ("GET",  "/memory/compression") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let raw_bytes: usize = s.context_turns.iter()
                 .map(|t| t.role.len() + t.content.len()).sum();
             let compressed_bytes = compressed_context_bytes(&s);
@@ -3881,7 +3881,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             }
 
             let (api_key, base_url, model, persona): (String,String,String,String) = {
-                let s = STATE.lock().unwrap();
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 (s.config.api_key.clone(), s.config.base_url.clone(),
                  s.config.model.clone(),   s.config.persona.clone())
             };
@@ -3892,7 +3892,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 && (base_url.starts_with("http://") || base_url.starts_with("https://")) {
                 base_url
             } else {
-                let mut s2 = STATE.lock().unwrap();
+                let mut s2 = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 s2.config.base_url = "https://api.groq.com/openai/v1".to_string();
                 drop(s2);
                 "https://api.groq.com/openai/v1".to_string()
@@ -3923,7 +3923,7 @@ You are executing a multi-step task autonomously.
             agent_ctx.push(("user".into(), format!("Task: {}", goal)));
 
             {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 s.theme.is_thinking = true;
                 // Log task start
                 let task = AgentTask {
@@ -3983,7 +3983,7 @@ You are executing a multi-step task autonomously.
                 steps_run += 1;
 
                 // Update task status in STATE
-                if let Some(task) = STATE.lock().unwrap().agent_tasks.back_mut() {
+                if let Some(task) = STATE.lock().unwrap_or_else(|e| e.into_inner()).agent_tasks.back_mut() {
                     task.current_step = steps_run;
                 }
             }
@@ -3995,7 +3995,7 @@ You are executing a multi-step task autonomously.
 
             // Push to compressed chat history so user can see result
             {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 push_turn_compressed(&mut s, "assistant", &final_summary);
                 s.theme.is_thinking = false;
                 if let Some(task) = s.agent_tasks.back_mut() {
@@ -4023,7 +4023,7 @@ You are executing a multi-step task autonomously.
                 return r#"{"error":"goal is required"}"#.to_string();
             }
             let (api_key, base_url, model): (String,String,String) = {
-                let s = STATE.lock().unwrap();
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 (s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
             };
             if api_key.is_empty() {
@@ -4065,7 +4065,7 @@ You are executing a multi-step task autonomously.
 
         // GET /ai/agent/status — current running agent task
         ("GET",  "/ai/agent/status") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.agent_tasks.back() {
                 Some(t) => format!(
                     r#"{{"id":"{}","goal":"{}","status":"{}","step":{},"max":{}}}"#,
@@ -4077,7 +4077,7 @@ You are executing a multi-step task autonomously.
 
         // POST /ai/agent/stop — cancel running agent
         ("POST", "/ai/agent/stop") => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.theme.is_thinking = false;
             if let Some(task) = s.agent_tasks.back_mut() {
                 task.status = "cancelled".into();
@@ -4100,7 +4100,7 @@ You are executing a multi-step task autonomously.
 
             // Load config
             let (api_key, base_url, model, _persona, system_prompt): (String,String,String,String,String) = {
-                let s = STATE.lock().unwrap();
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 let cfg = &s.config;
                 let persona = if cfg.persona.is_empty() {
                     "You are Kira, an AI agent on Android. Be concise and helpful.".to_string()
@@ -4118,7 +4118,7 @@ You are executing a multi-step task autonomously.
                 && (base_url.starts_with("http://") || base_url.starts_with("https://")) {
                 base_url
             } else {
-                let mut s2 = STATE.lock().unwrap();
+                let mut s2 = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 s2.config.base_url = "https://api.groq.com/openai/v1".to_string();
                 drop(s2);
                 "https://api.groq.com/openai/v1".to_string()
@@ -4126,7 +4126,7 @@ You are executing a multi-step task autonomously.
 
             // Push user message to compressed history
             {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 s.request_count += 1;
                 s.theme.is_thinking = true;
                 push_turn_compressed(&mut s, "user", &user_msg);
@@ -4134,7 +4134,7 @@ You are executing a multi-step task autonomously.
 
             // Build messages array from compressed history
             let context = {
-                let s = STATE.lock().unwrap();
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 decompress_context(&s)
             };
 
@@ -4143,7 +4143,7 @@ You are executing a multi-step task autonomously.
             let raw: String = match raw_response {
                 Ok(r)  => r,
                 Err(e) => {
-                    let mut s = STATE.lock().unwrap();
+                    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                     s.theme.is_thinking = false;
                     return format!(r#"{{"error":"{}","done":true}}"#, esc(&e));
                 }
@@ -4168,7 +4168,7 @@ You are executing a multi-step task autonomously.
                         tools_used.push(tname.clone());
                         // Queue shell commands for Java to execute if needed
                         if tname == "run_shell" || result.starts_with("__shell__") {
-                            let mut s = STATE.lock().unwrap();
+                            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                             s.pending_shell.push_back(ShellJob {
                                 id:      format!("tool_{}_{}", step, tname),
                                 cmd:     targs.get("cmd").cloned().unwrap_or_default(),
@@ -4197,7 +4197,7 @@ You are executing a multi-step task autonomously.
 
             // Push assistant reply to compressed history
             {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 push_turn_compressed(&mut s, "assistant", &reply);
                 s.theme.is_thinking = false;
                 s.tool_call_count += tools_used.len() as u64;
@@ -4213,7 +4213,7 @@ You are executing a multi-step task autonomously.
 
         // GET /ai/history — current compressed context as readable JSON
         ("GET",  "/ai/history") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let turns = decompress_context(&s);
             let items: Vec<String> = turns.iter()
                 .map(|(role, content)| format!(r#"{{"role":"{}","content":"{}"}}"#,
@@ -4224,7 +4224,7 @@ You are executing a multi-step task autonomously.
 
         // DELETE /ai/history — clear conversation context
         ("DELETE", "/ai/history") | ("POST", "/ai/history/clear") => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.context_turns.clear();
             s.context_turns_lz4.clear();
             r#"{"ok":true,"cleared":true}"#.to_string()
@@ -4251,7 +4251,7 @@ You are executing a multi-step task autonomously.
             let now = now_ms();
 
             {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
 
                 // Update device state
                 if battery >= 0 {
@@ -4360,7 +4360,7 @@ You are executing a multi-step task autonomously.
         // GET /macro/pending_results — results queued for Java to dispatch
         // Java polls this for completed macro actions requiring Android intents
         ("GET",  "/macro/pending_results") => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             // Return next pending shell job that needs Java (intent-based actions)
             match s.pending_shell.iter().position(|j| j.cmd.starts_with("__intent__:")) {
                 Some(idx) => {
@@ -4391,14 +4391,14 @@ You are executing a multi-step task autonomously.
             }
 
             // Check allowed user
-            let allowed = { STATE.lock().unwrap().config.tg_allowed };
+            let allowed = { STATE.lock().unwrap_or_else(|e| e.into_inner()).config.tg_allowed };
             if allowed != 0 && chat_id != allowed {
                 return r#"{"ok":false,"error":"unauthorized"}"#.to_string();
             }
 
             // Store in log
             {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 s.tg_last_update_id = update_id;
                 s.tg_message_log.push_back(TgMessage {
                     update_id, chat_id, ts: now_ms(),
@@ -4419,7 +4419,7 @@ You are executing a multi-step task autonomously.
 
             // Queue reply for Java to send
             {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 s.tg_pending_sends.push_back(TgSend {
                     chat_id, text: reply.clone(), ts: now_ms()
                 });
@@ -4429,7 +4429,7 @@ You are executing a multi-step task autonomously.
 
         // GET /telegram/next_send — Java polls for messages to send
         ("GET",  "/telegram/next_send") => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.tg_pending_sends.pop_front() {
                 Some(msg) => format!(
                     r#"{{"has_message":true,"chat_id":{},"text":"{}"}}"#,
@@ -4440,13 +4440,13 @@ You are executing a multi-step task autonomously.
 
         // GET /telegram/last_update_id — Java uses this for getUpdates offset
         ("GET",  "/telegram/last_update_id") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!(r#"{{"update_id":{}}}"#, s.tg_last_update_id)
         }
 
         // GET /telegram/log — last received messages
         ("GET",  "/telegram/log") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.tg_message_log.iter().rev().take(20).map(|m|
                 format!(r#"{{"chat_id":{},"user":"{}","text":"{}","ts":{}}}"#,
                     m.chat_id, esc(&m.user), esc(&m.text), m.ts)
@@ -4508,7 +4508,7 @@ You are executing a multi-step task autonomously.
 
         // GET /setup/status — current setup completion state
         ("GET",  "/setup/status") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!(r#"{{"setup_done":{},"has_api_key":{},"provider":"{}","model":"{}","user_name":"{}"}}"#,
                 s.config.setup_done,
                 !s.config.api_key.is_empty(),
@@ -4553,7 +4553,7 @@ You are executing a multi-step task autonomously.
 
         // GET /security/audit — reports current security posture
         ("GET",  "/security/audit") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let has_secret  = !s.http_secret.is_empty();
             let has_api_key = !s.config.api_key.is_empty();
             // Check if api_key looks encrypted (hex, even length, >32 chars)
@@ -4569,12 +4569,12 @@ You are executing a multi-step task autonomously.
         ("POST", "/security/rotate_secret") => {
             // Derive new secret from current time + existing key material
             let new_secret = {
-                let s = STATE.lock().unwrap();
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 let seed = format!("{}:{}:{}", now_ms(), s.request_count, s.config.api_key.len());
                 let k = derive_aes_key(&seed);
                 k.iter().map(|b| format!("{:02x}", b)).collect::<String>()[..32].to_string()
             };
-            STATE.lock().unwrap().http_secret = new_secret.clone();
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).http_secret = new_secret.clone();
             format!(r#"{{"ok":true,"new_secret":"{}","note":"store this — required for all future API calls"}}"#,
                 &new_secret)
         }
@@ -4591,7 +4591,7 @@ You are executing a multi-step task autonomously.
                 format!("{}…[truncated]", &trace[..4096])
             } else { trace };
             let entry = CrashEntry { ts, thread, message, trace: trace_capped };
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.crash_log.push_back(entry);
             if s.crash_log.len() > 50 { s.crash_log.pop_front(); }
             r#"{"ok":true}"#.to_string()
@@ -4599,7 +4599,7 @@ You are executing a multi-step task autonomously.
 
         // GET /crash/log — returns all stored crash entries as JSON array
         ("GET",  "/crash/log") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.crash_log.iter().map(|c| {
                 let safe_msg   = esc(&c.message);
                 let safe_trace = esc(&c.trace);
@@ -4612,13 +4612,13 @@ You are executing a multi-step task autonomously.
 
         // POST /crash/clear — wipe the crash log
         ("POST", "/crash/clear") => {
-            STATE.lock().unwrap().crash_log.clear();
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).crash_log.clear();
             r#"{"ok":true,"cleared":true}"#.to_string()
         }
 
         // GET /crash/latest — just the most recent crash (fast poll)
         ("GET",  "/crash/latest") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.crash_log.back() {
                 Some(c) => format!(
                     r#"{{"has_crash":true,"ts":{},"thread":"{}","message":"{}"}}"#,
@@ -4629,13 +4629,13 @@ You are executing a multi-step task autonomously.
 
         ("POST", "/theme/flash") => {
             let dark = body.contains("\"dark\":true");
-            STATE.lock().unwrap().theme.is_dark = dark;
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).theme.is_dark = dark;
             r#"{"ok":true}"#.to_string()
         }
 
         // GET /settings/automation/summary — automation engine summary for settings card
         ("GET",  "/settings/automation/summary") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let enabled = s.macros.iter().filter(|m| m.enabled).count();
             let total_runs: u64 = s.macros.iter().map(|m| m.run_count).sum();
             let last_run_ms = s.macros.iter().map(|m| m.last_run_ms).max().unwrap_or(0);
@@ -4655,7 +4655,7 @@ You are executing a multi-step task autonomously.
         // GET /settings/counters — live counter values for CounterAnimator
         // Returns numbers that the UI animates from old→new over 600ms EaseOut.
         ("GET", "/settings/counters") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime_ms   = now_ms().saturating_sub(s.uptime_start);
             let uptime_s    = (uptime_ms / 1000) as u64;
             let tool_calls  = s.tool_call_count;
@@ -4677,7 +4677,7 @@ You are executing a multi-step task autonomously.
         // GET /settings/activity — activity stream for last 20 events
         // Used by the settings page activity feed (Row-level visual feedback)
         ("GET", "/settings/activity") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let mut items: Vec<String> = Vec::new();
             // Last 10 macro runs
             for r in s.macro_run_log.iter().rev().take(10) {
@@ -4710,7 +4710,7 @@ You are executing a multi-step task autonomously.
         // GET /settings/shizuku/halo — Layer 9: God mode halo state
         // Returns border color + animation params for the screen-edge halo
         ("GET", "/settings/shizuku/halo") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let active = s.shizuku.permission_granted;
             let partial = s.shizuku.installed && !active;
             // God mode halo: 2dp Lavender border traces screen edge when fully active
@@ -4734,7 +4734,7 @@ You are executing a multi-step task autonomously.
             let row    = extract_json_str(body, "row").unwrap_or_default();
             let action = extract_json_str(body, "action").unwrap_or_else(|| "tap".to_string());
             if !row.is_empty() {
-                let mut s = STATE.lock().unwrap();
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 let entry = format!("[settings_interaction] row={} action={} ts={}", 
                     esc(&row), esc(&action), now_ms());
                 s.daily_log.push_back(entry);
@@ -4755,7 +4755,7 @@ You are executing a multi-step task autonomously.
 
         // GET /settings/top_rows — most-accessed settings rows (for smart ordering)
         ("GET", "/settings/top_rows") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let mut rows: Vec<(String, u32)> = s.variables.iter()
                 .filter(|(k, _v)| k.starts_with("_settings_tap_"))
                 .map(|(k, v)| {
@@ -4774,7 +4774,7 @@ You are executing a multi-step task autonomously.
 
         // GET /settings/memory/stats — detailed memory stats for memory card
         ("GET", "/settings/memory/stats") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let total    = s.memory_index.len();
             let pinned   = s.memory_index.iter().filter(|e| e.access_count > 5).count();
             let recent   = s.memory_index.iter()
@@ -4823,7 +4823,7 @@ You are executing a multi-step task autonomously.
         // Returns Catppuccin colour tokens + keyboard state hint
         // Java NeuralNavBar polls this to stay in sync with Rust theme
         ("GET",  "/layer1") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime_ms = now_ms().saturating_sub(s.uptime_start);
             // Nav bar pulse: subtle border alpha oscillation on heartbeat
             let phase = (uptime_ms % 3_000) as f32 / 3_000.0;
@@ -4844,7 +4844,7 @@ You are executing a multi-step task autonomously.
         // GET /layer2/header — header bar state (pulse, subtitle cycle index)
         // Java polls at 500ms to drive header border and subtitle crossfade
         ("GET",  "/layer2/header") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime_ms  = now_ms().saturating_sub(s.uptime_start);
             let phase      = (uptime_ms % 3_000) as f32 / 3_000.0;
             // Border alpha: 12% base, pulses to 35% when thinking
@@ -4872,7 +4872,7 @@ You are executing a multi-step task autonomously.
         // GET /layer2/typing — typing indicator animation params
         // Three Lavender dots, sinusoidal, each offset 120ms
         ("GET",  "/layer2/typing") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let uptime_ms = now_ms().saturating_sub(s.uptime_start);
             // Each dot phase offset by 120ms within 600ms period
             let t = uptime_ms as f32 / 600.0 * 2.0 * std::f32::consts::PI;
@@ -4889,7 +4889,7 @@ You are executing a multi-step task autonomously.
         // Updates request_count, last_message_ts, triggers K badge rotation signal
         ("POST", "/layer2/message") => {
             let role = extract_json_str(body, "role").unwrap_or_else(||"user".to_string());
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if role == "user" {
                 s.request_count += 1;
                 s.theme.is_thinking = true;
@@ -4903,65 +4903,65 @@ You are executing a multi-step task autonomously.
 
                 ("POST", "/layer0/burst") => {
             // We use is_thinking flip as the burst signal — Java detects thinking→false
-            STATE.lock().unwrap().theme.is_thinking = false;
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).theme.is_thinking = false;
             r#"{"ok":true}"#.to_string()
         }
 
-        ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap(); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
-        ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap(); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
-        ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap(); shizuku_to_json(&s.shizuku) }
-        ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap(); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }
-        ("GET",  "/appstats")          => { let s=STATE.lock().unwrap(); format!(r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"active_profile":"{}","variables":{}}}"#, s.memory_index.len(),s.context_turns.len(), if s.shizuku.permission_granted{"active \u{2713}"}else if s.shizuku.installed{"no permission"}else{"not running"}, if !s.agent_context.is_empty(){"enabled \u{2713}"}else{"disabled"}, esc(&s.config.model),esc(&s.config.base_url),now_ms().saturating_sub(s.uptime_start),s.macros.len(),esc(&s.active_profile),s.variables.len()) }
-        ("GET",  "/providers")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.providers.iter().map(|p| format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)).collect(); format!("[{}]", items.join(",")) }
-        ("POST", "/providers/set")     => { let id=extract_json_str(body,"id").unwrap_or_default(); if !id.is_empty() { let mut s=STATE.lock().unwrap(); let found=s.providers.iter().find(|p| p.id==id).cloned(); if let Some(p)=found { s.active_provider=id.clone(); s.config.base_url=p.base_url; s.config.model=p.model; } } format!(r#"{{"ok":true,"active":"{}"}}"#, id) }
-        ("POST", "/providers/custom")  => { let url=extract_json_str(body,"url").unwrap_or_default(); let model=extract_json_str(body,"model").unwrap_or_default(); if !url.is_empty() { let mut s=STATE.lock().unwrap(); s.setup.custom_url=url.clone(); s.setup.selected_provider_id="custom".to_string(); s.config.base_url=url.clone(); if !model.is_empty() { s.config.model=model.clone(); } if let Some(p)=s.providers.iter_mut().find(|p| p.id=="custom") { p.base_url=url; if !model.is_empty() { p.model=model; } } s.active_provider="custom".to_string(); } r#"{"ok":true}"#.to_string() }
+        ("POST", "/theme/set")         => { let name=extract_json_str(body,"name").unwrap_or_else(||"material".into()); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.theme = match name.as_str() { "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(), "material_light" | "material_neo_light" => ThemeConfig::material_light(), "kira" => ThemeConfig::default(), _ => ThemeConfig::material_dark() }; format!(r#"{{"ok":true,"theme":"{}"}}"#, s.theme.theme_name) }
+        ("POST", "/theme/tilt")        => { let ax=extract_json_f32(body,"ax").unwrap_or(0.0); let ay=extract_json_f32(body,"ay").unwrap_or(0.0); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay; let spd=s.theme.star_speed; let tx=-ax*spd; let ty=ay*spd; s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08; s.theme.star_parallax_y+=(ty-s.theme.star_parallax_y)*0.08; format!(r#"{{"px":{:.6},"py":{:.6}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y) }
+        ("GET",  "/shizuku")           => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); shizuku_to_json(&s.shizuku) }
+        ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }
+        ("GET",  "/appstats")          => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!(r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"active_profile":"{}","variables":{}}}"#, s.memory_index.len(),s.context_turns.len(), if s.shizuku.permission_granted{"active \u{2713}"}else if s.shizuku.installed{"no permission"}else{"not running"}, if !s.agent_context.is_empty(){"enabled \u{2713}"}else{"disabled"}, esc(&s.config.model),esc(&s.config.base_url),now_ms().saturating_sub(s.uptime_start),s.macros.len(),esc(&s.active_profile),s.variables.len()) }
+        ("GET",  "/providers")         => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.providers.iter().map(|p| format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)).collect(); format!("[{}]", items.join(",")) }
+        ("POST", "/providers/set")     => { let id=extract_json_str(body,"id").unwrap_or_default(); if !id.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let found=s.providers.iter().find(|p| p.id==id).cloned(); if let Some(p)=found { s.active_provider=id.clone(); s.config.base_url=p.base_url; s.config.model=p.model; } } format!(r#"{{"ok":true,"active":"{}"}}"#, id) }
+        ("POST", "/providers/custom")  => { let url=extract_json_str(body,"url").unwrap_or_default(); let model=extract_json_str(body,"model").unwrap_or_default(); if !url.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.setup.custom_url=url.clone(); s.setup.selected_provider_id="custom".to_string(); s.config.base_url=url.clone(); if !model.is_empty() { s.config.model=model.clone(); } if let Some(p)=s.providers.iter_mut().find(|p| p.id=="custom") { p.base_url=url; if !model.is_empty() { p.model=model; } } s.active_provider="custom".to_string(); } r#"{"ok":true}"#.to_string() }
 
         // v7: Device state
-        ("GET",  "/screen")            => STATE.lock().unwrap().screen_nodes.clone(),
-        ("GET",  "/screen_pkg")        => { let p=STATE.lock().unwrap().screen_pkg.clone(); format!(r#"{{"package":"{}"}}"#, esc(&p)) }
-        ("GET",  "/battery")           => { let s=STATE.lock().unwrap(); format!(r#"{{"percentage":{},"charging":{}}}"#, s.battery_pct,s.battery_charging) }
-        ("GET",  "/notifications")     => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.notifications.iter().map(|n| format!(r#"{{"pkg":"{}","title":"{}","text":"{}","time":{}}}"#, esc(&n.pkg),esc(&n.title),esc(&n.text),n.time)).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/screen")            => STATE.lock().unwrap_or_else(|e| e.into_inner()).screen_nodes.clone(),
+        ("GET",  "/screen_pkg")        => { let p=STATE.lock().unwrap_or_else(|e| e.into_inner()).screen_pkg.clone(); format!(r#"{{"package":"{}"}}"#, esc(&p)) }
+        ("GET",  "/battery")           => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!(r#"{{"percentage":{},"charging":{}}}"#, s.battery_pct,s.battery_charging) }
+        ("GET",  "/notifications")     => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.notifications.iter().map(|n| format!(r#"{{"pkg":"{}","title":"{}","text":"{}","time":{}}}"#, esc(&n.pkg),esc(&n.title),esc(&n.text),n.time)).collect(); format!("[{}]", items.join(",")) }
 
         // v7: Memory
-        ("GET",  "/memory")            => { let s=STATE.lock().unwrap(); format!(r#"{{"memory_md":{},"entries":{}}}"#, json_str(&s.memory_md),s.memory_index.len()) }
+        ("GET",  "/memory")            => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!(r#"{{"memory_md":{},"entries":{}}}"#, json_str(&s.memory_md),s.memory_index.len()) }
         ("GET",  "/memory/search")     => search_memory(path),
-        ("GET",  "/memory/full")       => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.memory_index.iter().map(|e| format!(r#"{{"key":"{}","value":"{}","tags":{},"relevance":{:.2},"access_count":{}}}"#, esc(&e.key),esc(&e.value),json_str_arr(&e.tags),e.relevance,e.access_count)).collect(); format!("[{}]", items.join(",")) }
-        ("GET",  "/daily_log")         => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.daily_log.iter().cloned().map(|l: String| format!("\"{}\"", esc(&l))).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/memory/full")       => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.memory_index.iter().map(|e| format!(r#"{{"key":"{}","value":"{}","tags":{},"relevance":{:.2},"access_count":{}}}"#, esc(&e.key),esc(&e.value),json_str_arr(&e.tags),e.relevance,e.access_count)).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/daily_log")         => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.daily_log.iter().cloned().map(|l: String| format!("\"{}\"", esc(&l))).collect(); format!("[{}]", items.join(",")) }
         ("GET",  "/context")           => get_context_json(),
-        ("GET",  "/soul")              => { let s=STATE.lock().unwrap(); format!(r#"{{"soul":{}}}"#, json_str(&s.soul_md)) }
-        ("POST", "/soul")              => { let val=extract_json_str(body,"content").unwrap_or_default(); if !val.is_empty() { STATE.lock().unwrap().soul_md=val; } r#"{"ok":true}"#.to_string() }
+        ("GET",  "/soul")              => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!(r#"{{"soul":{}}}"#, json_str(&s.soul_md)) }
+        ("POST", "/soul")              => { let val=extract_json_str(body,"content").unwrap_or_default(); if !val.is_empty() { STATE.lock().unwrap_or_else(|e| e.into_inner()).soul_md=val; } r#"{"ok":true}"#.to_string() }
 
         // v7: Skills
         ("GET",  "/skills")            => get_skills_json(),
         ("POST", "/skills/register")   => { register_skill(body); r#"{"ok":true}"#.to_string() }
-        ("POST", "/skills/enable")     => { let name=extract_json_str(body,"name").unwrap_or_default(); if let Some(sk)=STATE.lock().unwrap().skills.get_mut(&name) { sk.enabled=true; } r#"{"ok":true}"#.to_string() }
-        ("POST", "/skills/disable")    => { let name=extract_json_str(body,"name").unwrap_or_default(); if let Some(sk)=STATE.lock().unwrap().skills.get_mut(&name) { sk.enabled=false; } r#"{"ok":true}"#.to_string() }
+        ("POST", "/skills/enable")     => { let name=extract_json_str(body,"name").unwrap_or_default(); if let Some(sk)=STATE.lock().unwrap_or_else(|e| e.into_inner()).skills.get_mut(&name) { sk.enabled=true; } r#"{"ok":true}"#.to_string() }
+        ("POST", "/skills/disable")    => { let name=extract_json_str(body,"name").unwrap_or_default(); if let Some(sk)=STATE.lock().unwrap_or_else(|e| e.into_inner()).skills.get_mut(&name) { sk.enabled=false; } r#"{"ok":true}"#.to_string() }
 
         // v7: Sessions
-        ("GET",  "/sessions")          => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.sessions.values().map(|sess| format!(r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"last_msg":{}}}"#, sess.id,sess.channel,sess.turns,sess.tokens,sess.last_msg)).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/sessions")          => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.sessions.values().map(|sess| format!(r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"last_msg":{}}}"#, sess.id,sess.channel,sess.turns,sess.tokens,sess.last_msg)).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/sessions/new")      => new_session(body),
 
         // v7: Triggers
-        ("GET",  "/triggers")          => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.triggers.iter().map(|t| format!(r#"{{"id":"{}","type":"{}","value":"{}","fired":{},"repeat":{}}}"#, t.id,t.trigger_type,esc(&t.value),t.fired,t.repeat)).collect(); format!("[{}]", items.join(",")) }
-        ("GET",  "/fired_triggers")    => { let mut s=STATE.lock().unwrap(); let items: Vec<String>=s.fired_triggers.drain(..).collect(); format!("[{}]", items.join(",")) }
-        ("GET",  "/webhook_events")    => { let mut s=STATE.lock().unwrap(); let items: Vec<String>=s.webhook_events.drain(..).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/triggers")          => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.triggers.iter().map(|t| format!(r#"{{"id":"{}","type":"{}","value":"{}","fired":{},"repeat":{}}}"#, t.id,t.trigger_type,esc(&t.value),t.fired,t.repeat)).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/fired_triggers")    => { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.fired_triggers.drain(..).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/webhook_events")    => { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.webhook_events.drain(..).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/triggers/add")      => { add_trigger(body); r#"{"ok":true}"#.to_string() }
-        ("POST", "/webhook")           => { let ts=now_ms(); STATE.lock().unwrap().webhook_events.push_back(format!(r#"{{"body":{},"ts":{}}}"#, if body.is_empty(){"{}"}else{body},ts)); r#"{"ok":true}"#.to_string() }
+        ("POST", "/webhook")           => { let ts=now_ms(); STATE.lock().unwrap_or_else(|e| e.into_inner()).webhook_events.push_back(format!(r#"{{"body":{},"ts":{}}}"#, if body.is_empty(){"{}"}else{body},ts)); r#"{"ok":true}"#.to_string() }
 
         // v7: Heartbeat
-        ("GET",  "/heartbeat_log")     => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.heartbeat_log.iter().cloned().collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/heartbeat_log")     => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.heartbeat_log.iter().cloned().collect(); format!("[{}]", items.join(",")) }
         ("POST", "/heartbeat/add")     => { add_heartbeat(body); r#"{"ok":true}"#.to_string() }
 
         // v7: Cron
-        ("GET",  "/cron")              => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.cron_jobs.iter().map(|j| format!(r#"{{"id":"{}","action":"{}","interval_ms":{},"enabled":{}}}"#, j.id,esc(&j.action),j.interval_ms,j.enabled)).collect(); format!("[{}]", items.join(",")) }
+        ("GET",  "/cron")              => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.cron_jobs.iter().map(|j| format!(r#"{{"id":"{}","action":"{}","interval_ms":{},"enabled":{}}}"#, j.id,esc(&j.action),j.interval_ms,j.enabled)).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/cron/add")          => { add_cron(body); r#"{"ok":true}"#.to_string() }
-        ("POST", "/cron/remove")       => { let id=extract_json_str(body,"id").unwrap_or_default(); STATE.lock().unwrap().cron_jobs.retain(|j| j.id!=id); r#"{"ok":true}"#.to_string() }
+        ("POST", "/cron/remove")       => { let id=extract_json_str(body,"id").unwrap_or_default(); STATE.lock().unwrap_or_else(|e| e.into_inner()).cron_jobs.retain(|j| j.id!=id); r#"{"ok":true}"#.to_string() }
 
         // v7: Audit + task
         ("GET",  "/task_log")          => get_task_log_json(),
         ("GET",  "/audit_log")         => get_audit_log_json(),
-        ("GET",  "/checkpoints")       => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.checkpoints.iter().map(|(k,v)| format!(r#"{{{}:{}}}"#, json_str(k),json_str(v))).collect(); format!("[{}]", items.join(",")) }
-        ("POST", "/checkpoint")        => { let k=extract_json_str(body,"id").unwrap_or_default(); let v=extract_json_str(body,"data").unwrap_or_default(); if !k.is_empty() { STATE.lock().unwrap().checkpoints.insert(k,v); } r#"{"ok":true}"#.to_string() }
+        ("GET",  "/checkpoints")       => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.checkpoints.iter().map(|(k,v)| format!(r#"{{{}:{}}}"#, json_str(k),json_str(v))).collect(); format!("[{}]", items.join(",")) }
+        ("POST", "/checkpoint")        => { let k=extract_json_str(body,"id").unwrap_or_default(); let v=extract_json_str(body,"data").unwrap_or_default(); if !k.is_empty() { STATE.lock().unwrap_or_else(|e| e.into_inner()).checkpoints.insert(k,v); } r#"{"ok":true}"#.to_string() }
 
         // v7: KB
         ("GET",  "/kb")                => get_kb_json(),
@@ -4978,8 +4978,8 @@ You are executing a multi-step task autonomously.
         ("POST", "/relay")             => relay_msg(body),
         ("GET",  "/cache")             => cache_get(path),
         ("POST", "/cache")             => cache_post(body),
-        ("POST", "/policy/allow")      => { let t=extract_json_str(body,"tool").unwrap_or_default(); if !t.is_empty() { let mut s=STATE.lock().unwrap(); s.tool_denylist.retain(|d| d!=&t); if !s.tool_allowlist.contains(&t) { s.tool_allowlist.push(t); } } r#"{"ok":true}"#.to_string() }
-        ("POST", "/policy/deny")       => { let t=extract_json_str(body,"tool").unwrap_or_default(); if !t.is_empty() { let mut s=STATE.lock().unwrap(); s.tool_allowlist.retain(|a| a!=&t); if !s.tool_denylist.contains(&t) { s.tool_denylist.push(t); } } r#"{"ok":true}"#.to_string() }
+        ("POST", "/policy/allow")      => { let t=extract_json_str(body,"tool").unwrap_or_default(); if !t.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.tool_denylist.retain(|d| d!=&t); if !s.tool_allowlist.contains(&t) { s.tool_allowlist.push(t); } } r#"{"ok":true}"#.to_string() }
+        ("POST", "/policy/deny")       => { let t=extract_json_str(body,"tool").unwrap_or_default(); if !t.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.tool_allowlist.retain(|a| a!=&t); if !s.tool_denylist.contains(&t) { s.tool_denylist.push(t); } } r#"{"ok":true}"#.to_string() }
         ("GET",  "/policy")            => get_policy_json(),
         ("POST", "/nodes/register")    => { register_node(body); r#"{"ok":true}"#.to_string() }
         ("GET",  "/nodes")             => get_nodes_json(),
@@ -4998,9 +4998,9 @@ You are executing a multi-step task autonomously.
         // POST /ota/skip          — skip this version
         // POST /ota/set_version   — update current installed version
         // GET  /ota/install_cmd   — get the install command for Shizuku
-        ("GET",  "/ota/status")     => { STATE.lock().unwrap().ota.to_json() }
+        ("GET",  "/ota/status")     => { STATE.lock().unwrap_or_else(|e| e.into_inner()).ota.to_json() }
         ("POST", "/ota/begin_check") => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.ota.phase = OtaPhase::Checking;
             s.ota.check_error = String::new();
             s.ota.last_check_ms = now_ms();
@@ -5013,7 +5013,7 @@ You are executing a multi-step task autonomously.
             let date    = extract_json_str(body, "date").unwrap_or_default();
             let sha     = extract_json_str(body, "sha256").unwrap_or_default();
             let apk_sz  = extract_json_num(body, "apk_bytes").unwrap_or(0.0) as u64;
-            let mut s   = STATE.lock().unwrap();
+            let mut s   = STATE.lock().unwrap_or_else(|e| e.into_inner());
             // Check if this version is skipped
             if s.ota.skipped_versions.contains(&latest) {
                 s.ota.phase = OtaPhase::Idle;
@@ -5039,7 +5039,7 @@ You are executing a multi-step task autonomously.
         ("POST", "/ota/progress") => {
             let done  = extract_json_num(body, "bytes").unwrap_or(0.0) as u64;
             let total = extract_json_num(body, "total").unwrap_or(0.0) as u64;
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.ota.download_bytes = done;
             s.ota.download_total = total;
             s.ota.download_pct   = if total > 0 { ((done * 100) / total).min(100) as u8 } else { 0 };
@@ -5049,7 +5049,7 @@ You are executing a multi-step task autonomously.
         ("POST", "/ota/downloaded") => {
             let path = extract_json_str(body, "path").unwrap_or_default();
             let sha  = extract_json_str(body, "sha256").unwrap_or_default();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.ota.apk_local_path = path;
             // Verify SHA256 if we have an expected one
             let expected = s.ota.apk_sha256.clone();
@@ -5066,7 +5066,7 @@ You are executing a multi-step task autonomously.
         ("POST", "/ota/installing") => {
             let method = extract_json_str(body, "method").unwrap_or_else(|| "intent".to_string());
             let sid    = extract_json_num(body, "session_id").unwrap_or(-1.0) as i32;
-            let mut s  = STATE.lock().unwrap();
+            let mut s  = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.ota.install_method     = method;
             s.ota.install_session_id = sid;
             s.ota.install_error      = String::new();
@@ -5075,21 +5075,21 @@ You are executing a multi-step task autonomously.
         }
         ("POST", "/ota/installed") => {
             let ver = extract_json_str(body, "version").unwrap_or_default();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.ota.phase = OtaPhase::Installed;
             if !ver.is_empty() { s.ota.current_version = ver; s.config.setup_done = true; }
             r#"{"ok":true}"#.to_string()
         }
         ("POST", "/ota/failed") => {
             let err = extract_json_str(body, "error").unwrap_or_else(|| "unknown error".to_string());
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.ota.install_error = err.clone();
             s.ota.phase = OtaPhase::Failed(err.clone());
             format!(r#"{{"ok":true,"recorded_error":"{}"}}"#, esc(&err))
         }
         ("POST", "/ota/skip") => {
             let ver = extract_json_str(body, "version").unwrap_or_default();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if !ver.is_empty() && !s.ota.skipped_versions.contains(&ver) {
                 s.ota.skipped_versions.push(ver);
             }
@@ -5099,13 +5099,13 @@ You are executing a multi-step task autonomously.
         ("POST", "/ota/set_version") => {
             let ver  = extract_json_str(body, "version").unwrap_or_default();
             let code = extract_json_num(body, "code").unwrap_or(0.0) as i64;
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if !ver.is_empty() { s.ota.current_version = ver.clone(); s.config.setup_done = true; }
             if code > 0 { s.ota.current_code = code; }
             r#"{"ok":true}"#.to_string()
         }
         ("GET", "/ota/install_cmd") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let path = &s.ota.apk_local_path;
             if path.is_empty() {
                 r#"{"error":"no apk downloaded"}"#.to_string()
@@ -5133,7 +5133,7 @@ You are executing a multi-step task autonomously.
 fn run_watchdog() {
     loop {
         thread::sleep(Duration::from_secs(30));
-        watchdog_check(&mut STATE.lock().unwrap());
+        watchdog_check(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
     }
 }
 
@@ -5141,7 +5141,7 @@ fn run_watchdog() {
 fn run_macro_engine() {
     loop {
         thread::sleep(Duration::from_millis(500));
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         // Check context zones (enter/exit)
         apply_context_zones(&mut s);
         // Check composite triggers
@@ -5166,7 +5166,7 @@ fn run_trigger_watcher() {
     loop {
         thread::sleep(Duration::from_secs(10));
         let now = now_ms();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let tt: Vec<Trigger> = s.triggers.iter().filter(|t| t.trigger_type=="time" && !t.fired).cloned().collect();
         for t in tt {
             let fire_at = t.value.parse::<u128>().unwrap_or(0);
@@ -5189,7 +5189,7 @@ fn run_cron_scheduler() {
     loop {
         thread::sleep(Duration::from_secs(5));
         let now = now_ms();
-        let mut s = STATE.lock().unwrap();
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let jobs: Vec<CronJob> = s.cron_jobs.iter().filter(|j| j.enabled && now-j.last_run>=j.interval_ms).cloned().collect();
         for job in jobs {
             s.fired_triggers.push_back(format!(r#"{{"trigger":"cron_{}","action":"{}","type":"cron"}}"#, job.id,esc(&job.action)));
@@ -5215,7 +5215,7 @@ fn shizuku_to_json(sz: &ShizukuStatus) -> String {
 }
 
 fn update_config_from_http(body: &str) -> String {
-    let mut s = STATE.lock().unwrap();
+    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(v)=extract_json_str(body,"user_name") { s.config.user_name=v; }
     if let Some(v)=extract_json_str(body,"api_key")   { s.config.api_key=v; }
     if let Some(v)=extract_json_str(body,"base_url")  { s.config.base_url=v; }
@@ -5229,7 +5229,7 @@ fn update_config_from_http(body: &str) -> String {
 fn search_memory(path: &str) -> String {
     let query=path.find("q=").map(|i| &path[i+2..]).unwrap_or("").replace('+'," ");
     let ql=query.to_lowercase();
-    let mut s=STATE.lock().unwrap();
+    let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let mut results: Vec<(f32,String,String,u128)>=s.memory_index.iter_mut().filter_map(|e| {
         let mut score=0.0f32;
         if e.key.to_lowercase()==ql { score+=10.0; }
@@ -5252,25 +5252,25 @@ fn compact_context(s: &mut KiraState) {
 }
 
 fn get_context_json() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let turns: Vec<String>=s.context_turns.iter().map(|t| format!(r#"{{"role":"{}","content":"{}","tokens":{}}}"#, t.role,esc(&t.content[..t.content.len().min(300)]),t.tokens)).collect();
     format!(r#"{{"compact":{},"turns":[{}],"total_tokens":{},"memory_md":{}}}"#, json_str(&s.context_compact),turns.join(","),s.total_tokens,json_str(&s.memory_md[..s.memory_md.len().min(1000)]))
 }
 
 fn get_skills_json() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let items: Vec<String>=s.skills.values().map(|sk| format!(r#"{{"name":"{}","description":"{}","trigger":"{}","enabled":{},"usage_count":{}}}"#, esc(&sk.name),esc(&sk.description),esc(&sk.trigger),sk.enabled,sk.usage_count)).collect();
     format!("[{}]", items.join(","))
 }
 
 fn get_task_log_json() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let items: Vec<String>=s.task_log.iter().skip(s.task_log.len().saturating_sub(50)).map(|t| format!(r#"{{"task_id":"{}","step":{},"action":"{}","result":"{}","success":{},"time":{}}}"#, esc(&t.task_id),t.step,esc(&t.action),esc(&t.result),t.success,t.time)).collect();
     format!("[{}]", items.join(","))
 }
 
 fn get_audit_log_json() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let items: Vec<String>=s.audit_log.iter().skip(s.audit_log.len().saturating_sub(100)).map(|a| format!(r#"{{"session":"{}","tool":"{}","input":"{}","output":"{}","success":{},"blocked":{},"ts":{}}}"#, esc(&a.session),esc(&a.tool),esc(&a.input),esc(&a.output),a.success,a.blocked,a.ts)).collect();
     format!("[{}]", items.join(","))
 }
@@ -5280,7 +5280,7 @@ fn register_skill(body: &str) {
     let desc=extract_json_str(body,"description").unwrap_or_default();
     let trigger=extract_json_str(body,"trigger").unwrap_or_default();
     let content=extract_json_str(body,"content").unwrap_or_default();
-    if !name.is_empty() { STATE.lock().unwrap().skills.insert(name.clone(), Skill { name, description:desc, trigger, content, enabled:true, usage_count:0 }); }
+    if !name.is_empty() { STATE.lock().unwrap_or_else(|e| e.into_inner()).skills.insert(name.clone(), Skill { name, description:desc, trigger, content, enabled:true, usage_count:0 }); }
 }
 
 fn add_trigger(body: &str) {
@@ -5289,7 +5289,7 @@ fn add_trigger(body: &str) {
     let value=extract_json_str(body,"value").unwrap_or_default();
     let action=extract_json_str(body,"action").unwrap_or_default();
     let repeat=body.contains("\"repeat\":true");
-    STATE.lock().unwrap().triggers.push(Trigger { id, trigger_type:ttype, value, action, fired:false, repeat });
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).triggers.push(Trigger { id, trigger_type:ttype, value, action, fired:false, repeat });
 }
 
 fn add_heartbeat(body: &str) {
@@ -5297,7 +5297,7 @@ fn add_heartbeat(body: &str) {
     let check=extract_json_str(body,"check").unwrap_or_default();
     let action=extract_json_str(body,"action").unwrap_or_default();
     let interval=extract_json_str(body,"interval_ms").and_then(|s| s.parse::<u128>().ok()).unwrap_or(0);
-    let mut s=STATE.lock().unwrap();
+    let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     s.heartbeat_items.retain(|i| i.id!=id);
     s.heartbeat_items.push(HeartbeatItem { id, check, action, enabled:true, last_run:0, interval_ms:interval });
 }
@@ -5307,7 +5307,7 @@ fn add_cron(body: &str) {
     let action=extract_json_str(body,"action").unwrap_or_default();
     let interval=extract_json_str(body,"interval_ms").and_then(|s| s.parse::<u128>().ok()).unwrap_or(3_600_000);
     let expr=extract_json_str(body,"expression").unwrap_or_default();
-    STATE.lock().unwrap().cron_jobs.push(CronJob { id, expression:expr, action, last_run:0, interval_ms:interval, enabled:true });
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).cron_jobs.push(CronJob { id, expression:expr, action, last_run:0, interval_ms:interval, enabled:true });
 }
 
 fn fire_notif_triggers(s: &mut KiraState, pkg: &str, title: &str, text: &str) {
@@ -5347,7 +5347,7 @@ fn do_audit(s: &mut KiraState, session: &str, tool: &str, input: &str, output: &
 fn queue_to_java(endpoint: &str, body: &str) -> String {
     let id=gen_id();
     let payload=if body.is_empty() { format!(r#"{{"endpoint":"{}","data":{{}}}}"#, endpoint) } else { format!(r#"{{"endpoint":"{}","data":{}}}"#, endpoint, body) };
-    STATE.lock().unwrap().pending_cmds.push_back((id.clone(), payload));
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).pending_cmds.push_back((id.clone(), payload));
     let timeout=match endpoint { "install_apk"|"take_video" => 60000, _ => 10000 };
     wait_result(&id, timeout).unwrap_or_else(|| r#"{"error":"timeout"}"#.to_string())
 }
@@ -5355,7 +5355,7 @@ fn queue_to_java(endpoint: &str, body: &str) -> String {
 fn wait_result(id: &str, ms: u64) -> Option<String> {
     let t=std::time::Instant::now();
     loop {
-        { let mut s=STATE.lock().unwrap(); if let Some(r)=s.results.remove(id) { return Some(r); } }
+        { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); if let Some(r)=s.results.remove(id) { return Some(r); } }
         if t.elapsed().as_millis() as u64>=ms { return None; }
         thread::sleep(Duration::from_millis(8));
     }
@@ -5384,14 +5384,14 @@ fn make_providers() -> Vec<Provider> {
 }
 
 fn get_policy_json() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     format!(r#"{{"allowlist":[{}],"denylist":[{}]}}"#,
         s.tool_allowlist.iter().map(|t| format!("\"{}\"",esc(t))).collect::<Vec<_>>().join(","),
         s.tool_denylist.iter().map(|t| format!("\"{}\"",esc(t))).collect::<Vec<_>>().join(","))
 }
 
 fn get_nodes_json() -> String {
-    let s=STATE.lock().unwrap(); let now=now_ms();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let now=now_ms();
     let items: Vec<String>=s.node_caps.values().map(|n| format!(r#"{{"id":"{}","platform":"{}","caps":[{}],"online":{},"last_seen":{}}}"#, esc(&n.node_id),esc(&n.platform),n.caps.iter().map(|c| format!("\"{}\"",esc(c))).collect::<Vec<_>>().join(","),n.online&&now-n.last_seen<30000,n.last_seen)).collect();
     format!("[{}]", items.join(","))
 }
@@ -5401,7 +5401,7 @@ fn register_node(body: &str) {
     let platform=extract_json_str(body,"platform").unwrap_or_else(|| "android".to_string());
     let caps_str=extract_json_str(body,"caps").unwrap_or_default();
     let caps: Vec<String>=caps_str.split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
-    STATE.lock().unwrap().node_caps.insert(id.clone(), NodeCapability { node_id:id, caps, platform, online:true, last_seen:now_ms() });
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).node_caps.insert(id.clone(), NodeCapability { node_id:id, caps, platform, online:true, last_seen:now_ms() });
 }
 
 fn new_session(body: &str) -> String {
@@ -5409,13 +5409,13 @@ fn new_session(body: &str) -> String {
     let channel=extract_json_str(body,"channel").unwrap_or_else(|| "kira".to_string());
     let ts=now_ms();
     let sess=Session { id:id.clone(), channel, turns:0, tokens:0, created:ts, last_msg:ts };
-    STATE.lock().unwrap().sessions.insert(id.clone(), sess);
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).sessions.insert(id.clone(), sess);
     format!(r#"{{"ok":true,"id":"{}"}}"#, id)
 }
 
 fn get_credential(body: &str) -> String {
     let name=extract_json_str(body,"name").unwrap_or_default();
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     match s.credentials.get(&name) {
         Some(enc) => { let key=derive_key(&name); let dec=xor_crypt(enc,&key); let val=String::from_utf8_lossy(&dec).to_string(); format!(r#"{{"name":"{}","value":"{}"}}"#, esc(&name),esc(&val)) }
         None      => format!(r#"{{"error":"credential '{}' not found"}}"#, esc(&name))
@@ -5423,25 +5423,25 @@ fn get_credential(body: &str) -> String {
 }
 
 fn stream_poll() -> String {
-    let mut s=STATE.lock().unwrap();
+    let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let chunks: Vec<String>=s.stream_chunks.drain(..).map(|c| format!(r#"{{"session_id":"{}","text":"{}","done":{},"ts":{}}}"#, esc(&c.session_id),esc(&c.text),c.done,c.ts)).collect();
     format!("[{}]", chunks.join(","))
 }
 
 fn push_stream_chunk(text: &str) {
-    let mut s=STATE.lock().unwrap(); let sid=s.active_session.clone();
+    let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let sid=s.active_session.clone();
     s.stream_chunks.push_back(StreamChunk { session_id:sid, text:text.to_string(), done:false, ts:now_ms() });
     if s.stream_chunks.len() > 1000 { s.stream_chunks.pop_front(); }
 }
 
 fn relay_msg(body: &str) -> String {
     let ch=extract_json_str(body,"channel").unwrap_or_default(); let msg=extract_json_str(body,"message").unwrap_or_default(); let ts=now_ms();
-    STATE.lock().unwrap().webhook_events.push_back(format!(r#"{{"type":"relay","channel":"{}","message":"{}","ts":{}}}"#, esc(&ch),esc(&msg),ts));
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).webhook_events.push_back(format!(r#"{{"type":"relay","channel":"{}","message":"{}","ts":{}}}"#, esc(&ch),esc(&msg),ts));
     r#"{"ok":true}"#.to_string()
 }
 
 fn cache_get(path: &str) -> String {
-    let key=path.find("key=").map(|i| &path[i+4..]).unwrap_or("").split('&').next().unwrap_or(""); let s=STATE.lock().unwrap(); let now=now_ms();
+    let key=path.find("key=").map(|i| &path[i+4..]).unwrap_or("").split('&').next().unwrap_or(""); let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let now=now_ms();
     match s.response_cache.get(key) {
         Some(e) if e.expires_at>now => format!(r#"{{"key":"{}","value":"{}","ttl":{}}}"#, esc(key),esc(&e.value),e.expires_at-now),
         Some(_) => r#"{"error":"expired"}"#.to_string(), None => r#"{"error":"not_found"}"#.to_string(),
@@ -5451,18 +5451,18 @@ fn cache_get(path: &str) -> String {
 fn cache_post(body: &str) -> String {
     let k=extract_json_str(body,"key").unwrap_or_default(); let v=extract_json_str(body,"value").unwrap_or_default();
     let ttl=extract_json_str(body,"ttl_ms").and_then(|s| s.parse::<u128>().ok()).unwrap_or(300_000);
-    STATE.lock().unwrap().response_cache.insert(k, CacheEntry { value:v, expires_at:now_ms()+ttl });
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).response_cache.insert(k, CacheEntry { value:v, expires_at:now_ms()+ttl });
     r#"{"ok":true}"#.to_string()
 }
 
 fn get_budget_json() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let items: Vec<String>=s.tool_iterations.iter().map(|(k,v)| format!(r#"{{"session":"{}","used":{},"remaining":{}}}"#, esc(k),v,s.max_tool_iters.saturating_sub(*v))).collect();
     format!(r#"{{"max":{},"sessions":[{}]}}"#, s.max_tool_iters,items.join(","))
 }
 
 fn get_kb_json() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let items: Vec<String>=s.knowledge_base.iter().map(|e| format!(r#"{{"id":"{}","title":"{}","snippet":"{}","tags":[{}],"ts":{}}}"#, esc(&e.id),esc(&e.title),esc(&e.content[..e.content.len().min(100)]),e.tags.iter().map(|t| format!("\"{}\"",esc(t))).collect::<Vec<_>>().join(","),e.ts)).collect();
     format!("[{}]", items.join(","))
 }
@@ -5470,12 +5470,12 @@ fn get_kb_json() -> String {
 fn add_kb_entry(body: &str) {
     let id=extract_json_str(body,"id").unwrap_or_else(gen_id); let title=extract_json_str(body,"title").unwrap_or_default(); let content=extract_json_str(body,"content").unwrap_or_default();
     let tags_s=extract_json_str(body,"tags").unwrap_or_default(); let tags: Vec<String>=tags_s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
-    let mut s=STATE.lock().unwrap(); s.knowledge_base.retain(|e| e.id!=id); s.knowledge_base.push(KbEntry { id, title, content, tags, ts:now_ms() });
+    let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.knowledge_base.retain(|e| e.id!=id); s.knowledge_base.push(KbEntry { id, title, content, tags, ts:now_ms() });
     if s.knowledge_base.len() > 10000 { s.knowledge_base.remove(0); }
 }
 
 fn kb_search(path: &str) -> String {
-    let query=path.find("q=").map(|i| &path[i+2..]).unwrap_or("").to_lowercase(); let s=STATE.lock().unwrap();
+    let query=path.find("q=").map(|i| &path[i+2..]).unwrap_or("").to_lowercase(); let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     let mut results: Vec<(u32, &KbEntry)>=s.knowledge_base.iter().filter_map(|e| { let mut sc=0u32; if e.title.to_lowercase().contains(&query) { sc+=10; } if e.content.to_lowercase().contains(&query) { sc+=5; } for tag in e.tags.iter() { let tag: &String = tag; if tag.to_lowercase().contains(&query) { sc+=3; } } if sc>0 { Some((sc,e)) } else { None } }).collect();
     results.sort_by(|a,b| b.0.cmp(&a.0));
     let items: Vec<String>=results.iter().take(10).map(|(sc,e)| format!(r#"{{"id":"{}","title":"{}","content":"{}","score":{}}}"#, esc(&e.id),esc(&e.title),esc(&e.content[..e.content.len().min(300)]),sc)).collect();
@@ -5483,19 +5483,19 @@ fn kb_search(path: &str) -> String {
 }
 
 fn get_metrics_text() -> String {
-    let s=STATE.lock().unwrap();
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     format!("kira_uptime_ms {}\nkira_requests_total {}\nkira_tool_calls {}\nkira_notifications {}\nkira_memory_entries {}\nkira_battery {}\nkira_skills {}\nkira_kb_entries {}\nkira_event_feed {}\nkira_macros {}\nkira_macro_runs {}\nkira_variables {}\n",
         now_ms()-s.uptime_start, s.request_count, s.tool_call_count, s.notifications.len(), s.memory_index.len(), s.battery_pct, s.skills.len(), s.knowledge_base.len(), s.event_feed.len(), s.macros.len(), s.macro_run_log.len(), s.variables.len())
 }
 
 fn get_event_feed() -> String {
-    let s=STATE.lock().unwrap(); let skip=s.event_feed.len().saturating_sub(100);
+    let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let skip=s.event_feed.len().saturating_sub(100);
     let items: Vec<String>=s.event_feed.iter().skip(skip).map(|e| format!(r#"{{"event":"{}","data":"{}","ts":{}}}"#, esc(&e.event),esc(&e.data),e.ts)).collect();
     format!("[{}]", items.join(","))
 }
 
 fn push_event_feed(event: &str, data: &str) {
-    let mut s=STATE.lock().unwrap();
+    let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner());
     s.event_feed.push_back(EventFeedEntry { event:event.to_string(), data:data.to_string(), ts:now_ms() });
     if s.event_feed.len() > 5000 { s.event_feed.pop_front(); }
 }
@@ -6242,7 +6242,7 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
                 context: String::new(), result: String::new(),
                 created_ms: now_ms(), last_step_ms: now_ms(),
             };
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             // Enqueue task plan generation (Java calls AI with the planning prompt)
             let plan_prompt = build_task_plan_prompt(&goal, &s.agent_context);
             s.pending_actions.push_back(PendingMacroAction {
@@ -6263,7 +6263,7 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
 
         // Get all tasks
         ("GET", "/agent/tasks")     => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.phone_agent_tasks.iter().map(|t| format!(
                 r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"max_steps":{},"plan_steps":{},"history_steps":{}}}"#,
                 esc(&t.id), esc(&t.goal),
@@ -6284,7 +6284,7 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
         // Get task detail including history
         ("GET", "/agent/task")      => {
             let id = path.find("id=").map(|i| &path[i+3..]).unwrap_or("").split('&').next().unwrap_or("");
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.phone_agent_tasks.iter().find(|t| t.id == id) {
                 Some(t) => {
                     let plan_json: Vec<String> = t.plan.iter().map(|p| format!("\"{}\"", esc(p))).collect();
@@ -6314,7 +6314,7 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
             let task_id = extract_json_str(body, "task_id").unwrap_or_default();
             let vlm_resp = extract_json_str(body, "vlm_response").unwrap_or_default();
             if task_id.is_empty() { return Some(r#"{"error":"task_id required"}"#.to_string()); }
-            let done = execute_vlm_step(&mut STATE.lock().unwrap(), &task_id, &vlm_resp);
+            let done = execute_vlm_step(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &task_id, &vlm_resp);
             Some(format!(r#"{{"ok":true,"done":{}}}"#, done))
         }
 
@@ -6327,7 +6327,7 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
                 .map(|s| s.trim().trim_matches('"').to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == task_id) {
                 t.plan = plan;
                 t.state = VlmTaskState::Observing;
@@ -6341,7 +6341,7 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
         // Build VLM prompt for current task step (Java uses this to call AI)
         ("GET", "/agent/prompt")    => {
             let id = path.find("id=").map(|i| &path[i+3..]).unwrap_or("").split('&').next().unwrap_or("");
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.phone_agent_tasks.iter().find(|t| t.id == id) {
                 Some(t) => {
                     let sub_task = t.plan.get(t.plan_idx).cloned().unwrap_or_else(|| t.goal.clone());
@@ -6361,7 +6361,7 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
         // Cancel a task
         ("POST", "/agent/cancel")   => {
             let id = extract_json_str(body, "task_id").unwrap_or_default();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == id) {
                 t.state = VlmTaskState::Failed("cancelled by user".to_string());
             }
@@ -6370,14 +6370,14 @@ fn route_vlm_agent(method: &str, path: &str, body: &str) -> Option<String> {
 
         // Clear completed tasks
         ("POST", "/agent/clear")    => {
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.phone_agent_tasks.retain(|t| matches!(t.state, VlmTaskState::Planning | VlmTaskState::Observing | VlmTaskState::Acting | VlmTaskState::Verifying));
             Some(format!(r#"{{"ok":true,"remaining":{}}}"#, s.phone_agent_tasks.len()))
         }
 
         // Screen observations log (Roubao pattern)
         ("GET", "/agent/observations") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.screen_observations.iter().rev().take(20).map(|o| format!(
                 r#"{{"task_id":"{}","step":{},"pkg":"{}","vlm":"{}","ts":{}}}"#,
                 esc(&o.task_id), o.step, esc(&o.screen_pkg),
@@ -7375,14 +7375,14 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/dsl/run") => {
             let macro_id = extract_json_str(body, "macro_id").unwrap_or_else(gen_id);
             let script   = extract_json_str(body, "script").unwrap_or_default();
-            let log = execute_dsl_script(&mut STATE.lock().unwrap(), &macro_id, &script);
+            let log = execute_dsl_script(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &macro_id, &script);
             Some(format!(r#"{{"ok":true,"log":[{}]}}"#,
                 log.iter().map(|l| format!(r#""{}""#, esc(l))).collect::<Vec<_>>().join(",")))
         }
 
         // \u{2500}\u{2500} Reactive subscriptions
         ("GET",  "/rx/subscriptions") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.rx_subscriptions.iter().map(|sub|
                 format!(r#"{{"id":"{}","name":"{}","enabled":{},"fired":{}}}"#,
                     esc(&sub.id), esc(&sub.name), sub.enabled, sub.fired_count)
@@ -7406,14 +7406,14 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 fired_count: 0, last_fired: 0, debounce_last: 0, throttle_last: 0,
                 take_count: 0, skip_count: 0, last_value: String::new(), buffer: Vec::new(),
             };
-            STATE.lock().unwrap().rx_subscriptions.push(sub);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).rx_subscriptions.push(sub);
             Some(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id)))
         }
         ("POST", "/rx/event") => {
             let kind = extract_json_str(body, "kind").unwrap_or_default();
             let data = extract_json_str(body, "data").unwrap_or_default();
             let event = RxEvent { kind: kind.clone(), data, ts: now_ms(), source: "api".to_string() };
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let subs: Vec<RxSubscription> = s.rx_subscriptions.iter().cloned().collect();
             for mut sub in subs {
                 if !sub.enabled { continue; }
@@ -7430,7 +7430,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
 
         // \u{2500}\u{2500} State machines
         ("GET",  "/fsm/machines")   => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.state_machines.iter().map(|m|
                 format!(r#"{{"id":"{}","name":"{}","state":"{}","enabled":{}}}"#,
                     esc(&m.id), esc(&m.name), esc(&m.current_state), m.enabled)
@@ -7440,13 +7440,13 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/fsm/event")      => {
             let machine_id = extract_json_str(body, "machine_id").unwrap_or_default();
             let event_kind = extract_json_str(body, "event").unwrap_or_default();
-            fsm_process_event(&mut STATE.lock().unwrap(), &machine_id, &event_kind);
+            fsm_process_event(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &machine_id, &event_kind);
             Some(r#"{"ok":true}"#.to_string())
         }
 
         // \u{2500}\u{2500} Context zones
         ("GET",  "/zones")          => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.context_zones.iter().map(|z|
                 format!(r#"{{"id":"{}","name":"{}","active":{},"profile":"{}"}}"#,
                     esc(&z.id), esc(&z.name), z.currently_active, esc(&z.activate_profile))
@@ -7457,10 +7457,10 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         // \u{2500}\u{2500} Bundle export/import
         ("GET",  "/bundle/export")  => {
             let tag = path.find("tag=").map(|i| &path[i+4..]).map(|s| s.split('&').next().unwrap_or(""));
-            Some(export_bundle(&STATE.lock().unwrap(), tag))
+            Some(export_bundle(&STATE.lock().unwrap_or_else(|e| e.into_inner()), tag))
         }
         ("POST", "/bundle/import")  => {
-            import_macros_json(&mut STATE.lock().unwrap(), body);
+            import_macros_json(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), body);
             Some(r#"{"ok":true}"#.to_string())
         }
 
@@ -7468,7 +7468,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/channel/post")   => {
             let ch  = extract_json_str(body, "channel").unwrap_or_default();
             let msg = extract_json_str(body, "message").unwrap_or_default();
-            channel_post(&mut STATE.lock().unwrap(), &ch, &msg);
+            channel_post(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &ch, &msg);
             Some(r#"{"ok":true}"#.to_string())
         }
 
@@ -7476,7 +7476,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/battery/defer")  => {
             let macro_id = extract_json_str(body, "macro_id").unwrap_or_default();
             let min_pct  = extract_json_num(body, "min_pct").unwrap_or(20.0) as i32;
-            defer_until_charged(&mut STATE.lock().unwrap(), &macro_id, min_pct);
+            defer_until_charged(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &macro_id, min_pct);
             Some(format!(r#"{{"ok":true,"deferred":"{}","min_pct":{}}}"#, esc(&macro_id), min_pct))
         }
 
@@ -7499,7 +7499,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&tkind), esc(&tval), esc(&action_str)
             ));
             let mid = m.id.clone(); let mname = m.name.clone();
-            STATE.lock().unwrap().macros.push(m);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","trigger":"{}","val":"{}"}}"#,
                 esc(&mid), esc(&mname), esc(&tkind), esc(&tval)))
         }
@@ -7516,7 +7516,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&id), esc(&app), esc(&pkg), esc(&action)
             ));
             let mid = m.id.clone();
-            STATE.lock().unwrap().macros.push(m);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","app":"{}","pkg":"{}"}}"#,
                 esc(&mid), esc(&app), esc(&pkg)))
         }
@@ -7533,7 +7533,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&id), minutes, esc(&task), interval_ms, esc(&task)
             ));
             let mid = m.id.clone();
-            STATE.lock().unwrap().macros.push(m);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","task":"{}","every_minutes":{}}}"#,
                 esc(&mid), esc(&task), minutes))
         }
@@ -7552,7 +7552,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(tkind), esc(&tval), esc(&action)
             ));
             let mid = m.id.clone(); let mname = m.name.clone();
-            STATE.lock().unwrap().macros.push(m);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","keyword":"{}"}}"#,
                 esc(&mid), esc(&mname), esc(&keyword)))
         }
@@ -7568,7 +7568,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&id), esc(&time), esc(&action), esc(&time), esc(&action)
             ));
             let mid = m.id.clone();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             schedule_macro_daily(&mut s, &id, &time);
             s.macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","time":"{}","action":"{}"}}"#,
@@ -7587,14 +7587,14 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&id), esc(&state), esc(&action), esc(tkind), esc(&action)
             ));
             let mid = m.id.clone();
-            STATE.lock().unwrap().macros.push(m);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","state":"{}","action":"{}"}}"#,
                 esc(&mid), esc(&state), esc(&action)))
         }
 
         // GET /auto/list  — friendly summary of all automations
         ("GET", "/auto/list") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.macros.iter().map(|m| {
                 let tsum = m.triggers.first().map(|t| t.kind.to_str().to_string()).unwrap_or_default();
                 let asum = m.actions.first()
@@ -7612,7 +7612,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/auto/enable") => {
             let id  = extract_json_str(body, "id").unwrap_or_default();
             let ena = !body.contains(r#""enabled":false"#);
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(m) = s.macros.iter_mut().find(|m| m.id == id) {
                 m.enabled = ena;
                 Some(format!(r#"{{"ok":true,"id":"{}","enabled":{}}}"#, esc(&id), ena))
@@ -7624,7 +7624,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         // DELETE /auto/:id
         ("DELETE", auto_path) if auto_path.starts_with("/auto/") => {
             let id = auto_path.trim_start_matches("/auto/");
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let before = s.macros.len();
             s.macros.retain(|m| m.id != id);
             Some(format!(r#"{{"ok":true,"removed":{}}}"#, before - s.macros.len()))
@@ -7691,7 +7691,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             ));
             let mid  = m.id.clone();
             let mname= m.name.clone();
-            STATE.lock().unwrap().macros.push(m);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","trigger":"{}","val":"{}"}}"#,
                 esc(&mid), esc(&mname), esc(tkind), esc(tval_final)))
         }
@@ -7723,7 +7723,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&scene_id), esc(&name), esc(&combined)
             ));
             let mid = m.id.clone();
-            STATE.lock().unwrap().macros.push(m);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.push(m);
             Some(format!(r#"{{"ok":true,"id":"{}","name":"{}","steps":{}}}"#,
                 esc(&mid), esc(&name), acts.len()))
         }
@@ -7732,7 +7732,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/auto/run_now") => {
             let id = extract_json_str(body, "id").unwrap_or_default();
             if id.is_empty() { return Some(r#"{"error":"need id"}"#.to_string()); }
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(m) = s.macros.iter().find(|m| m.id == id).cloned() {
                 let name = m.name.clone();
                 let (steps, _ok) = execute_macro_actions(&mut s, &id, &m.actions);
@@ -7749,7 +7749,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             let minutes = extract_json_num(body, "resume_after_minutes").unwrap_or(60.0) as u64;
             if id.is_empty() { return Some(r#"{"error":"need id"}"#.to_string()); }
             let resume_ms = now_ms() + (minutes as u128) * 60_000;
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(m) = s.macros.iter_mut().find(|m| m.id == id) {
                 m.enabled = false;
                 let resume_trigger = Trigger {
@@ -7770,7 +7770,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
 
         // GET /auto/history — last 50 runs
         ("GET", "/auto/history") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.macro_run_log.iter().rev().take(50)
                 .map(|r| format!(
                     r#"{{"id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"ms":{},"ts":{}}}"#,
@@ -7783,7 +7783,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
 
         // GET /auto/stats
         ("GET", "/auto/stats") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let enabled  = s.macros.iter().filter(|m| m.enabled).count();
             let total_runs: u64 = s.macros.iter().map(|m| m.run_count).sum();
             let success  = s.macro_run_log.iter().filter(|r| r.success).count();
@@ -7799,7 +7799,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             let src     = extract_json_str(body, "id").unwrap_or_default();
             let new_id  = extract_json_str(body, "new_id").unwrap_or_else(|| format!("clone_{}", gen_id()));
             let new_nm  = extract_json_str(body, "new_name").unwrap_or_default();
-            let mut s   = STATE.lock().unwrap();
+            let mut s   = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(original) = s.macros.iter().find(|m| m.id == src).cloned() {
                 let mut c    = original.clone();
                 c.id         = new_id.clone();
@@ -7823,7 +7823,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 .map(|s| s.trim().trim_matches('"'))
                 .filter(|s| !s.is_empty())
                 .collect();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let mut count = 0usize;
             for m in s.macros.iter_mut() {
                 if ids.contains(&m.id.as_str()) { m.enabled = enabled; count += 1; }
@@ -8388,7 +8388,7 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
     match (method, path) {
         // Flows (visual flowchart)
         ("GET",  "/flows")          => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.roboru_flows.iter().map(|(id, f)|
                 format!(r#"{{"id":"{}","name":"{}","enabled":{},"blocks":{},"run_count":{},"last_run_ms":{}}}"#,
                     esc(id), esc(&f.name), f.enabled, f.blocks.len(), f.run_count, f.last_run_ms)
@@ -8398,7 +8398,7 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/flows/add")      => {
             if let Some(flow) = parse_flow_from_json(body) {
                 let id = flow.id.clone();
-                STATE.lock().unwrap().roboru_flows.insert(id.clone(), flow);
+                STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_flows.insert(id.clone(), flow);
                 Some(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id)))
             } else {
                 Some(r#"{"error":"invalid flow json"}"#.to_string())
@@ -8406,7 +8406,7 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
         }
         ("POST", "/flows/run")      => {
             let id = extract_json_str(body, "id").unwrap_or_default();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let flow = s.roboru_flows.get(&id).cloned();
             if let Some(flow) = flow {
                 let steps = execute_flow(&mut s, &flow, None);
@@ -8420,12 +8420,12 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
         }
         ("POST", "/flows/remove")   => {
             let id = extract_json_str(body, "id").unwrap_or_default();
-            STATE.lock().unwrap().roboru_flows.remove(&id);
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_flows.remove(&id);
             Some(r#"{"ok":true}"#.to_string())
         }
         // Keywords (Robot Framework pattern)
         ("GET",  "/keywords")       => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.roboru_keywords.iter().map(|(name, kw)|
                 format!(r#"{{"name":"{}","description":"{}","args":{},"steps":{}}}"#,
                     esc(name), esc(&kw.description),
@@ -8437,13 +8437,13 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/keywords/add")   => {
             if let Some(kw) = parse_keyword_from_json(body) {
                 let name = kw.name.clone();
-                STATE.lock().unwrap().roboru_keywords.insert(name.clone(), kw);
+                STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_keywords.insert(name.clone(), kw);
                 Some(format!(r#"{{"ok":true,"name":"{}"}}"#, esc(&name)))
             } else { Some(r#"{"error":"invalid keyword json"}"#.to_string()) }
         }
         ("POST", "/keywords/run")   => {
             let name = extract_json_str(body, "name").unwrap_or_default();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let kw = s.roboru_keywords.get(&name).cloned();
             if let Some(kw) = kw {
                 let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name): (usize, &String)| {
@@ -8456,7 +8456,7 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
         }
         // Pipelines (Hyper-automation)
         ("GET",  "/pipelines")      => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.roboru_pipelines.iter().map(|(id, p)|
                 format!(r#"{{"id":"{}","name":"{}","enabled":{},"steps":{},"run_count":{}}}"#,
                     esc(id), esc(&p.name), p.enabled, p.steps.len(), p.run_count)
@@ -8466,13 +8466,13 @@ fn route_roboru(method: &str, path: &str, body: &str) -> Option<String> {
         ("POST", "/pipelines/add")  => {
             if let Some(pipeline) = parse_pipeline_from_json(body) {
                 let id = pipeline.id.clone();
-                STATE.lock().unwrap().roboru_pipelines.insert(id.clone(), pipeline);
+                STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_pipelines.insert(id.clone(), pipeline);
                 Some(format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id)))
             } else { Some(r#"{"error":"invalid pipeline json"}"#.to_string()) }
         }
         ("POST", "/pipelines/run")  => {
             let id = extract_json_str(body, "id").unwrap_or_default();
-            let mut s = STATE.lock().unwrap();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let pipeline = s.roboru_pipelines.get(&id).cloned();
             if let Some(pipeline) = pipeline {
                 let (steps, errors) = execute_pipeline(&mut s, &pipeline);
@@ -8680,10 +8680,10 @@ fn watchdog_check(s: &mut KiraState) {
 /// HTTP route additions for OpenClaw features
 fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
     match (method, path) {
-        ("GET",  "/macros/export")  => Some(export_macros_json(&STATE.lock().unwrap())),
-        ("POST", "/macros/import")  => { import_macros_json(&mut STATE.lock().unwrap(), body); Some(r#"{"ok":true}"#.to_string()) }
+        ("GET",  "/macros/export")  => Some(export_macros_json(&STATE.lock().unwrap_or_else(|e| e.into_inner()))),
+        ("POST", "/macros/import")  => { import_macros_json(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), body); Some(r#"{"ok":true}"#.to_string()) }
         ("GET",  "/macros/templates") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.macros.iter()
                 .filter(|m| m.tags.contains(&"template".to_string()))
                 .map(macro_to_json).collect();
@@ -8691,36 +8691,36 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
         }
         ("POST", "/macros/chain")   => {
             let id = extract_json_str(body, "target").unwrap_or_default();
-            if !id.is_empty() { chain_macro(&mut STATE.lock().unwrap(), &id); }
+            if !id.is_empty() { chain_macro(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &id); }
             Some(format!(r#"{{"ok":true,"chained":"{}"}}"#, esc(&id)))
         }
         ("POST", "/macros/pipeline") => {
             let id = extract_json_str(body, "macro_id").unwrap_or_else(gen_id);
-            run_pipeline(&mut STATE.lock().unwrap(), &id, body);
+            run_pipeline(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &id, body);
             Some(format!(r#"{{"ok":true,"pipeline":"{}"}}"#, esc(&id)))
         }
         ("GET",  "/expr")           => {
             // Evaluate expression: GET /expr?e=5+3 \u{2192} {"result":"8"}
             let expr = path.find("e=").map(|i| &path[i+2..]).unwrap_or("").replace('+', " ");
-            let result = eval_expr(&STATE.lock().unwrap(), &expr);
+            let result = eval_expr(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &expr);
             Some(format!(r#"{{"result":"{}"}}"#, esc(&result)))
         }
         ("GET",  "/variables/expand") => {
             // Expand %VAR% tokens: GET /variables/expand?text=hello+%BATTERY%
             let text = path.find("text=").map(|i| &path[i+5..]).unwrap_or("").replace('+', " ");
-            let result = expand_vars(&STATE.lock().unwrap(), &text);
+            let result = expand_vars(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &text);
             Some(format!(r#"{{"result":"{}"}}"#, esc(&result)))
         }
-        ("GET",  "/automation/analytics") => Some(get_automation_analytics(&STATE.lock().unwrap())),
+        ("GET",  "/automation/analytics") => Some(get_automation_analytics(&STATE.lock().unwrap_or_else(|e| e.into_inner()))),
         ("GET",  "/automation/report")    => {
-            let report = get_automation_report(&STATE.lock().unwrap());
+            let report = get_automation_report(&STATE.lock().unwrap_or_else(|e| e.into_inner()));
             Some(format!(r#"{{"report":"{}"}}"#, esc(&report)))
         }
         ("POST", "/macros/schedule")      => {
             let id   = extract_json_str(body, "macro_id").unwrap_or_default();
             let time = extract_json_str(body, "time").unwrap_or_default();
             if !id.is_empty() && !time.is_empty() {
-                schedule_macro_daily(&mut STATE.lock().unwrap(), &id, &time);
+                schedule_macro_daily(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &id, &time);
             }
             Some(format!(r#"{{"ok":true,"scheduled":"{}","time":"{}"}}"#, esc(&id), esc(&time)))
         }
@@ -8728,12 +8728,12 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
             let parallel = body.contains(r#""parallel":true"#);
             let ids_str = extract_json_str(body, "ids").unwrap_or_default();
             let ids: Vec<&str> = ids_str.split(',').map(|s| s.trim()).collect();
-            run_macro_group(&mut STATE.lock().unwrap(), &ids, parallel);
+            run_macro_group(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &ids, parallel);
             Some(format!(r#"{{"ok":true,"count":{}}}"#, ids.len()))
         }
         ("GET",  "/macros/find")          => {
             let name = body.find("name=").map(|i| &body[i+5..]).unwrap_or("").split('&').next().unwrap_or("");
-            let result = find_macro_by_name(&STATE.lock().unwrap(), name);
+            let result = find_macro_by_name(&STATE.lock().unwrap_or_else(|e| e.into_inner()), name);
             Some(match result {
                 Some(id) => format!(r#"{{"found":true,"id":"{}"}}"#, esc(&id)),
                 None     => r#"{"found":false}"#.to_string(),
@@ -8741,11 +8741,11 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
         }
         ("POST", "/macros/conditional")   => {
             let id = extract_json_str(body, "macro_id").unwrap_or_default();
-            let ran = if !id.is_empty() { try_run_macro_conditional(&mut STATE.lock().unwrap(), &id) } else { false };
+            let ran = if !id.is_empty() { try_run_macro_conditional(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &id) } else { false };
             Some(format!(r#"{{"ok":true,"ran":{}}}"#, ran))
         }
         ("GET",  "/automation/status") => {
-            let s = STATE.lock().unwrap();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let enabled = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
             let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
             Some(format!(

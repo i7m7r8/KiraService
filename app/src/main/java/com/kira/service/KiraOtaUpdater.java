@@ -105,8 +105,13 @@ public class KiraOtaUpdater {
 
                 int remoteVer = parseTagVersion(tag);
                 int localVer  = parseInstalledVersion();
-                Log.i(TAG, "Version check: local=" + localVer + " remote=" + remoteVer + " tag=" + tag);
-                if (remoteVer > 0 && localVer >= remoteVer) {
+                String installedTag = getInstalledTag();
+                Log.i(TAG, "OTA check: local=" + localVer + " remote=" + remoteVer
+                    + " tag=" + tag + " installedTag=" + installedTag);
+                // Up to date if: same tag OR remote version not newer
+                boolean sameTag = !installedTag.isEmpty() && installedTag.equals(tag);
+                boolean notNewer = remoteVer > 0 && localVer >= remoteVer;
+                if (sameTag || notNewer) {
                     if (callback != null) handler.post(callback::onUpToDate);
                     return;
                 }
@@ -290,6 +295,7 @@ public class KiraOtaUpdater {
                 if (result != null && result.toLowerCase().contains("success")) {
                     String ver = getInstalledVersion();
                     RustBridge.otaOnInstalled(ver);
+                    saveInstalledTag(tag);
                     apk.delete();
                     handler.post(() -> sendSuccessNotification(tag));
                     if (callback != null) handler.post(() -> callback.onSuccess(ver));
@@ -392,6 +398,17 @@ public class KiraOtaUpdater {
     private String getInstalledVersion() {
         try { return ctx.getPackageManager().getPackageInfo(ctx.getPackageName(),0).versionName; }
         catch (Exception e) { return "unknown"; }
+    }
+
+    /** Get the full build tag stored after last OTA install, or empty string */
+    private String getInstalledTag() {
+        return ctx.getSharedPreferences("kira_ota", android.content.Context.MODE_PRIVATE)
+            .getString("installed_tag", "");
+    }
+
+    private void saveInstalledTag(String tag) {
+        ctx.getSharedPreferences("kira_ota", android.content.Context.MODE_PRIVATE)
+            .edit().putString("installed_tag", tag).apply();
     }
 
     /** Get the installed APK as delta baseline. Returns null if inaccessible. */

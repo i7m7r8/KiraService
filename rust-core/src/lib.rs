@@ -5670,6 +5670,8 @@ fn route_channels(method: &str, path: &str, body: &str) -> Option<String> {
         _ => None,
     }
 }
+
+fn s_push_event(event: &str, data: &str) {
     let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
     s.event_feed.push_back(EventFeedEntry {
         event: event.to_string(),

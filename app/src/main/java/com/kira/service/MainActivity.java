@@ -805,7 +805,11 @@ public class MainActivity extends Activity
         }
         ai.chat(text, new KiraAI.Callback() {
             @Override public void onThinking() {
-                uiHandler.post(() -> { if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); } });
+                uiHandler.post(() -> {
+                    try {
+                        if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); }
+                    } catch (Throwable t) { android.util.Log.e("Kira","onThinking crash",t); }
+                });
             }
             @Override public void onTool(String name, String result) {
                 ConvTurn toolTurn = new ConvTurn("tool", "? " + name + ": " + result.substring(0, Math.min(100, result.length())));
@@ -814,29 +818,44 @@ public class MainActivity extends Activity
             }
             @Override public void onReply(String reply) {
                 uiHandler.post(() -> {
-                    if (kiraTurn[0] != null) {
-                        kiraTurn[0].text = reply;
-                        updateThinkingBubble(kiraTurn[0], reply);
-                    } else {
-                        kiraTurn[0] = new ConvTurn("kira", reply);
-                        conversation.add(kiraTurn[0]);
-                        addKiraBubble(kiraTurn[0]);
+                    try {
+                        stopBorderPulse();
+                        stopSubtitleCycle();
+                        if (kiraTurn[0] != null) {
+                            kiraTurn[0].text = reply;
+                            updateThinkingBubble(kiraTurn[0], reply);
+                        } else {
+                            kiraTurn[0] = new ConvTurn("kira", reply);
+                            conversation.add(kiraTurn[0]);
+                            addKiraBubble(kiraTurn[0]);
+                        }
+                        if (sendBtn != null) sendBtn.setEnabled(true);
+                        if (headerSubtitle != null) headerSubtitle.setText("ready \u00B7 " + cfg.userName.toLowerCase());
+                        scrollToBottom();
+                    } catch (Throwable t) {
+                        android.util.Log.e("Kira", "onReply crash", t);
+                        if (sendBtn != null) sendBtn.setEnabled(true);
+                        addSystemNotice("UI error displaying reply: " + t.getMessage());
                     }
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    stopSubtitleCycle(); if (headerSubtitle != null) if (headerSubtitle != null) headerSubtitle.setText("ready \u00B7 " + cfg.userName.toLowerCase());
-                    scrollToBottom();
                 });
             }
             @Override public void onError(String error) {
                 final String safeError = (error != null && !error.isEmpty())
                     ? error : "Unknown error — check logcat for details";
                 uiHandler.post(() -> {
-                    removeThinkingBubble();
-                    ConvTurn errTurn = new ConvTurn("error", safeError);
-                    conversation.add(errTurn);
-                    addErrorBubble(errTurn);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("error");
+                    try {
+                        stopBorderPulse();
+                        stopSubtitleCycle();
+                        removeThinkingBubble();
+                        ConvTurn errTurn = new ConvTurn("error", safeError);
+                        conversation.add(errTurn);
+                        addErrorBubble(errTurn);
+                        if (sendBtn != null) sendBtn.setEnabled(true);
+                        if (headerSubtitle != null) headerSubtitle.setText("error");
+                    } catch (Throwable t) {
+                        android.util.Log.e("Kira","onError crash",t);
+                        if (sendBtn != null) sendBtn.setEnabled(true);
+                    }
                 });
             }
         });
@@ -1339,14 +1358,7 @@ public class MainActivity extends Activity
     public void onKiraReplied() {
         if (isFinishing() || isDestroyed()) return;
         fireLightning(0); // L6: reply arc — burst triggered automatically by thinking→false
-        // Stop header border pulse
-        View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
-        if (hb != null) {
-            Object p = hb.getTag(R.id.tag2);
-            if (p instanceof android.animation.ObjectAnimator)
-                ((android.animation.ObjectAnimator) p).cancel();
-            hb.setBackgroundColor(0x44B4BEFE);
-        }
+        stopBorderPulse();
         hideTypingIndicator();
         // Signal Rust: burst + stop thinking
         new Thread(() -> { try {
@@ -2066,7 +2078,19 @@ public class MainActivity extends Activity
     }
 
     private void scrollToBottom() {
-        chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN));
+        if (chatScroll != null)
+            chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void stopBorderPulse() {
+        try {
+            View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
+            if (hb == null) return;
+            Object p = hb.getTag(R.id.tag2);
+            if (p instanceof android.animation.ObjectAnimator)
+                ((android.animation.ObjectAnimator) p).cancel();
+            hb.setBackgroundColor(0x44B4BEFE);
+        } catch (Throwable ignored) {}
     }
 
     private void copyText(String text) {

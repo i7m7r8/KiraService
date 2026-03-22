@@ -1806,7 +1806,7 @@ pub fn call_llm_sync(
         stream.set_read_timeout(Some(std::time::Duration::from_secs(60)))
             .map_err(|e| e.to_string())?;
         let request = format!(
-            "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\n             Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             path, host, api_key, body.len(), body
         );
         stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
@@ -8952,14 +8952,7 @@ pub fn https_post(
 
     // Write HTTP/1.1 request
     let request = format!(
-        "POST {} HTTP/1.1
-         Host: {}
-         Authorization: Bearer {}
-         Content-Type: application/json
-         Content-Length: {}
-         Connection: close
-         
-         {}",
+        "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         path, host, auth_token, body.len(), body
     );
     tls_stream.write_all(request.as_bytes())
@@ -8983,8 +8976,10 @@ pub fn https_post(
     // Strip HTTP headers — find blank line
     if let Some(body_start) = resp_str.find("
 
-") {
-        Ok(resp_str[body_start + 4..].to_string())
+").or_else(|| resp_str.find("
+
+")) {
+        Ok(resp_str[body_start + sep.len()..].to_string())
     } else {
         Ok(resp_str)
     }

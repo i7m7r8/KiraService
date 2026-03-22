@@ -1392,24 +1392,63 @@ Context: {}",
         env: JNIEnv, _c: JObject,
         message:       *const c_char,
         session_id:    *const c_char,
-        max_tool_steps: i32,
+        _max_tool_steps: i32,
     ) -> JString {
-        let msg  = cs_safe(message, 32768);
-        let sess = cs_safe(session_id, 64);
-        let body = format!(
-            r#"{{"message":"{}","session":"{}","max_tool_steps":{}}}"#,
-            esc(&msg), esc(&sess), max_tool_steps
-        );
-        // IMPORTANT: do NOT spawn a new thread here.
-        // KiraAI-Chat thread already has 8MB stack (set in Java KiraAI.java).
-        // Spawning another thread inside JNI doubles stack usage → stack overflow → SIGABRT.
-        // catch_unwind here catches any Rust panic before it crosses the JNI boundary.
-        let result = match std::panic::catch_unwind(
-            std::panic::AssertUnwindSafe(|| route_http("POST", "/ai/chat", &body))
-        ) {
-            Ok(r)  => r,
-            Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
+        let user_msg = cs_safe(message, 16384);
+
+        // Read config + history under lock, then release lock before network call.
+        // Holding a Mutex across a network call = deadlock risk if another JNI
+        // call comes in while waiting.
+        let (api_key, base_url, model, system, history) = {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let cfg = &s.config;
+
+            if cfg.api_key.is_empty() {
+                let err = r#"{"error":"no API key — go to Settings and add one","done":true}"#;
+                return unsafe { jni_str(env, err) };
+            }
+
+            let persona = if cfg.persona.is_empty() {
+                "You are Kira, an AI agent on Android. Be concise and helpful.".to_string()
+            } else {
+                cfg.persona.clone()
+            };
+            let system_prompt = build_system_prompt(&s, &persona);
+
+            // Push user turn to history
+            s.request_count += 1;
+            push_turn_compressed(&mut s, "user", &user_msg);
+
+            let hist = decompress_context(&s);
+            (cfg.api_key.clone(), cfg.base_url.clone(), cfg.model.clone(), system_prompt, hist)
+        }; // lock released here
+
+        // Call LLM directly — no route_http, no HTTP server, no panic risk from routing.
+        // catch_unwind protects against any panic in network / TLS code.
+        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            call_llm_sync(&api_key, &base_url, &model, &system, &history)
+        })) {
+            Ok(Ok(reply)) => {
+                // Store assistant reply in history
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                push_turn_compressed(&mut s, "assistant", &reply);
+                s.theme.is_thinking = false;
+                let safe_reply = esc(&reply);
+                format!(r#"{{"content":"{}","tools_used":"[]","done":true}}"#, safe_reply)
+            }
+            Ok(Err(e)) => {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.theme.is_thinking = false;
+                format!(r#"{{"error":"{}","done":true}}"#, esc(&e))
+            }
+            Err(_) => {
+                // Panic caught — safe to continue
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.theme.is_thinking = false;
+                r#"{"error":"Rust panicked during LLM call — check your API key and network","done":true}"#.to_string()
+            }
         };
+
         unsafe { jni_str(env, &result) }
     }
 

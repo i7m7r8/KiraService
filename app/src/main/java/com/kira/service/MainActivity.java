@@ -1337,6 +1337,7 @@ public class MainActivity extends Activity
 
     /** Called by KiraAI when a response is fully received — triggers burst */
     public void onKiraReplied() {
+        if (isFinishing() || isDestroyed()) return;
         fireLightning(0); // L6: reply arc — burst triggered automatically by thinking→false
         // Stop header border pulse
         View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
@@ -2084,91 +2085,45 @@ public class MainActivity extends Activity
 
     /** Draw and immediately decay a lightning event on the root overlay. */
     private void fireLightning(int type) {
-        android.view.ViewGroup root = (android.view.ViewGroup)
-            getWindow().getDecorView().getRootView();
+        // Guard: cannot call getWindow() after onDestroy
+        if (isFinishing() || isDestroyed()) return;
+        android.view.ViewGroup root;
+        try {
+            root = (android.view.ViewGroup) getWindow().getDecorView().getRootView();
+        } catch (Throwable ignored) { return; }
 
-        android.view.View bolt = new android.view.View(this) {
-            private final android.graphics.Paint lp =
-                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-            private float alpha = 1f;
-            private final long born = System.currentTimeMillis();
-            private final android.graphics.Path path = new android.graphics.Path();
-            private boolean built = false;
-
-            @Override protected void onDraw(android.graphics.Canvas canvas) {
-                long age = System.currentTimeMillis() - born;
-                if (age > 250) { setVisibility(GONE); return; }
-                alpha = 1f - age / 250f;
-                int w = getWidth(), h = getHeight();
-                if (!built && w > 0) {
-                    built = true;
-                    switch (type) {
-                        case 0: { // Reply: branching arc from K badge area to center-bottom
-                            float sx = dp(44), sy = dp(52);  // K badge position
-                            float ex = w * 0.5f, ey = h * 0.65f;
-                            path.moveTo(sx, sy);
-                            // 3 jagged branches
-                            float mx1 = sx + (ex-sx)*0.33f + 20, my1 = sy + (ey-sy)*0.33f - 30;
-                            float mx2 = ex - (ex-sx)*0.33f - 20, my2 = ey - (ey-sy)*0.33f + 20;
-                            path.lineTo(mx1, my1);
-                            path.lineTo(mx1 + 30, my1 + 40); // branch 1
-                            path.moveTo(mx1, my1);
-                            path.lineTo(mx2, my2);
-                            path.lineTo(mx2 - 25, my2 + 35); // branch 2
-                            path.moveTo(mx2, my2);
-                            path.lineTo(ex, ey);
-                            lp.setStrokeWidth(dp(2));
-                            lp.setColor(0xFFB4BEFE); // Lavender
-                            break;
-                        }
-                        case 1: { // Macro: horizontal streak top 4dp
-                            path.moveTo(0, dp(2));
-                            path.lineTo(w, dp(2));
-                            lp.setStrokeWidth(dp(4));
-                            lp.setColor(0xFFFAB387); // Peach
-                            break;
-                        }
-                        case 2: { // Shizuku: 4 radial lines from status dot
-                            float cx = w - dp(22), cy = dp(26); // status dot position
-                            for (int i = 0; i < 4; i++) {
-                                double ang = i * Math.PI / 2;
-                                path.moveTo(cx, cy);
-                                path.lineTo(cx + (float)(Math.cos(ang) * dp(28)),
-                                            cy + (float)(Math.sin(ang) * dp(28)));
-                            }
-                            lp.setStrokeWidth(dp(2));
-                            lp.setColor(0xFFA6E3A1); // Green
-                            break;
-                        }
-                    }
-                    lp.setStyle(android.graphics.Paint.Style.STROKE);
-                    lp.setStrokeCap(android.graphics.Paint.Cap.ROUND);
-                    lp.setStrokeJoin(android.graphics.Paint.Join.ROUND);
-                }
-                lp.setAlpha((int)(alpha * 178)); // 70% max
-                canvas.drawPath(path, lp);
-                // 1-frame white flash at origin on first frame
-                if (age < 32) {
-                    android.graphics.Paint flash = new android.graphics.Paint();
-                    flash.setColor(0xFFFFFFFF);
-                    flash.setAlpha((int)(( 1f - age/32f) * 100));
-                    canvas.drawCircle(type == 0 ? dp(44) : (type == 2 ? getWidth()-dp(22) : 0),
-                                      type == 0 ? dp(52) : (type == 2 ? dp(26) : dp(2)), dp(8), flash);
-                }
-                postInvalidateDelayed(16);
-            }
-
-            private int dp(int v) {
-                return Math.round(v * getResources().getDisplayMetrics().density);
-            }
-        };
+        // Use a simple semi-transparent colored bar — NO postInvalidateDelayed loop.
+        // postInvalidateDelayed inside onDraw on a removed view = ViewRootImpl crash.
+        int color;
+        switch (type) {
+            case 1:  color = 0x88FAB387; break; // Peach — macro
+            case 2:  color = 0x88A6E3A1; break; // Green — shizuku
+            default: color = 0x88B4BEFE; break; // Lavender — reply
+        }
+        android.view.View bolt = new android.view.View(this);
+        bolt.setBackgroundColor(color);
+        bolt.setClickable(false);
+        bolt.setFocusable(false);
         bolt.setLayoutParams(new android.view.ViewGroup.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT));
-        bolt.setClickable(false); bolt.setFocusable(false);
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(3)));
         root.addView(bolt);
-        // Auto-remove after animation
-        uiHandler.postDelayed(() -> root.removeView(bolt), 300);
+
+        // Animate with ValueAnimator — cancellable, no onDraw recursion
+        android.animation.ValueAnimator va =
+            android.animation.ValueAnimator.ofFloat(1f, 0f);
+        va.setDuration(280);
+        va.addUpdateListener(a -> {
+            if (bolt.getParent() != null)
+                bolt.setAlpha((float) a.getAnimatedValue());
+        });
+        va.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                if (bolt.getParent() == root) {
+                    try { root.removeView(bolt); } catch (Throwable ignored) {}
+                }
+            }
+        });
+        va.start();
     }
 
     private String buildToolExample(String tool) {

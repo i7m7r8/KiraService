@@ -103,7 +103,7 @@ public class KiraTelegram {
 
             // Allowlist check
             if (cfg.tgAllowed != 0 && chatId != cfg.tgAllowed) {
-                sendMessage(cfg.tgToken, chatId, "\u{1F510} Unauthorized. Contact the owner.");
+                sendMessage(cfg.tgToken, chatId, "🔐 Unauthorized. Contact the owner.");
                 continue;
             }
 
@@ -114,7 +114,7 @@ public class KiraTelegram {
 
             // Send placeholder "thinking" message — we'll edit it as response streams in
             final long[] placeholderMsgId = {0};
-            String placeholder = sendMessageWithId(cfg.tgToken, chatId, "\u{1F914}\u{FE0F} Thinking...");
+            String placeholder = sendMessageWithId(cfg.tgToken, chatId, "🤔️ Thinking...");
             if (placeholder != null) {
                 try { placeholderMsgId[0] = Long.parseLong(placeholder); } catch (Exception ignored) {}
             }
@@ -133,16 +133,16 @@ public class KiraTelegram {
                     long now = System.currentTimeMillis();
                     if (now - lastEditMs.get() < EDIT_THROTTLE_MS) return;
                     currentText.setLength(0);
-                    currentText.append(partialReply).append(" \u{23F3}");
+                    currentText.append(partialReply).append(" ⏳");
                     editMessage(token, finalChatId, placeholderMsgId[0], currentText.toString());
                     lastEditMs.set(now);
                 }
 
                 @Override public void onTool(String name, String result) {
                     if (placeholderMsgId[0] == 0) return;
-                    String toolLine = "\u{1F527} " + name + "...\n\n";
+                    String toolLine = "🔧 " + name + "...\n\n";
                     editMessage(token, finalChatId, placeholderMsgId[0],
-                        toolLine + (currentText.length() > 0 ? currentText.toString() : "\u{23F3}"));
+                        toolLine + (currentText.length() > 0 ? currentText.toString() : "⏳"));
                 }
 
                 @Override public void onReply(String reply) {
@@ -160,7 +160,7 @@ public class KiraTelegram {
                 }
 
                 @Override public void onError(String error) {
-                    String msg = "\u{26A0}\u{FE0F} " + (error != null ? error : "Unknown error");
+                    String msg = "⚠️ " + (error != null ? error : "Unknown error");
                     if (placeholderMsgId[0] != 0) {
                         editMessage(token, finalChatId, placeholderMsgId[0], msg);
                     } else {
@@ -284,8 +284,17 @@ public class KiraTelegram {
             .replace("\\n","\n").replace("\\\"","\"");
     }
     private String escapeJson(String s) {
-        return s.replace("\\","\\\\").replace("\"","\\"")
-                .replace("\n","\\n").replace("\r","\\r")
-                .replace("\t","\\t");
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if      (c == '\\') { sb.append('\\'); sb.append('\\'); }
+            else if (c == '"')   { sb.append('\\'); sb.append('"'); }
+            else if (c == '\n')  { sb.append('\\'); sb.append('n'); }
+            else if (c == '\r')  { sb.append('\\'); sb.append('r'); }
+            else if (c == '\t')  { sb.append('\\'); sb.append('t'); }
+            else                  { sb.append(c); }
+        }
+        return sb.toString();
     }
 }

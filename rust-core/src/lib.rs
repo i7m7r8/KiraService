@@ -2043,8 +2043,8 @@ fn extract_llm_content(json: &str) -> Option<String> {
             if bytes[end] == b'"' && (end == 0 || bytes[end-1] != b'\\') { break; }
             end += 1;
         }
-        let s = &json[start..end];
-        if s.is_empty() { None } else { Some(unescape(s)) }
+        // Return Some even for empty string — empty content is a valid response
+        Some(unescape(&json[start..end]))
     }
 
     // 1. OpenAI / Groq / Together / LLaMA: {"choices":[{"message":{"content":"..."}}]}

@@ -590,18 +590,27 @@ You are executing a multi-step task autonomously.
                 return r#"{"error":"no API key — go to settings and add one","done":true}"#.to_string();
             }
 
-            // Push user message to compressed history
+            let now = now_ms();
+
+            // Record user turn in legacy buffer AND session_store
             {
                 let mut s = STATE.lock().unwrap();
                 s.request_count += 1;
                 s.theme.is_thinking = true;
                 push_turn_compressed(&mut s, "user", &user_msg);
+                // Session 4: authoritative session record
+                s.session_store.get_or_create(&session_id, "kira", now);
+                s.session_store.add_turn(&session_id, "user", &user_msg, now);
             }
 
-            // Build messages array from compressed history
+            // Build context — prefer session_store (includes compact summary)
             let context = {
                 let s = STATE.lock().unwrap();
-                decompress_context(&s)
+                if s.session_store.get(&session_id).is_some() {
+                    s.session_store.build_context(&session_id)
+                } else {
+                    decompress_context(&s)
+                }
             };
 
             // Call LLM
@@ -620,7 +629,7 @@ You are executing a multi-step task autonomously.
             let mut reply  = clean_reply(&raw);
             let mut tools_used: Vec<String> = Vec::new();
 
-            // Tool execution loop (max_steps iterations)
+            // Tool execution loop
             if !tool_calls.is_empty() {
                 let mut pending = tool_calls;
                 let mut step = 0;
@@ -629,10 +638,8 @@ You are executing a multi-step task autonomously.
                     let mut tool_results = String::new();
                     for (tname, targs) in &pending {
                         let result = dispatch_tool(tname, targs);
-                        tool_results.push_str(&format!("[{}]: {}
-", tname, result));
+                        tool_results.push_str(&format!("[{}]: {}\n", tname, result));
                         tools_used.push(tname.clone());
-                        // Queue shell commands for Java to execute if needed
                         if tname == "run_shell" || result.starts_with("__shell__") {
                             let mut s = STATE.lock().unwrap();
                             s.pending_shell.push_back(ShellJob {
@@ -643,17 +650,12 @@ You are executing a multi-step task autonomously.
                             });
                         }
                     }
-                    // Build follow-up context
                     let mut ctx2 = context.clone();
                     ctx2.push(("assistant".into(), raw.clone()));
                     ctx2.push(("user".into(),
-                        format!("[tool results]
-{}respond to the user now.", tool_results)));
+                        format!("[tool results]\n{}respond to the user now.", tool_results)));
                     match call_llm_sync(&api_key, &base_url, &model, &system_prompt, &ctx2) {
-                        Ok(r2) => {
-                            reply   = clean_reply(&r2);
-                            pending = parse_tool_calls(&r2);
-                        }
+                        Ok(r2) => { reply = clean_reply(&r2); pending = parse_tool_calls(&r2); }
                         Err(_) => break,
                     }
                 }
@@ -661,23 +663,47 @@ You are executing a multi-step task autonomously.
 
             if reply.is_empty() { reply = "done.".into(); }
 
-            // Push assistant reply to compressed history
+            // Record assistant reply + persist + auto-compact
+            let needs_compact;
             {
+                let now2 = now_ms();
                 let mut s = STATE.lock().unwrap();
                 push_turn_compressed(&mut s, "assistant", &reply);
+                s.session_store.add_turn(&session_id, "assistant", &reply, now2);
                 s.theme.is_thinking = false;
                 s.tool_call_count += tools_used.len() as u64;
+                // Session 4: persist after every assistant reply
+                s.session_store.save_transcript(&session_id);
+                s.session_store.save_index();
+                needs_compact = s.session_store.needs_compact(&session_id);
+            }
+
+            // Session 4: auto-compact in background if over threshold
+            if needs_compact {
+                let (api2, url2, mdl2) = {
+                    let s = STATE.lock().unwrap();
+                    (s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
+                };
+                let sid = session_id.clone();
+                std::thread::spawn(move || {
+                    if let Ok(mut s) = STATE.lock() {
+                        if let Ok(_) = crate::ai::compaction::compact_session(
+                            &mut s.session_store, &sid, &api2, &url2, &mdl2, false
+                        ) {
+                            s.session_store.save_transcript(&sid);
+                            s.session_store.save_index();
+                        }
+                    }
+                });
             }
 
             let tools_json: String = tools_used.iter()
                 .map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(",");
             format!(
-                r#"{{"role":"assistant","content":"{}","tools_used":[{}],"done":true}}"#,
-                esc(&reply), tools_json
+                r#"{{"role":"assistant","content":"{}","tools_used":[{}],"done":true,"session":"{}"}}"#,
+                esc(&reply), tools_json, esc(&session_id)
             )
         }
-
-        // GET /ai/history — current compressed context as readable JSON
         ("GET",  "/ai/history") => {
             let s = STATE.lock().unwrap();
             let turns = decompress_context(&s);
@@ -1403,9 +1429,83 @@ You are executing a multi-step task autonomously.
         ("POST", "/skills/enable")     => { let name=extract_json_str(body,"name").unwrap_or_default(); if let Some(sk)=STATE.lock().unwrap().skills.get_mut(&name) { sk.enabled=true; } r#"{"ok":true}"#.to_string() }
         ("POST", "/skills/disable")    => { let name=extract_json_str(body,"name").unwrap_or_default(); if let Some(sk)=STATE.lock().unwrap().skills.get_mut(&name) { sk.enabled=false; } r#"{"ok":true}"#.to_string() }
 
-        // v7: Sessions
+        // v7: Sessions (legacy)
         ("GET",  "/sessions")          => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.sessions.values().map(|sess| format!(r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"last_msg":{}}}"#, sess.id,sess.channel,sess.turns,sess.tokens,sess.last_msg)).collect(); format!("[{}]", items.join(",")) }
         ("POST", "/sessions/new")      => new_session(body),
+
+        // ── Session 4: Persistent session store ─────────────────────────────
+
+        // GET /sessions/v2 — list all sessions from session_store (sorted by recency)
+        ("GET",  "/sessions/v2") => {
+            let s = STATE.lock().unwrap();
+            s.session_store.list_sessions_json()
+        }
+
+        // GET /sessions/v2/:key — full transcript for one session
+        _ if method == "GET" && path_clean.starts_with("/sessions/v2/") && !path_clean.contains("compact") => {
+            let key = &path_clean["/sessions/v2/".len()..];
+            let s   = STATE.lock().unwrap();
+            match s.session_store.get(key) {
+                None => r#"{"error":"session not found"}"#.to_string(),
+                Some(sess) => {
+                    let sess_json = sess.to_json();
+                    let turns = s.session_store.get_turns(key);
+                    let turns_json: Vec<String> = turns.iter().map(|t| t.to_json()).collect();
+                    format!(r#"{{"session":{},"turns":[{}]}}"#,
+                        sess_json, turns_json.join(","))
+                }
+            }
+        }
+
+        // DELETE /sessions/v2/:key — delete session + transcript from disk
+        _ if method == "DELETE" && path_clean.starts_with("/sessions/v2/") => {
+            let key = path_clean["/sessions/v2/".len()..].to_string();
+            let mut s = STATE.lock().unwrap();
+            if s.session_store.delete_and_purge(&key) {
+                r#"{"ok":true}"#.to_string()
+            } else {
+                r#"{"error":"session not found"}"#.to_string()
+            }
+        }
+
+        // POST /sessions/v2/:key/compact — force compact a session now
+        _ if method == "POST" && path_clean.starts_with("/sessions/v2/") && path_clean.ends_with("/compact") => {
+            let without_suffix = &path_clean[..path_clean.len() - "/compact".len()];
+            let key2 = without_suffix["/sessions/v2/".len()..].to_string();
+            let (api_key, base_url, model) = {
+                let s = STATE.lock().unwrap();
+                (s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
+            };
+            if api_key.is_empty() {
+                return r#"{"error":"no API key configured"}"#.to_string();
+            }
+            let result = {
+                let mut s = STATE.lock().unwrap();
+                crate::ai::compaction::compact_session(
+                    &mut s.session_store, &key2, &api_key, &base_url, &model, true
+                )
+            };
+            match result {
+                Ok(summary) => {
+                    // Persist after compaction
+                    let mut s = STATE.lock().unwrap();
+                    s.session_store.save_transcript(&key2);
+                    s.session_store.save_index();
+                    format!(r#"{{"ok":true,"summary":"{}","session":"{}"}}"#,
+                        esc(&summary), esc(&key2))
+                }
+                Err(reason) => format!(r#"{{"ok":false,"reason":"{}"}}"#, esc(&reason)),
+            }
+        }
+
+        // POST /sessions/v2/prune — prune sessions inactive > ttl_hours
+        ("POST", "/sessions/v2/prune") => {
+            let ttl_hours = extract_json_num(body, "ttl_hours").unwrap_or(72.0) as u128;
+            let ttl_ms    = ttl_hours * 3600 * 1000;
+            let mut s     = STATE.lock().unwrap();
+            let pruned    = s.session_store.prune_inactive(now_ms(), ttl_ms);
+            format!(r#"{{"ok":true,"pruned":{}}}"#, pruned)
+        }
 
         // v7: Triggers
         ("GET",  "/triggers")          => { let s=STATE.lock().unwrap(); let items: Vec<String>=s.triggers.iter().map(|t| format!(r#"{{"id":"{}","type":"{}","value":"{}","fired":{},"repeat":{}}}"#, t.id,t.trigger_type,esc(&t.value),t.fired,t.repeat)).collect(); format!("[{}]", items.join(",")) }

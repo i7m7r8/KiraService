@@ -1205,6 +1205,14 @@ struct KiraState {
     // ── Session 18: Security / pairing ─────────────────────────────────────
     pairing_codes:   std::collections::HashMap<String, String>, // sender → code
     channel_allowlists: std::collections::HashMap<String, Vec<String>>,
+
+    // ── Session 4: Persistent SessionStore ─────────────────────────────────
+    // Replaces the bare HashMap<String, Session> above for new sessions.
+    // Old `sessions` field kept for legacy routes; session_store is authoritative.
+    pub session_store: crate::gateway::sessions::SessionStore,
+
+    // Panic hook storage (jni_bridge)
+    pub last_panic:  String,
 }
 
 // Sub-structs (v7, unchanged)

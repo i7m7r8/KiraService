@@ -93,6 +93,12 @@ mod jni_bridge {
             s.providers    = make_providers();
             let sess = Session { id:"default".into(), channel:"kira".into(), created:now_ms(), last_msg:now_ms(), ..Default::default() };
             s.sessions.insert("default".into(), sess);
+
+            // ── Session 4: Load persisted sessions from disk ────────────────
+            s.session_store.load_from_disk();
+            // Ensure "default" session always exists in store
+            let now = now_ms();
+            s.session_store.get_or_create("default", "kira", now);
             // Default profiles
             s.profiles = vec![
                 AutoProfile { id:"default".into(), name:"Default".into(), active:true,  auto_activate_trigger:String::new(), auto_activate_value:String::new() },

@@ -35,4 +35,4 @@ pub use subagents::{
     SpawnRequest, SUBAGENT_REGISTRY,
     spawn_subagent, register_subagent_fns,
 };
-pub use compaction::compact_turns;
+pub use compaction::{compact_turns, compact_session, CompactionConfig};

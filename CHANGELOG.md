@@ -1,3 +1,51 @@
+## v0.1.8 — Session 4: Persistent SessionStore + LLM Compaction (2026-03-22)
+
+### Session 4 — Full Session Model with Disk Persistence
+
+**`gateway/sessions.rs`** — complete rewrite (~450 lines):
+- `SessionStore` — authoritative session registry replacing bare `HashMap<String, Session>`
+- Per-session LZ4-compressed transcript storage: `VecDeque<Vec<u8>>` (pack_turn/unpack_turn)
+- `save_index()` — persists all session metadata to `/data/data/com.kira.service/sessions/index.json`
+- `save_transcript(session_id)` — LZ4-compresses transcript, writes to `sessions/<id>.lz4`
+- `load_from_disk()` — called at startup; restores all sessions + transcripts from disk
+- `build_context(session_id)` — prepends compact summary as synthetic turns before live history
+- `compact_collect_dropped()` — trims oldest turns, returns them for LLM summarisation
+- `apply_compact_summary()` — stores LLM summary, marks session as compacted
+- `needs_compact()` — true when token_estimate > compact_threshold (default 100K tokens)
+- `delete_and_purge()` — removes from memory + deletes `.lz4` file + saves index
+- `prune_inactive(ttl_ms)` — bulk-delete + purge sessions inactive longer than TTL
+- `Session` — new fields: `token_estimate`, `compacted`, `compact_summary`
+- Minimal JSON helpers (no serde): `extract_str`, `extract_u64`, `split_json_array`
+
+**`ai/compaction.rs`** — full Session 4 upgrade (~200 lines):
+- `compact_session()` — main entry point: collect dropped turns → call LLM → store summary
+- `COMPACTION_PROMPT` — OpenClaw-parity summarisation prompt (3–6 sentence concise summary)
+- `call_llm_for_summary()` — thin wrapper calling existing `call_llm_sync` with no history
+- `extract_content_text()` — parses OpenAI response JSON to get text content
+- `CompactionConfig` — `token_threshold()` helper; default 85% of 128K = ~108K tokens
+- Legacy `compact_turns()` / `needs_compaction()` kept for `/ai/agent` + `/ai/chain` paths
+
+**`http.rs`** — `/ai/chat` wired to SessionStore + 5 new routes:
+- `/ai/chat` now records every user+assistant turn to `session_store`, saves to disk after each reply
+- Auto-compaction: spawns background thread if `needs_compact()` returns true after reply
+- Context building: `session_store.build_context()` used (includes compact summary if present)
+- `GET  /sessions/v2` — list all sessions sorted by recency with full metadata
+- `GET  /sessions/v2/:key` — full session metadata + all transcript turns
+- `DELETE /sessions/v2/:key` — delete session from memory and disk
+- `POST /sessions/v2/:key/compact` — force-compact a session now (calls LLM)
+- `POST /sessions/v2/prune` — prune sessions inactive > `ttl_hours` (default 72h)
+
+**`lib.rs`** — `KiraState`:
+- New field: `pub session_store: SessionStore` — authoritative store
+- New field: `pub last_panic: String` — for JNI panic hook
+- Legacy `sessions: HashMap<String, Session>` kept for backwards compat
+
+**`jni_bridge.rs`** — `startServer`:
+- Calls `session_store.load_from_disk()` at startup to restore all sessions
+- Ensures `default` session always exists in store after load
+
+---
+
 ## v0.0.2 — Crash Fix + Neural Glass Crash Reporter
 
 ### Critical Bug Fixes

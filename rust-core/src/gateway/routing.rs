@@ -46,7 +46,7 @@ impl AgentConfig {
     }
 
     pub fn to_json(&self) -> String {
-        let skills_json: Vec<String> = self.skill_ids.iter()
+        let _skills_json: Vec<String> = self.skill_ids.iter()
             .map(|s| format!("\"{}\"", s))
             .collect();
         format!(

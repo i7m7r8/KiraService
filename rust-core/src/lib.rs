@@ -5421,7 +5421,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
             let q_lower = query.to_lowercase();
             let terms: Vec<&str> = q_lower.split_whitespace().collect();
 
-            let mut results: Vec<String> = s.memory_index.iter()
+            let results: Vec<String> = s.memory_index.iter()
                 .filter(|e| {
                     if terms.is_empty() { return true; }
                     let hay = format!("{} {}",

@@ -61,7 +61,7 @@ pub fn escape_md_v2(s: &str) -> String {
 pub fn parse_updates(json: &str) -> Vec<TgUpdate> {
     let mut updates = Vec::new();
     let mut pos = 0;
-    let bytes = json.as_bytes();
+    let _bytes = json.as_bytes();
 
     // Find each "update_id" occurrence
     while let Some(uid_pos) = json[pos..].find("\"update_id\":")

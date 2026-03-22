@@ -105,6 +105,10 @@ pub enum DmPolicy {
     Deny,
 }
 
+impl Default for DmPolicy {
+    fn default() -> Self { DmPolicy::Pairing }
+}
+
 impl DmPolicy {
     pub fn from_str(s: &str) -> Self {
         match s {

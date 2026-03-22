@@ -156,9 +156,12 @@
         </receiver>
 
         <!-- Crash display activity — shown instead of system crash dialog -->
+        <!-- CrashActivity runs in separate :crash process —
+             survives main process death, shows full trace -->
         <activity
             android:name=".CrashActivity"
             android:exported="false"
+            android:process=":crash"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:excludeFromRecents="true"
             android:screenOrientation="portrait"/>

@@ -32,9 +32,9 @@ webpki-roots     = "0.26"
 opt-level     = "z"
 lto           = "fat"
 codegen-units = 1
-panic         = "abort"
+panic         = "unwind"
 strip         = true
-overflow-checks = true
+overflow-checks = false
 
 [profile.dev]
 opt-level       = 1

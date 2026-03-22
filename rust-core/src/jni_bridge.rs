@@ -1392,7 +1392,7 @@ Context: {}",
         let result = std::thread::Builder::new()
             .stack_size(8 * 1024 * 1024) // 8MB
             .spawn(move || {
-                match std::panic::catch_unwind(|| route_http("POST", "/ai/chat", &body)) {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route_http("POST", "/ai/chat", &body))) {
                     Ok(r)  => r,
                     Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
                 }

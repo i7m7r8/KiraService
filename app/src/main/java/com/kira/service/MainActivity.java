@@ -1264,11 +1264,9 @@ public class MainActivity extends Activity
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER) return;
-        float ax = event.values[0]; // tilt left/right  (–10 to +10)
-        float ay = event.values[1]; // tilt forward/back
-        // Push to Rust for EMA smoothing
-        RustBridge.updateTilt(ax, ay);
-        // Pass normalised tilt directly to GalaxyView (–1 to +1 range)
+        float ax = event.values[0];
+        float ay = event.values[1];
+        // Only update GalaxyView — skip RustBridge.updateTilt to avoid JNI on sensor thread
         if (galaxyView != null) {
             galaxyView.setParallax(ax / 10f, ay / 10f);
         }
@@ -1324,34 +1322,10 @@ public class MainActivity extends Activity
         }
     };
 
-    // Shared OkHttpClient for galaxy poll - never recreate per call
-    private final okhttp3.OkHttpClient animClient = new okhttp3.OkHttpClient.Builder()
-        .connectTimeout(400, java.util.concurrent.TimeUnit.MILLISECONDS)
-        .readTimeout(400, java.util.concurrent.TimeUnit.MILLISECONDS).build();
-
     private void pollGalaxyAnim() {
-        if (galaxyView == null) return;
-        new Thread(() -> {
-            try {
-                okhttp3.Response resp = animClient.newCall(
-                    new okhttp3.Request.Builder()
-                        .url("http://localhost:7070/layer0").get().build()).execute();
-                if (resp.body() == null) return;
-                String j = resp.body().string();
-                float hueShift = parseJsonFloat(j, "hue_shift");
-                float vortex   = parseJsonFloat(j, "vortex");
-                float activity = parseJsonFloat(j, "activity");
-                boolean thinking = j.contains("\"thinking\":true");
-                uiHandler.post(() -> {
-                    galaxyView.setAnimState(hueShift, vortex, activity, thinking);
-                    View hb = homeFragment != null ? homeFragment.findViewById(R.id.headerBorder) : null;
-                    if (hb != null && !thinking) {
-                        int alpha = 0x44 + (int)(activity * 0x22);
-                        hb.setBackgroundColor((alpha << 24) | 0x00B4BEFE);
-                    }
-                });
-            } catch (Exception ignored) {}
-        }).start();
+        // Removed: was spawning a thread every 500ms causing thread leak.
+        // GalaxyView is now driven only by sensor events (setParallax)
+        // and explicit calls (triggerBurst, setAnimState).
     }
 
     /** Called by KiraAI when a response is fully received — triggers burst */
@@ -2373,62 +2347,20 @@ public class MainActivity extends Activity
     }
 
     // ── Layer 9 (via L5): God Mode Halo — Lavender border traces screen edge ──
-    private android.animation.ObjectAnimator haloAnimator;
-    private View haloView;
-
     private void applyGodModeHalo(boolean visible, int color, int revolutionMs) {
-        // Halo is a fixed overlay view on the root window
-        android.view.ViewGroup root = (android.view.ViewGroup)
-            getWindow().getDecorView().getRootView();
+        // Simple: pulse the window background color instead of a custom onDraw view.
+        // Custom anonymous View with onDraw accessing outer-scope variables = crash.
+        View contentFrame = findViewById(R.id.contentFrame);
+        if (contentFrame == null) return;
         if (!visible) {
-            if (haloView != null) {
-                haloView.setVisibility(View.GONE);
-                if (haloAnimator != null) haloAnimator.cancel();
-            }
+            contentFrame.setBackground(null);
             return;
         }
-        // Create halo view if needed
-        if (haloView == null) {
-            haloView = new View(this) {
-                private final android.graphics.Paint haloPaint =
-                    new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-                private float rotation = 0f;
-
-                @Override protected void onDraw(android.graphics.Canvas canvas) {
-                    if (!visible) return;
-                    int w = getWidth(), h = getHeight();
-                    haloPaint.setColor(color);
-                    haloPaint.setStyle(android.graphics.Paint.Style.STROKE);
-                    haloPaint.setStrokeWidth(dp(2));
-                    haloPaint.setAlpha(180);
-                    android.graphics.RectF rect = new android.graphics.RectF(1, 1, w-1, h-1);
-                    // Draw rotating arc: 30dp long, orbiting the screen perimeter
-                    float perimeter = 2f * (w + h);
-                    float arcFraction = dp(30) / perimeter * 360f;
-                    canvas.drawArc(rect, rotation, arcFraction, false, haloPaint);
-                    // ObjectAnimator handles redraw via invalidation
-                }
-
-                private int dp(int v) {
-                    return Math.round(v * getResources().getDisplayMetrics().density);
-                }
-            };
-            haloView.setLayoutParams(new android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT));
-            haloView.setClickable(false);
-            haloView.setFocusable(false);
-            root.addView(haloView);
-        }
-        haloView.setVisibility(View.VISIBLE);
-        // Rotate the arc: full revolution = revolutionMs
-        if (haloAnimator != null) haloAnimator.cancel();
-        haloAnimator = android.animation.ObjectAnimator.ofFloat(haloView, "rotation", 0f, 360f);
-        haloAnimator.setDuration(revolutionMs > 0 ? revolutionMs : 4000);
-        haloAnimator.setRepeatCount(android.animation.ValueAnimator.INFINITE);
-        haloAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
-        haloAnimator.start();
-        haloView.invalidate();
+        android.graphics.drawable.GradientDrawable border = new android.graphics.drawable.GradientDrawable();
+        border.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        border.setStroke(dp(2), color != 0 ? color : 0xFFB4BEFE);
+        border.setColor(0x00000000);
+        contentFrame.setBackground(border);
     }
 
     private void buildSuggestions() {
@@ -2750,16 +2682,7 @@ public class MainActivity extends Activity
                                 macrosEn + " automations · " + macroRuns + " total runs");
                     });
                 }
-                // Halo state
-                okhttp3.Response rh = cl.newCall(new okhttp3.Request.Builder()
-                    .url("http://localhost:7070/settings/shizuku/halo").get().build()).execute();
-                if (rh.body() != null) {
-                    String jh = rh.body().string();
-                    boolean haloVisible = jh.contains("\"visible\":true");
-                    int haloColor = (int)(long) parseJsonDouble(jh, "color");
-                    int revMs     = (int) parseJsonDouble(jh, "revolution_ms");
-                    uiHandler.post(() -> applyGodModeHalo(haloVisible, haloColor, revMs));
-                }
+                // Halo: driven by Shizuku status, not HTTP poll
             } catch (Exception ignored) {}
         }).start();
 

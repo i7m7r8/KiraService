@@ -203,10 +203,7 @@ public class SetupActivity extends Activity implements SensorEventListener {
     public void onSensorChanged(SensorEvent e) {
         if (e.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
             starField.onTilt(e.values[0], e.values[1]);
-            // v38: Rust smooths the parallax; Java still draws independently
-            // but Rust state is available for /theme/tilt endpoint
-            try { RustBridge.updateTilt(e.values[0], e.values[1]); }
-            catch (UnsatisfiedLinkError ignored) {}
+            // updateTilt removed: JNI from sensor thread causes instability
         }
     }
 

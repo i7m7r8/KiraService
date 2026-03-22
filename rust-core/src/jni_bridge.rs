@@ -58,6 +58,12 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_startServer(
         _e: JNIEnv, _c: JObject, port: i32,
     ) {
+        // Guard: only start once. Second call from KiraAccessibilityService is a no-op.
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SERVER_STARTED: AtomicBool = AtomicBool::new(false);
+        if SERVER_STARTED.swap(true, Ordering::SeqCst) {
+            return; // already running
+        }
         let p = port as u16;
         {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());

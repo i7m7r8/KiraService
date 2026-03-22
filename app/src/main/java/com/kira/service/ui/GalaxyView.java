@@ -38,10 +38,17 @@ public class GalaxyView extends View {
     public GalaxyView(Context c) { super(c); paint.setStyle(Paint.Style.FILL); }
     public GalaxyView(Context c, AttributeSet a) { super(c, a); paint.setStyle(Paint.Style.FILL); }
 
+    private long lastInvalidateMs = 0;
+
     public void setParallax(float px, float py) {
         parallaxX = parallaxX * 0.7f + px * 0.3f;
         parallaxY = parallaxY * 0.7f + py * 0.3f;
-        postInvalidate(); // single redraw on sensor update
+        // Throttle redraws to 30fps max — sensor fires at up to 50Hz
+        long now = System.currentTimeMillis();
+        if (now - lastInvalidateMs > 32) {
+            lastInvalidateMs = now;
+            postInvalidate();
+        }
     }
 
     public void triggerBurst() {

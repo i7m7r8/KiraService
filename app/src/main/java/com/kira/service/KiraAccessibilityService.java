@@ -39,8 +39,9 @@ public class KiraAccessibilityService extends AccessibilityService {
         instance = this;
         handler = new Handler(Looper.getMainLooper());
 
-        // Start Rust HTTP server on port 7070
-        try { RustBridge.startServer(7070); } catch (Throwable ignored) {}
+        // startServer intentionally NOT called here.
+        // KiraForegroundService starts it with a rustStarted guard.
+        // Calling it again spawns duplicate background threads → STATE mutex races → SIGABRT.
 
         // Init AI
         ai = new KiraAI(this);

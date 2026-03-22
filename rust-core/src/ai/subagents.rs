@@ -160,7 +160,7 @@ pub fn spawn_subagent(req: SpawnRequest) -> Result<String, String> {
     let goal = req.goal.clone();
     let model_override = req.model.clone();
     let max_steps = req.max_steps;
-    let sid = session_id.clone();
+    let _sid = session_id.clone();
 
     std::thread::spawn(move || {
         // Get LLM config

@@ -180,7 +180,7 @@ pub fn process_inbound(msg: WaInbound) {
     if msg.text.is_empty() { return; }
 
     // Allowlist check
-    let (allowed, dm_policy, allowlist) = {
+    let (allowed, dm_policy, _allowlist) = {
         let s = WA_STATE.lock().unwrap_or_else(|e|e.into_inner());
         let allow = s.allowlist_check(&msg.from);
         (allow, s.config.dm_policy.clone(), s.config.allowlist.clone())

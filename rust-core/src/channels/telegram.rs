@@ -15,7 +15,7 @@
 //   - Allowlist enforcement
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-use super::shared::{DmPolicy, SendResult};
+use super::shared::DmPolicy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -379,7 +379,7 @@ pub fn parse_updates(json: &str) -> Vec<TgUpdate> {
         let obj_end = find_object_end(json, abs).unwrap_or(json.len());
         let fragment = &json[abs..obj_end];
 
-        let update_id = num_field(fragment, "update_id").unwrap_or(0) as i64;
+        let update_id = num_field(fragment, "update_id").unwrap_or(0.0) as i64;
         if update_id == 0 { pos = abs + 10; continue; }
 
         // Navigate into message object
@@ -388,13 +388,13 @@ pub fn parse_updates(json: &str) -> Vec<TgUpdate> {
             .unwrap_or(0);
         let msg = &fragment[msg_start..];
 
-        let chat_id   = nested_num(msg, "chat", "id").unwrap_or(0) as i64;
-        let user_id   = nested_num(msg, "from", "id").unwrap_or(0) as i64;
+        let chat_id   = nested_num(msg, "chat", "id").unwrap_or(0.0) as i64;
+        let user_id   = nested_num(msg, "from", "id").unwrap_or(0.0) as i64;
         let username  = nested_str(msg, "from", "username")
             .or_else(|| nested_str(msg, "from", "first_name"))
             .unwrap_or_default();
         let text      = str_field(msg, "text").unwrap_or_default();
-        let message_id = num_field(msg, "message_id").unwrap_or(0) as i64;
+        let message_id = num_field(msg, "message_id").unwrap_or(0.0) as i64;
         let is_voice  = msg.contains("\"voice\":");
         let file_id   = if is_voice {
             nested_str(msg, "voice", "file_id").unwrap_or_default()

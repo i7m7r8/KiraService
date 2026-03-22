@@ -8,7 +8,7 @@
 
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 use std::path::{Path, PathBuf};
-use std::io::{Read, Write};
+use std::io::Write;
 
 pub const DATA_DIR: &str = "/data/data/com.kira.service";
 

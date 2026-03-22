@@ -6282,7 +6282,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 s.cron_jobs.push(CronJob {
                     id: id.clone(), expression: expr.clone(),
                     action: action.clone(), last_run: 0,
-                    interval_ms, enabled: true,
+                    interval_ms: interval_ms as u128, enabled: true,
                 });
             }
             // Persist
@@ -6545,7 +6545,7 @@ fn run_cron_scheduler() {
             let jid = job_id.clone();
             let goal = action.clone();
             std::thread::spawn(move || {
-                let (api_key, base_url, model, system_prompt, history) =
+                let (api_key, base_url, model, system_prompt, _history) =
                     get_llm_config_snapshot();
 
                 if api_key.is_empty() { return; }

@@ -385,23 +385,4 @@ public class RustBridge {
     /** Get full OTA status JSON from Rust (phase, pct, version info, etc.). */
     public static native String otaGetStatus();
 
-
-    // ── Crash log JNI (direct call, no HTTP needed) ──────────────────────────
-
-    /**
-     * Log a crash to Rust in-memory store (up to 50 entries).
-     * Call from KiraApp UncaughtExceptionHandler BEFORE process dies.
-     * tsMs = System.currentTimeMillis() at crash time.
-     */
-    public static native void   logCrash(String threadName, String message, String trace, long tsMs);
-
-    /** Get the most recent crash entry. Returns {"has_crash":false} if none. */
-    public static native String getLatestCrash();
-
-    /** Get all crash entries as JSON {count, crashes:[{ts,thread,message,trace}]} */
-    public static native String getCrashLog();
-
-    /** Clear all stored crash entries from Rust memory. */
-    public static native void   clearCrashLog();
-
 }

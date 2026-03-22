@@ -1,51 +1,87 @@
-## v0.0.2 — Neural Glass UI + Full Automation Engine
+## v0.0.2 — Crash Fix + Neural Glass Crash Reporter
 
-### New Features
+### Critical Bug Fixes
 
-**Layer 0 — Living Canvas**
-- 3-depth star field with gyroscope parallax (0.3×/0.8×/1.5× per layer)
-- Chromatic hue pulse synchronized to Rust uptime (3s sine wave, ±12° HSV)
-- Vortex animation when Kira is thinking — stars spiral toward center
-- Burst explosion on reply — stars push outward, 60fps spring physics
-- Per-star twinkle with unique phase offsets
+#### Crash 1 — App never opens (`NullPointerException` at startup)
+- **Root cause:** `sendBtn.setOnTouchListener()` called directly with no null check.
+  If `R.id.sendBtn` doesn't resolve, NPE before any UI renders.
+- **Fix:** Null guard + diagnostic `Log.e` so the missing view ID is visible in logcat.
 
-**Layer 1 — Neural Nav Bar**
-- Floating island: Catppuccin Mantle 94% opacity, 24dp corners, elevation 8dp
-- Active tab icon grows with OvershootInterpolator(2.8) in 250ms
-- Radial Lavender aura blooms beneath active tab (0→32dp, 180ms)
-- Nav bar floats up 4dp + 0.97 scale when keyboard opens
-- Geometric glyphs: ⬡ Chat, ⠿ Tools, ☰ Log, ⧉ System
+#### Crash 2 — App crashes on every message send (`NullPointerException`)
+- **Root cause:** `showTypingIndicator()` calls `chatContainer.removeView()` and
+  `chatContainer.addView()` without checking `chatContainer != null`.
+  This is the primary send-crash: every single message triggered it.
+- **Fix:** Null guard on entry, safe try/catch on remove.
 
-**Layer 2 — Chat Interface**
-- K badge rotates 360° on every message send
-- Subtitle crossfades: ready → thinking → reasoning → processing → composing
-- User bubbles spring in from right (+40dp, OvershootInterpolator)
-- Kira bubbles spring in from left (−40dp) with Lavender left border
-- Sinusoidal typing indicator (3 dots, 120ms stagger, 4dp amplitude)
-- Header border pulses Lavender while Kira processes, stops on reply
+#### Crash 3 — Crash after reply (`IllegalArgumentException`: view not attached)
+- **Root cause:** `hideTypingIndicator()` animation end callback calls
+  `chatContainer.removeView(ti)` even after `ti` was already removed
+  (race condition between animation end and direct removal).
+- **Fix:** `ti.getParent() == chatContainer` check before remove.
 
-**Layer 3 — Input Composer**
-- Send button: press springs 1.0→0.88→1.05→1.0 (80ms/120ms/80ms)
-- Input field: Lavender border appears on focus, fades on blur
-- Send button pulses alpha 85%↔100% when field has text
-- Keyboard detection via ViewTreeObserver → nav bar float
+#### Crash 4 — `NullPointerException` in `addToolBubble`, `addSystemNotice`, `rebuildChat`
+- All called `chatContainer.addView()` or `removeAllViews()` without null check.
+- **Fix:** All sites guarded with `if (chatContainer != null)`.
 
-**Rust Engine v9.1**
-- `/theme/anim` endpoint: phase, bpm, activity_level, is_thinking (polled 500ms)
-- `/theme/thinking` endpoint: toggles vortex ON/OFF from UI
-- ThemeConfig extended with 4 live animation fields
-- 17 automation HTTP routes: `/auto/if_then`, `/auto/watch_app`, `/auto/repeat`,
-  `/auto/templates`, `/auto/scene`, `/auto/run_now`, `/auto/pause`, `/auto/history`,
-  `/auto/stats`, `/auto/clone`, `/auto/batch_enable` + more
-- 280+ app package database in `app_name_to_pkg()`
-- `parse_nl_condition()`: natural language → trigger kind (battery/screen/wifi/time/app)
-- OTA engine: 9 JNI functions, SHA256 verify, 3-tier install (Shizuku/PackageInstaller/Intent)
-- Per-ABI APK splits: arm64-v8a, armeabi-v7a, x86_64, universal
+#### Crash 5 — CrashActivity never opens (Android 10+ background start restriction)
+- **Root cause:** `startActivity()` from background/crash thread is silently blocked
+  on Android 10+. The crash handler had no notification fallback — so when the main
+  process died, nothing appeared on screen.
+- **Fix:** KiraApp now posts a `💀 Kira crashed` notification via `NotificationManager`
+  with a `PendingIntent`. Tapping notification opens `CrashActivity` reliably even
+  after process death.
 
-### Bug Fixes
-- Fixed 57 Java compile errors (unescaped JSON keys in KiraTools string literals)
-- Fixed 4 KiraWatcher API mismatches (nextMacroAction args, KiraEventBus.post, tools.execute)
-- Fixed u64 type mismatch in `/auto/stats` total_runs sum
-- Fixed stray closing brace in jni_bridge module
-- Fixed MacroTriggerKind Display error (→ .to_str())
-- Fixed MacroAction field error (action_type → kind.to_str())
+#### Crash 6 — `state.rs` encoding corruption
+- 3 embedded null bytes in `state.rs` caused potential Rust build failures.
+- **Fix:** Null bytes stripped.
+
+#### Additional guards (16 unguarded NPE sites fixed)
+- `inputField`, `headerSubtitle`, `historyList`, `sendBtn` — all now null-checked
+  in lambdas, theme callbacks, and history card listeners.
+
+---
+
+### New: Crash Reporter System (Pure Rust + Java)
+
+**`KiraApp` — crash handler:**
+- Catches ALL uncaught exceptions (main thread + all background threads)
+- Synchronous `SharedPreferences.commit()` before process dies (survives death)
+- Calls `RustBridge.logCrash()` JNI directly (no HTTP, no thread needed)
+- Posts HTTP to `localhost:7070/crash` as backup
+- Posts `💀 Kira crashed` notification (high priority, Catppuccin Pink)
+- Launches `CrashActivity` in `:crash` process
+- Falls through to system default handler
+
+**`CrashActivity` — standalone crash viewer:**
+- Runs in `:crash` process (survives main process death)
+- **TRACE tab:** Colored stack trace
+  - Kira frames → Lavender
+  - Exception types / `Caused by` → Pink
+  - `NullPointer`/`ClassCast` → Yellow
+  - `at ` frames → muted
+- **HISTORY tab:** All stored crashes
+  - Loads from SharedPrefs (always available)
+  - Polls Rust `GET /crash/log` for full 50-entry history
+  - Each card tap-to-expand full trace
+- **Buttons:** Copy | Restart | Ask Kira to Fix | Clear
+- "Ask Kira to Fix" → copies prompt + opens MainActivity → auto-sends crash trace to AI
+
+**Rust JNI bridge (`jni_bridge.rs`):**
+- `logCrash(thread, message, trace, tsMs)` — stores up to 50 entries
+- `getLatestCrash()` → `{"has_crash":bool,"ts":...,"thread":...,"message":...}`
+- `getCrashLog()` → `{"count":N,"crashes":[...]}`
+- `clearCrashLog()` — wipes all entries
+
+**Rust HTTP endpoints (`http.rs`):**
+- `POST /crash` — stores crash entry
+- `GET /crash/log` — returns all entries with `ts_str` field
+- `GET /crash/latest` — fast poll for latest
+- `POST /crash/clear` — wipe log
+
+---
+
+## v0.0.1 — Foundation
+- Rust automation engine (OpenClaw, NanoBot, ZeroClaw, Roubao, Open-AutoGLM)
+- Neural Glass UI — 10 animation layers
+- Catppuccin Mocha/Latte theme with auto system detection
+- OTA update via GitHub Releases

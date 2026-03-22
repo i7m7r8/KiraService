@@ -2,7 +2,7 @@ name: Build Kira APK
 
 on:
   push:
-    branches: [ main, master, stable ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 permissions:

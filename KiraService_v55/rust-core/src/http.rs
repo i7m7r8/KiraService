@@ -1067,11 +1067,8 @@ You are executing a multi-step task autonomously.
                 let safe_msg   = esc(&c.message);
                 let safe_trace = esc(&c.trace);
                 let safe_thr   = esc(&c.thread);
-                // Human-readable timestamp for CrashActivity history tab
-                let ts_secs = c.ts / 1000;
-                let ts_str = format!("{}", ts_secs); // Java side formats it
-                format!(r#"{{"ts":{},"ts_str":"{}","thread":"{}","message":"{}","trace":"{}"}}"#,
-                    c.ts, ts_str, safe_thr, safe_msg, safe_trace)
+                format!(r#"{{"ts":{},"thread":"{}","message":"{}","trace":"{}"}}"#,
+                    c.ts, safe_thr, safe_msg, safe_trace)
             }).collect();
             format!(r#"{{"count":{},"crashes":[{}]}}"#, items.len(), items.join(","))
         }

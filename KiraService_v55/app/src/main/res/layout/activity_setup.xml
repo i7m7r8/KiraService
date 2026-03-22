@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v38: Setup built entirely in SetupActivity.java ? this layout is not used but kept for R id references -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#11111B">
+
+    <!-- IDs referenced programmatically in SetupActivity -->
+    <FrameLayout android:id="@+id/setupPageContainer"
+        android:layout_width="match_parent" android:layout_height="match_parent"/>
+
+    <LinearLayout android:id="@+id/setupDots"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="120dp"/>
+
+    <LinearLayout android:id="@+id/setupBtnRow"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_gravity="bottom"
+        android:paddingStart="24dp" android:paddingEnd="24dp"
+        android:paddingBottom="40dp" android:gravity="center_vertical">
+
+        <TextView android:id="@+id/setupSkipBtn"
+            android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1"
+            android:text="Skip" android:textColor="#666680" android:textSize="15sp"
+            android:gravity="center_vertical" android:clickable="true" android:focusable="true"/>
+
+        <TextView android:id="@+id/setupNextBtn"
+            android:layout_width="170dp" android:layout_height="52dp"
+            android:text="Get Started" android:textColor="#EEEEF5"
+            android:textSize="15sp" android:textStyle="bold"
+            android:gravity="center" android:background="#B4BEFE"
+            android:clickable="true" android:focusable="true"/>
+    </LinearLayout>
+</FrameLayout>

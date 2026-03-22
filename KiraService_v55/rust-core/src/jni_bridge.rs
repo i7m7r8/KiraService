@@ -54,7 +54,7 @@ mod jni_bridge {
     ) {
         let p = port as u16;
         {
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let mut s = STATE.lock().unwrap();
             s.uptime_start = now_ms();
             s.providers    = make_providers();
             let sess = Session { id:"default".into(), channel:"kira".into(), created:now_ms(), last_msg:now_ms(), ..Default::default() };
@@ -68,7 +68,7 @@ mod jni_bridge {
                 AutoProfile { id:"car".into(),     name:"Car".into(),     active:false, auto_activate_trigger:"bt_connected".into(),   auto_activate_value:String::new() },
             ];
         }
-        install_builtin_templates(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
+        install_builtin_templates(&mut STATE.lock().unwrap());
         thread::spawn(move || run_http(p));
         thread::spawn(run_trigger_watcher);
         thread::spawn(run_cron_scheduler);
@@ -81,54 +81,54 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOn(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_screen_on = true; }
+    ) { STATE.lock().unwrap().sig_screen_on = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalScreenOff(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_screen_off = true; }
+    ) { STATE.lock().unwrap().sig_screen_off = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalUnlocked(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_device_unlocked = true; }
+    ) { STATE.lock().unwrap().sig_device_unlocked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocked(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_device_locked = true; }
+    ) { STATE.lock().unwrap().sig_device_locked = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalShake(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_shake = true; }
+    ) { STATE.lock().unwrap().sig_shake = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeUp(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_vol_up = true; }
+    ) { STATE.lock().unwrap().sig_vol_up = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalVolumeDown(
         _e: JNIEnv, _c: JObject,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_vol_down = true; }
+    ) { STATE.lock().unwrap().sig_vol_down = true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalWifi(
         _e: JNIEnv, _c: JObject, ssid: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_wifi_ssid = cs(ssid); }
+    ) { STATE.lock().unwrap().sig_wifi_ssid = cs(ssid); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalBluetooth(
         _e: JNIEnv, _c: JObject, device: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_bt_device = cs(device); }
+    ) { STATE.lock().unwrap().sig_bt_device = cs(device); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalSms(
         _e: JNIEnv, _c: JObject,
         sender: *const c_char, text: *const c_char,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.sig_sms_sender = cs(sender);
         s.sig_sms_text   = cs(text);
     }
@@ -136,33 +136,33 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalCall(
         _e: JNIEnv, _c: JObject, number: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_call_number = cs(number); }
+    ) { STATE.lock().unwrap().sig_call_number = cs(number); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalNfc(
         _e: JNIEnv, _c: JObject, tag_id: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_nfc_tag = cs(tag_id); }
+    ) { STATE.lock().unwrap().sig_nfc_tag = cs(tag_id); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalClipboard(
         _e: JNIEnv, _c: JObject, text: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_clipboard = cs(text); }
+    ) { STATE.lock().unwrap().sig_clipboard = cs(text); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppLaunched(
         _e: JNIEnv, _c: JObject, pkg: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_app_launched = cs(pkg); }
+    ) { STATE.lock().unwrap().sig_app_launched = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalAppClosed(
         _e: JNIEnv, _c: JObject, pkg: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_app_closed = cs(pkg); }
+    ) { STATE.lock().unwrap().sig_app_closed = cs(pkg); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalLocation(
         _e: JNIEnv, _c: JObject, lat: f64, lon: f64, geofence: *const c_char,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.sig_lat      = lat;
         s.sig_lon      = lon;
         s.sig_geofence = cs(geofence);
@@ -171,7 +171,7 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_signalKiraEvent(
         _e: JNIEnv, _c: JObject, event: *const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).sig_kira_event = cs(event); }
+    ) { STATE.lock().unwrap().sig_kira_event = cs(event); }
 
     // \u{2500}\u{2500} v40: Macro management JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
@@ -182,7 +182,7 @@ mod jni_bridge {
     ) -> JString {
         let body = cs(json);
         let m = parse_macro_from_json(&body);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.macros.retain(|x| x.id != m.id);
         let id = m.id.clone();
         s.macros.push(m);
@@ -194,7 +194,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, id: *const c_char,
     ) {
         let id = cs(id);
-        STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.retain(|m| m.id != id);
+        STATE.lock().unwrap().macros.retain(|m| m.id != id);
     }
 
     #[no_mangle]
@@ -202,7 +202,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, id: *const c_char, enabled: bool,
     ) {
         let id = cs(id);
-        if let Some(m) = STATE.lock().unwrap_or_else(|e| e.into_inner()).macros.iter_mut().find(|m| m.id == id) {
+        if let Some(m) = STATE.lock().unwrap().macros.iter_mut().find(|m| m.id == id) {
             m.enabled = enabled;
         }
     }
@@ -211,7 +211,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacros(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let items: Vec<String> = s.macros.iter().map(macro_to_json).collect();
         unsafe { jni_str(env, &format!("[{}]", items.join(","))) }
     }
@@ -221,7 +221,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject, id: *const c_char,
     ) -> JString {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let actions: Vec<MacroAction> = s.macros.iter()
             .find(|m| m.id == id)
             .map(|m| m.actions.clone())
@@ -246,7 +246,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_nextMacroAction(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        match STATE.lock().unwrap_or_else(|e| e.into_inner()).pending_actions.pop_front() {
+        match STATE.lock().unwrap().pending_actions.pop_front() {
             Some(pa) => {
                 let params_json: Vec<String> = pa.params.iter()
                     .map(|(k,v)| format!("\"{}\":\"{}\"", esc(k), esc(v))).collect();
@@ -269,7 +269,7 @@ mod jni_bridge {
     ) {
         let name = cs(name); let value = cs(value); let vt = cs(var_type);
         let ts = now_ms();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.variables.entry(name.clone()).and_modify(|v| { v.value = value.clone(); v.updated_ms = ts; })
             .or_insert(AutoVariable { name, value, var_type: if vt.is_empty(){"string".to_string()}else{vt}, persistent:false, created_ms:ts, updated_ms:ts });
     }
@@ -279,7 +279,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject, name: *const c_char,
     ) -> JString {
         let name = cs(name);
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let json = match s.variables.get(&name) {
             Some(v) => format!(r#"{{"name":"{}","value":"{}","type":"{}"}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type)),
             None    => r#"{"error":"not_found"}"#.to_string(),
@@ -291,7 +291,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getVariables(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let items: Vec<String> = s.variables.values().map(|v|
             format!(r#"{{"name":"{}","value":"{}","type":"{}","updated_ms":{}}}"#, esc(&v.name), esc(&v.value), esc(&v.var_type), v.updated_ms)
         ).collect();
@@ -305,7 +305,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, id: *const c_char,
     ) {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.active_profile = id.clone();
         for p in s.profiles.iter_mut() { p.active = p.id == id; }
         s.sig_kira_event = format!("profile_changed:{}", id);
@@ -315,7 +315,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getProfiles(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let items: Vec<String> = s.profiles.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","active":{}}}"#, esc(&p.id), esc(&p.name), p.active)
         ).collect();
@@ -326,7 +326,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getMacroRunLog(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let items: Vec<String> = s.macro_run_log.iter().skip(s.macro_run_log.len().saturating_sub(100)).map(|r|
             format!(r#"{{"macro_id":"{}","name":"{}","trigger":"{}","success":{},"steps":{},"duration_ms":{},"ts":{}}}"#,
                 esc(&r.macro_id), esc(&r.macro_name), esc(&r.trigger), r.success, r.steps_run, r.duration_ms, r.ts)
@@ -344,17 +344,10 @@ mod jni_bridge {
         tg_token:*const c_char, tg_allowed:i64, max_steps:i32, auto_approve:bool,
         heartbeat:i32, setup_done:bool,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        s.config.user_name = cs(user_name);
-        // Sanitize: reject non-UTF8 / binary garbage from old encrypted storage
-        let raw_key = cs(api_key);
-        let raw_url = cs(base_url);
-        if !raw_key.is_empty() {
-            s.config.api_key = if raw_key.chars().all(|c| c.is_ascii()) { raw_key } else { String::new() };
-        }
-        let is_valid_url = (raw_url.starts_with("http://") || raw_url.starts_with("https://"))
-            && raw_url.is_ascii() && raw_url.len() < 256;
-        s.config.base_url = if is_valid_url { raw_url } else { "https://api.groq.com/openai/v1".to_string() };
+        let mut s = STATE.lock().unwrap();
+        s.config.user_name          = cs(user_name);
+        s.config.api_key            = cs(api_key);
+        s.config.base_url           = cs(base_url);
         s.config.model              = cs(model);
         s.config.vision_model       = cs(vision_model);
         s.config.persona            = cs(persona);
@@ -372,7 +365,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getConfig(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let json = config_to_json(&s.config);
         unsafe { jni_str(env, &json) }
     }
@@ -383,16 +376,10 @@ mod jni_bridge {
         page:i32, api_key:*const c_char, base_url:*const c_char,
         model:*const c_char, user_name:*const c_char, tg_token:*const c_char, tg_id:i64,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.setup.current_page = page as u8;
-        let ak=cs(api_key);
-        if !ak.is_empty() && ak.chars().all(|c| c.is_ascii()) {
-            s.setup.api_key = ak.clone(); s.config.api_key = ak;
-        }
-        let bu=cs(base_url);
-        if !bu.is_empty() && (bu.starts_with("http://") || bu.starts_with("https://")) {
-            s.setup.base_url = bu.clone(); s.config.base_url = bu;
-        }
+        let ak=cs(api_key);   if !ak.is_empty()  { s.setup.api_key   =ak.clone();  s.config.api_key  =ak; }
+        let bu=cs(base_url);  if !bu.is_empty()  { s.setup.base_url  =bu.clone();  s.config.base_url =bu; }
         let mo=cs(model);     if !mo.is_empty()  { s.setup.model     =mo.clone();  s.config.model    =mo; }
         let un=cs(user_name); if !un.is_empty()  { s.setup.user_name =un.clone();  s.config.user_name=un; }
         let tt=cs(tg_token);  if !tt.is_empty()  { s.setup.tg_token  =tt.clone();  s.config.tg_token =tt; }
@@ -402,19 +389,19 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_completeSetup(
         _e: JNIEnv, _c: JObject,
-    ) { let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner()); s.setup.done=true; s.config.setup_done=true; }
+    ) { let mut s = STATE.lock().unwrap(); s.setup.done=true; s.config.setup_done=true; }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_isSetupDone(
         _e: JNIEnv, _c: JObject,
-    ) -> bool { STATE.lock().unwrap_or_else(|e| e.into_inner()).config.setup_done }
+    ) -> bool { STATE.lock().unwrap().config.setup_done }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_setCustomProvider(
         _e: JNIEnv, _c: JObject, url:*const c_char, model:*const c_char,
     ) {
         let url=cs(url); let model=cs(model);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.setup.custom_url=url.clone(); s.setup.selected_provider_id="custom".to_string();
         s.config.base_url=url.clone(); if !model.is_empty() { s.config.model=model.clone(); }
         if let Some(p) = s.providers.iter_mut().find(|p| p.id=="custom") {
@@ -428,7 +415,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject, provider_id:*const c_char,
     ) -> JString {
         let id=cs(provider_id);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let found=s.providers.iter().find(|p| p.id==id).cloned();
         let result = if let Some(p)=found {
             s.active_provider=id; s.config.base_url=p.base_url.clone(); s.config.model=p.model.clone();
@@ -441,7 +428,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getProviders(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let items: Vec<String> = s.providers.iter().map(|p|
             format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)
         ).collect();
@@ -453,7 +440,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject,
         installed:bool, permission_granted:bool, error_msg:*const c_char,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.shizuku.installed=installed; s.shizuku.permission_granted=permission_granted;
         s.shizuku.error_msg=cs(error_msg); s.shizuku.last_checked_ms=now_ms();
     }
@@ -462,7 +449,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getShizukuJson(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         unsafe { jni_str(env, &shizuku_to_json(&s.shizuku)) }
     }
 
@@ -470,7 +457,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_updateTilt(
         _e: JNIEnv, _c: JObject, ax:f32, ay:f32,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.theme.star_tilt_x=ax; s.theme.star_tilt_y=ay;
         let tx=-ax*s.theme.star_speed; let ty=ay*s.theme.star_speed;
         s.theme.star_parallax_x+=(tx-s.theme.star_parallax_x)*0.08;
@@ -481,7 +468,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getStarParallax(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         unsafe { jni_str(env, &format!(r#"{{"px":{:.6},"py":{:.6},"ax":{:.4},"ay":{:.4}}}"#, s.theme.star_parallax_x,s.theme.star_parallax_y,s.theme.star_tilt_x,s.theme.star_tilt_y)) }
     }
 
@@ -489,7 +476,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getTheme(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         unsafe { jni_str(env, &s.theme.to_json()) }
     }
 
@@ -499,7 +486,7 @@ mod jni_bridge {
         name: *const c_char,
     ) {
         let name = unsafe { std::ffi::CStr::from_ptr(name).to_str().unwrap_or("catppuccin_mocha") };
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.theme = match name {
             "material" | "material_neo" | "material_dark" => ThemeConfig::material_dark(),
             "material_light" | "material_neo_light"       => ThemeConfig::material_light(),
@@ -513,7 +500,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_getStatsJson(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         { let _s = format!(
             r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"profiles":{},"active_profile":"{}","variables":{}}}"#,
             s.memory_index.len(), s.context_turns.len(),
@@ -535,7 +522,7 @@ mod jni_bridge {
     ) {
         let (pkg,title,text) = (cs(pkg),cs(title),cs(text));
         let ts = now_ms();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         fire_notif_triggers(&mut s, &pkg, &title, &text);
         s.daily_log.push_back(format!("[{}] notif {}:{}", ts, pkg, &title[..title.len().min(40)]));
         if s.daily_log.len() > 1000 { s.daily_log.pop_front(); }
@@ -546,14 +533,14 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenNodes(
         _e: JNIEnv, _c: JObject, json:*const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).screen_nodes = cs(json); }
+    ) { STATE.lock().unwrap().screen_nodes = cs(json); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateScreenPackage(
         _e: JNIEnv, _c: JObject, pkg:*const c_char,
     ) {
         let pkg = cs(pkg);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let prev = s.screen_pkg.clone();
         if prev != pkg {
             s.sig_app_launched = pkg.clone();
@@ -566,7 +553,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_updateBattery(
         _e: JNIEnv, _c: JObject, pct:i32, charging:bool,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let prev = s.battery_pct;
         s.battery_pct=pct; s.battery_charging=charging;
         fire_battery_triggers(&mut s, pct, prev);
@@ -575,7 +562,7 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_updateAgentContext(
         _e: JNIEnv, _c: JObject, ctx:*const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).agent_context = cs(ctx); }
+    ) { STATE.lock().unwrap().agent_context = cs(ctx); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushContextTurn(
@@ -585,7 +572,7 @@ mod jni_bridge {
         let role=cs(role); let content=cs(content);
         let tokens=estimate_tokens(&content);
         let ts=now_ms();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let sess_id = s.active_session.clone();
         s.total_tokens += tokens as u64;
         s.daily_log.push_back(format!("[{}] {}: {}", ts, role, &content[..content.len().min(80)]));
@@ -602,7 +589,7 @@ mod jni_bridge {
     ) {
         let (key,value,tags_raw) = (cs(key),cs(value),cs(tags));
         let tags: Vec<String> = tags_raw.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.memory_index.retain(|e| e.key != key);
         let fact = format!("- {}: {}", key, value);
         if !s.memory_md.contains(&fact) { s.memory_md.push_str(&format!("\n{}", fact)); }
@@ -620,7 +607,7 @@ mod jni_bridge {
     ) {
         let name=cs(name); let value=cs(value);
         let enc=xor_crypt(value.as_bytes(), derive_key(&name).as_slice());
-        STATE.lock().unwrap_or_else(|e| e.into_inner()).credentials.insert(name, enc);
+        STATE.lock().unwrap().credentials.insert(name, enc);
     }
 
     #[no_mangle]
@@ -629,7 +616,7 @@ mod jni_bridge {
         name:*const c_char, desc:*const c_char, trigger:*const c_char, content:*const c_char,
     ) {
         let name=cs(name);
-        STATE.lock().unwrap_or_else(|e| e.into_inner()).skills.insert(name.clone(), Skill { name, description:cs(desc), trigger:cs(trigger), content:cs(content), enabled:true, usage_count:0 });
+        STATE.lock().unwrap().skills.insert(name.clone(), Skill { name, description:cs(desc), trigger:cs(trigger), content:cs(content), enabled:true, usage_count:0 });
     }
 
     #[no_mangle]
@@ -638,7 +625,7 @@ mod jni_bridge {
         id:*const c_char, check:*const c_char, action:*const c_char, interval_ms:i64,
     ) {
         let item = HeartbeatItem { id:cs(id), check:cs(check), action:cs(action), enabled:true, last_run:0, interval_ms:interval_ms as u128 };
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.heartbeat_items.retain(|i| i.id!=item.id);
         s.heartbeat_items.push(item);
     }
@@ -648,7 +635,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject, session_id:*const c_char,
     ) -> i32 {
         let id=cs(session_id);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let count = { let c=s.tool_iterations.entry(id).or_insert(0); *c+=1; *c };
         s.tool_call_count += 1;
         let max = s.max_tool_iters;
@@ -658,7 +645,7 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_resetToolIter(
         _e: JNIEnv, _c: JObject, session_id:*const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).tool_iterations.remove(&cs(session_id)); }
+    ) { STATE.lock().unwrap().tool_iterations.remove(&cs(session_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_logTaskStep(
@@ -667,7 +654,7 @@ mod jni_bridge {
     ) {
         let (tid,act,res) = (cs(task_id),cs(action),cs(result));
         let ts=now_ms();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         do_audit(&mut s, &tid, &act, &act, &res, success, false);
         s.task_log.push_back(TaskStep { task_id:tid, step:step as u32, action:act, result:res, time:ts, success });
         if s.task_log.len() > 2000 { s.task_log.pop_front(); }
@@ -677,7 +664,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_nextCommand(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        match STATE.lock().unwrap_or_else(|e| e.into_inner()).pending_cmds.pop_front() {
+        match STATE.lock().unwrap().pending_cmds.pop_front() {
             Some((id,body)) => unsafe { jni_str(env, &format!(r#"{{"id":"{}","body":{}}}"#, id, body)) },
             None => std::ptr::null_mut(),
         }
@@ -686,13 +673,13 @@ mod jni_bridge {
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_pushResult(
         _e: JNIEnv, _c: JObject, id:*const c_char, result:*const c_char,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).results.insert(cs(id), cs(result)); }
+    ) { STATE.lock().unwrap().results.insert(cs(id), cs(result)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_nextFiredTrigger(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        match STATE.lock().unwrap_or_else(|e| e.into_inner()).fired_triggers.pop_front() {
+        match STATE.lock().unwrap().fired_triggers.pop_front() {
             Some(t) => unsafe { jni_str(env, &t) },
             None    => std::ptr::null_mut(),
         }
@@ -702,12 +689,12 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_addTrigger(
         _e: JNIEnv, _c: JObject,
         id:*const c_char, ttype:*const c_char, value:*const c_char, action:*const c_char, repeat:bool,
-    ) { STATE.lock().unwrap_or_else(|e| e.into_inner()).triggers.push(Trigger { id:cs(id), trigger_type:cs(ttype), value:cs(value), action:cs(action), fired:false, repeat }); }
+    ) { STATE.lock().unwrap().triggers.push(Trigger { id:cs(id), trigger_type:cs(ttype), value:cs(value), action:cs(action), fired:false, repeat }); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_removeTrigger(
         _e: JNIEnv, _c: JObject, id:*const c_char,
-    ) { let id=cs(id); STATE.lock().unwrap_or_else(|e| e.into_inner()).triggers.retain(|t| t.id!=id); }
+    ) { let id=cs(id); STATE.lock().unwrap().triggers.retain(|t| t.id!=id); }
 
     // \u{2500}\u{2500} OpenClaw v3 JNI \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
 
@@ -716,7 +703,7 @@ mod jni_bridge {
         env: JNIEnv, _c: JObject,
         macro_id: *const c_char, script: *const c_char,
     ) -> JString {
-        let log = execute_dsl_script(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(macro_id), &cs(script));
+        let log = execute_dsl_script(&mut STATE.lock().unwrap(), &cs(macro_id), &cs(script));
         let log_json: Vec<String> = log.iter().map(|l| format!(r#""{}""#, esc(l))).collect();
         unsafe { jni_str(env, &format!(r#"{{"ok":true,"log":[{}]}}"#, log_json.join(","))) }
     }
@@ -739,7 +726,7 @@ mod jni_bridge {
             enabled: true, fired_count: 0, last_fired: 0, debounce_last: 0, throttle_last: 0,
             take_count: 0, skip_count: 0, last_value: String::new(), buffer: Vec::new(),
         };
-        STATE.lock().unwrap_or_else(|e| e.into_inner()).rx_subscriptions.push(sub);
+        STATE.lock().unwrap().rx_subscriptions.push(sub);
         unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
     }
 
@@ -749,7 +736,7 @@ mod jni_bridge {
         kind: *const c_char, data: *const c_char,
     ) {
         let event = RxEvent { kind: cs(kind), data: cs(data), ts: now_ms(), source: "jni".to_string() };
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let subs: Vec<RxSubscription> = s.rx_subscriptions.iter().cloned().collect();
         for mut sub in subs {
             if !sub.enabled { continue; }
@@ -767,20 +754,20 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_channelPost(
         _e: JNIEnv, _c: JObject,
         channel: *const c_char, message: *const c_char,
-    ) { channel_post(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(channel), &cs(message)); }
+    ) { channel_post(&mut STATE.lock().unwrap(), &cs(channel), &cs(message)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_batteryDefer(
         _e: JNIEnv, _c: JObject,
         macro_id: *const c_char, min_pct: i32,
-    ) { defer_until_charged(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(macro_id), min_pct); }
+    ) { defer_until_charged(&mut STATE.lock().unwrap(), &cs(macro_id), min_pct); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_exportBundle(
         env: JNIEnv, _c: JObject, tag_filter: *const c_char,
     ) -> JString {
         let tag = cs(tag_filter);
-        let result = export_bundle(&STATE.lock().unwrap_or_else(|e| e.into_inner()), if tag.is_empty() { None } else { Some(&tag) });
+        let result = export_bundle(&STATE.lock().unwrap(), if tag.is_empty() { None } else { Some(&tag) });
         unsafe { jni_str(env, &result) }
     }
 
@@ -788,7 +775,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_fsmEvent(
         _e: JNIEnv, _c: JObject,
         machine_id: *const c_char, event: *const c_char,
-    ) { fsm_process_event(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(machine_id), &cs(event)); }
+    ) { fsm_process_event(&mut STATE.lock().unwrap(), &cs(machine_id), &cs(event)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_freeString(
@@ -801,25 +788,25 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_exportMacros(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let json = export_macros_json(&STATE.lock().unwrap_or_else(|e| e.into_inner()));
+        let json = export_macros_json(&STATE.lock().unwrap());
         unsafe { jni_str(env, &json) }
     }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_importMacros(
         _e: JNIEnv, _c: JObject, json: *const c_char,
-    ) { import_macros_json(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(json)); }
+    ) { import_macros_json(&mut STATE.lock().unwrap(), &cs(json)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_chainMacro(
         _e: JNIEnv, _c: JObject, target_id: *const c_char,
-    ) { chain_macro(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(target_id)); }
+    ) { chain_macro(&mut STATE.lock().unwrap(), &cs(target_id)); }
 
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_evalExpr(
         env: JNIEnv, _c: JObject, expr: *const c_char,
     ) -> JString {
-        let result = eval_expr(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(expr));
+        let result = eval_expr(&STATE.lock().unwrap(), &cs(expr));
         unsafe { jni_str(env, &result) }
     }
 
@@ -827,7 +814,7 @@ mod jni_bridge {
     pub extern "C" fn Java_com_kira_service_RustBridge_expandVars(
         env: JNIEnv, _c: JObject, text: *const c_char,
     ) -> JString {
-        let result = expand_vars(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(text));
+        let result = expand_vars(&STATE.lock().unwrap(), &cs(text));
         unsafe { jni_str(env, &result) }
     }
 
@@ -842,7 +829,7 @@ mod jni_bridge {
         let goal = cs(goal);
         let max_s = if max_steps > 0 { max_steps as u32 } else { 20 };
         let task_id = gen_id();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let plan_prompt = build_task_plan_prompt(&goal, &s.agent_context);
         s.pending_actions.push_back(PendingMacroAction {
             macro_id: task_id.clone(), action_id: gen_id(),
@@ -872,7 +859,7 @@ mod jni_bridge {
         task_id: *const c_char, vlm_response: *const c_char,
     ) -> JString {
         let task_id = cs(task_id); let vlm_resp = cs(vlm_response);
-        let done = execute_vlm_step(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &task_id, &vlm_resp);
+        let done = execute_vlm_step(&mut STATE.lock().unwrap(), &task_id, &vlm_resp);
         unsafe { jni_str(env, &format!(r#"{{"ok":true,"done":{}}}"#, done)) }
     }
 
@@ -882,7 +869,7 @@ mod jni_bridge {
         _e: JNIEnv, _c: JObject,
         task_id: *const c_char, step: i32, vlm_desc: *const c_char,
     ) {
-        record_screen_observation(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(task_id), step as u32, &cs(vlm_desc));
+        record_screen_observation(&mut STATE.lock().unwrap(), &cs(task_id), step as u32, &cs(vlm_desc));
     }
 
     /// Set the AI-generated plan for a task
@@ -897,7 +884,7 @@ mod jni_bridge {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         if let Some(t) = s.phone_agent_tasks.iter_mut().find(|t| t.id == task_id) {
             t.plan = plan;
             t.state = VlmTaskState::Observing;
@@ -912,7 +899,7 @@ mod jni_bridge {
         task_id: *const c_char,
     ) -> JString {
         let task_id = cs(task_id);
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let result = match s.phone_agent_tasks.iter().find(|t| t.id == task_id) {
             Some(t) => {
                 let sub_task = t.plan.get(t.plan_idx).cloned().unwrap_or_else(|| t.goal.clone());
@@ -936,7 +923,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAgentTasks(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let items: Vec<String> = s.phone_agent_tasks.iter().map(|t| format!(
             r#"{{"id":"{}","goal":"{}","state":"{}","step":{},"result":"{}"}}"#,
             esc(&t.id), esc(&t.goal),
@@ -961,7 +948,7 @@ Context: {}",
         let body = cs(json);
         if let Some(flow) = parse_flow_from_json(&body) {
             let id = flow.id.clone();
-            STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_flows.insert(id.clone(), flow);
+            STATE.lock().unwrap().roboru_flows.insert(id.clone(), flow);
             unsafe { jni_str(env, &format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))) }
         } else {
             unsafe { jni_str(env, &r#"{"error":"invalid flow"}"#) }
@@ -973,7 +960,7 @@ Context: {}",
         env: JNIEnv, _c: JObject, id: *const c_char,
     ) -> JString {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let flow = s.roboru_flows.get(&id).cloned();
         let result = if let Some(flow) = flow {
             let steps = execute_flow(&mut s, &flow, None);
@@ -990,7 +977,7 @@ Context: {}",
         let body = cs(json);
         let result = if let Some(kw) = parse_keyword_from_json(&body) {
             let name = kw.name.clone();
-            STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_keywords.insert(name.clone(), kw);
+            STATE.lock().unwrap().roboru_keywords.insert(name.clone(), kw);
             format!(r#"{{"ok":true,"name":"{}"}}"#, esc(&name))
         } else { r#"{"error":"invalid keyword"}"#.to_string() };
         unsafe { jni_str(env, &result) }
@@ -1002,7 +989,7 @@ Context: {}",
         name: *const c_char, args_json: *const c_char,
     ) -> JString {
         let name = cs(name); let args_body = cs(args_json);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let kw = s.roboru_keywords.get(&name).cloned();
         let result = if let Some(kw) = kw {
             let args: HashMap<String,String> = kw.args.iter().enumerate().map(|(i, arg_name)| {
@@ -1022,7 +1009,7 @@ Context: {}",
         let body = cs(json);
         let result = if let Some(p) = parse_pipeline_from_json(&body) {
             let id = p.id.clone();
-            STATE.lock().unwrap_or_else(|e| e.into_inner()).roboru_pipelines.insert(id.clone(), p);
+            STATE.lock().unwrap().roboru_pipelines.insert(id.clone(), p);
             format!(r#"{{"ok":true,"id":"{}"}}"#, esc(&id))
         } else { r#"{"error":"invalid pipeline"}"#.to_string() };
         unsafe { jni_str(env, &result) }
@@ -1033,7 +1020,7 @@ Context: {}",
         env: JNIEnv, _c: JObject, id: *const c_char,
     ) -> JString {
         let id = cs(id);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let pipeline = s.roboru_pipelines.get(&id).cloned();
         let result = if let Some(pipeline) = pipeline {
             let (steps, errors) = execute_pipeline(&mut s, &pipeline);
@@ -1048,7 +1035,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationAnalytics(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let json = get_automation_analytics(&STATE.lock().unwrap_or_else(|e| e.into_inner()));
+        let json = get_automation_analytics(&STATE.lock().unwrap());
         unsafe { jni_str(env, &json) }
     }
 
@@ -1056,7 +1043,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationReport(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let report = get_automation_report(&STATE.lock().unwrap_or_else(|e| e.into_inner()));
+        let report = get_automation_report(&STATE.lock().unwrap());
         unsafe { jni_str(env, &report) }
     }
 
@@ -1067,7 +1054,7 @@ Context: {}",
     ) {
         let id = cs(macro_id); let time = cs(time_hhmm);
         if !id.is_empty() && !time.is_empty() {
-            schedule_macro_daily(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()), &id, &time);
+            schedule_macro_daily(&mut STATE.lock().unwrap(), &id, &time);
         }
     }
 
@@ -1076,7 +1063,7 @@ Context: {}",
         env: JNIEnv, _c: JObject,
         name: *const c_char,
     ) -> JString {
-        let result = find_macro_by_name(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(name));
+        let result = find_macro_by_name(&STATE.lock().unwrap(), &cs(name));
         let json = match result {
             Some(id) => format!(r#"{{"found":true,"id":"{}"}}"#, esc(&id)),
             None     => r#"{"found":false}"#.to_string(),
@@ -1089,7 +1076,7 @@ Context: {}",
         env: JNIEnv, _c: JObject,
         param: *const c_char,
     ) -> JString {
-        let result = resolve_param(&STATE.lock().unwrap_or_else(|e| e.into_inner()), &cs(param));
+        let result = resolve_param(&STATE.lock().unwrap(), &cs(param));
         unsafe { jni_str(env, &result) }
     }
 
@@ -1097,7 +1084,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getAutomationStatus(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let s = STATE.lock().unwrap();
         let enabled = s.macros.iter().filter(|m| m.enabled && !m.tags.contains(&"template".to_string())).count();
         let templates = s.macros.iter().filter(|m| m.tags.contains(&"template".to_string())).count();
         let json = format!(
@@ -1117,7 +1104,7 @@ Context: {}",
         _e: JNIEnv, _c: JObject,
         version: *const c_char, code: i64,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         let v = cs(version);
         if !v.is_empty() { s.ota.current_version = v; }
         if code > 0 { s.ota.current_code = code; }
@@ -1131,7 +1118,7 @@ Context: {}",
         repo: *const c_char,
     ) {
         let r = cs(repo);
-        if !r.is_empty() { STATE.lock().unwrap_or_else(|e| e.into_inner()).ota.repo = r; }
+        if !r.is_empty() { STATE.lock().unwrap().ota.repo = r; }
     }
 
     /// Java feeds parsed GitHub release. Rust decides: prompt_user | up_to_date | skipped.
@@ -1147,7 +1134,7 @@ Context: {}",
         apk_bytes: i64,
     ) -> JString {
         let (tag, url, log, date, sha) = (cs(tag), cs(url), cs(changelog), cs(date), cs(sha256));
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         if s.ota.skipped_versions.contains(&tag) {
             s.ota.phase = OtaPhase::Idle;
             return unsafe { jni_str(env, &r#"{"action":"skipped"}"#) };
@@ -1180,7 +1167,7 @@ Context: {}",
         _e: JNIEnv, _c: JObject,
         bytes_done: i64, bytes_total: i64,
     ) {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.ota.download_bytes = bytes_done as u64;
         s.ota.download_total = bytes_total as u64;
         s.ota.download_pct   = if bytes_total > 0 {
@@ -1209,7 +1196,7 @@ Context: {}",
         if !path_ok {
             return unsafe { jni_str(env, r#"{"ok":false,"error":"invalid_apk_path"}"#) };
         }
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.ota.apk_local_path = path.clone();
         let expected = s.ota.apk_sha256.clone();
         let ok = expected.is_empty() || expected == sha;
@@ -1237,7 +1224,7 @@ Context: {}",
         new_version: *const c_char,
     ) {
         let ver = cs(new_version);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.ota.phase = OtaPhase::Installed;
         if !ver.is_empty() { s.ota.current_version = ver; }
     }
@@ -1249,7 +1236,7 @@ Context: {}",
         error: *const c_char,
     ) {
         let err = cs(error);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.ota.install_error = err.clone();
         s.ota.phase = OtaPhase::Failed(err);
     }
@@ -1261,7 +1248,7 @@ Context: {}",
         version: *const c_char,
     ) {
         let ver = cs(version);
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         if !ver.is_empty() && !s.ota.skipped_versions.contains(&ver) {
             s.ota.skipped_versions.push(ver);
         }
@@ -1273,7 +1260,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_otaGetStatus(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        unsafe { jni_str(env, &STATE.lock().unwrap_or_else(|e| e.into_inner()).ota.to_json()) }
+        unsafe { jni_str(env, &STATE.lock().unwrap().ota.to_json()) }
     }
 
 
@@ -1326,15 +1313,15 @@ Context: {}",
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_agentSync(
         env: JNIEnv, _c: JObject,
-        goal: *const c_char, max_steps: i32, session: *const c_char,
+        goal:      *const c_char,
+        max_steps: i32,
+        session:   *const c_char,
     ) -> JString {
-        let g = cs_safe(goal, 4096);
-        let s = cs_safe(session, 64);
-        let body = format!(r#"{{"goal":"{}","max_steps":{},"session":"{}"}}"#, esc(&g), max_steps, esc(&s));
-        let result = match std::panic::catch_unwind(|| route_http("POST", "/ai/agent", &body)) {
-            Ok(r) => r,
-            Err(_) => r#"{"error":"agent crashed — try again","success":false}"#.to_string(),
-        };
+        let body = format!(
+            r#"{{"goal":"{}","max_steps":{},"session":"{}"}}"#,
+            esc(&cs(goal)), max_steps, esc(&cs(session))
+        );
+        let result = route_http("POST", "/ai/agent", &body);
         unsafe { jni_str(env, &result) }
     }
 
@@ -1342,14 +1329,11 @@ Context: {}",
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_chainSync(
         env: JNIEnv, _c: JObject,
-        goal: *const c_char, depth: i32,
+        goal:  *const c_char,
+        depth: i32,
     ) -> JString {
-        let g = cs_safe(goal, 4096);
-        let body = format!(r#"{{"goal":"{}","depth":{}}}"#, esc(&g), depth);
-        let result = match std::panic::catch_unwind(|| route_http("POST", "/ai/chain", &body)) {
-            Ok(r) => r,
-            Err(_) => r#"{"error":"chain crashed — try again"}"#.to_string(),
-        };
+        let body = format!(r#"{{"goal":"{}","depth":{}}}"#, esc(&cs(goal)), depth);
+        let result = route_http("POST", "/ai/chain", &body);
         unsafe { jni_str(env, &result) }
     }
 
@@ -1388,17 +1372,8 @@ Context: {}",
             r#"{{"message":"{}","session":"{}","max_tool_steps":{}}}"#,
             esc(&msg), esc(&sess), max_tool_steps
         );
-        // Run on thread with large stack — rustls TLS handshake needs ~2MB
-        let result = std::thread::Builder::new()
-            .stack_size(8 * 1024 * 1024) // 8MB
-            .spawn(move || {
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route_http("POST", "/ai/chat", &body))) {
-                    Ok(r)  => r,
-                    Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
-                }
-            })
-            .map(|h| h.join().unwrap_or_else(|_| r#"{"error":"thread join failed","done":true}"#.to_string()))
-            .unwrap_or_else(|_| r#"{"error":"thread spawn failed","done":true}"#.to_string());
+        // Reuse the HTTP route handler — same logic, no code duplication
+        let result = route_http("POST", "/ai/chat", &body);
         unsafe { jni_str(env, &result) }
     }
 
@@ -1408,7 +1383,7 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getNextShellJob(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         match s.pending_shell.pop_front() {
             Some(job) => {
                 let r = format!(r#"{{"id":"{}","cmd":"{}","timeout":{}}}"#,
@@ -1428,7 +1403,7 @@ Context: {}",
         stdout: *const c_char,
     ) {
         let (id, out) = (cs(job_id), cs(stdout));
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = STATE.lock().unwrap();
         s.shell_results.insert(id, out);
     }
 
@@ -1478,72 +1453,5 @@ Context: {}",
         let hex: String = key.iter().map(|b| format!("{:02x}", b)).collect();
         unsafe { jni_str(env, &hex) }
     }
-
-    // ── Crash log JNI — called directly by KiraApp (faster than HTTP) ──────────
-
-    /// Store a crash entry directly in Rust memory.
-    /// Called synchronously from the UncaughtExceptionHandler before process dies.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_logCrash(
-        _e: JNIEnv, _c: JObject,
-        thread_name: *const c_char,
-        message:     *const c_char,
-        trace:       *const c_char,
-        ts_ms:       i64,
-    ) {
-        let thread  = cs_safe(thread_name, 256);
-        let msg     = cs_safe(message,     512);
-        let tr      = cs_safe(trace,       4096); // cap at 4KB
-        let ts      = if ts_ms > 0 { ts_ms as u128 } else {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis()).unwrap_or(0)
-        };
-        let entry = CrashEntry { ts, thread, message: msg, trace: tr };
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        s.crash_log.push_back(entry);
-        if s.crash_log.len() > 50 { s.crash_log.pop_front(); }
-    }
-
-    /// Return the latest crash entry as JSON.
-    /// Returns {"has_crash":false} if no crashes stored.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_getLatestCrash(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        let result = match s.crash_log.back() {
-            Some(c) => format!(
-                r#"{{"has_crash":true,"ts":{},"thread":"{}","message":"{}"}}"#,
-                c.ts, esc(&c.thread), esc(&c.message)
-            ),
-            None => r#"{"has_crash":false}"#.to_string(),
-        };
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Return all crash entries as JSON array.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_getCrashLog(
-        env: JNIEnv, _c: JObject,
-    ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        let items: Vec<String> = s.crash_log.iter().map(|c| {
-            format!(r#"{{"ts":{},"thread":"{}","message":"{}","trace":"{}"}}"#,
-                c.ts, esc(&c.thread), esc(&c.message), esc(&c.trace))
-        }).collect();
-        let result = format!(r#"{{"count":{},"crashes":[{}]}}"#,
-            items.len(), items.join(","));
-        unsafe { jni_str(env, &result) }
-    }
-
-    /// Clear all stored crash entries.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_clearCrashLog(
-        _e: JNIEnv, _c: JObject,
-    ) {
-        STATE.lock().unwrap_or_else(|e| e.into_inner()).crash_log.clear();
-    }
-
 
 }

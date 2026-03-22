@@ -192,9 +192,6 @@ public class MainActivity extends Activity
         }
         setContentView(R.layout.activity_main);
         uiHandler = new Handler(Looper.getMainLooper());
-        // Handle crash_prompt from CrashActivity "Ask Kira to Fix" button
-        final String crashPrompt = getIntent() != null
-            ? getIntent().getStringExtra("crash_prompt") : null;
         cfg = KiraConfig.load(this);
         // Auto theme: follow system setting
         int uiMode = getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
@@ -239,10 +236,10 @@ public class MainActivity extends Activity
 
         // If launched from CrashActivity — pre-fill input with crash context
         String crashPrompt = getIntent().getStringExtra("crash_prompt");
-        if (crashPrompt != null) {
+        if (crashPrompt != null && inputField != null) {
             uiHandler.postDelayed(() -> {
-                if (inputField != null) inputField.setText(crashPrompt);
-                addSystemNotice("Kira crashed. Paste the crash to ask for help.");
+                inputField.setText(crashPrompt);
+                addSystemNotice("⚠ Kira crashed. Paste the crash to ask for help.");
             }, 600);
         } else {
             // Show welcome message so user knows Kira is alive
@@ -266,33 +263,14 @@ public class MainActivity extends Activity
         // Safety: also attempt Rust server start from main thread in case service delays
         new Thread(() -> {
             try { Thread.sleep(200); } catch (Exception ignored) {}
-            try { RustBridge.startServer(7070); } catch (Throwable ignored) {}
-            // CRITICAL: push loaded config into Rust STATE after server starts
-            // Without this, Rust has empty api_key after every process restart
-            try { cfg.save(MainActivity.this); }
-            catch (Throwable ignored) {}
+            try { RustBridge.startServer(7070); }
+            catch (Throwable ignored) {} // no-op if already running
         }, "kira-rust-init").start();
         // v43: init OTA engine (registers version with Rust, schedules checks)
         initOta();
         // Start galaxy animation polling
         animHandler.postDelayed(animPollRunnable, 1000);
         // OTA check (non-blocking, 3s delay)
-    }
-
-    @Override
-    protected void onNewIntent(android.content.Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        // Handle crash_prompt from CrashActivity
-        String crashPrompt = intent.getStringExtra("crash_prompt");
-        if (crashPrompt != null && inputField != null) {
-            uiHandler.postDelayed(() -> {
-                if (inputField != null) {
-                    inputField.setText(crashPrompt);
-                    addSystemNotice("Kira crashed. Paste the crash to ask for help.");
-                }
-            }, 300);
-        }
     }
 
     // -- Permissions -----------------------------------------------------------
@@ -401,8 +379,7 @@ public class MainActivity extends Activity
         suggestionsScroll = homeFragment.findViewById(R.id.suggestionsScroll);
 
         // Layer 3: Send button — press spring animation
-        if (sendBtn == null) { android.util.Log.e("Kira","FATAL: sendBtn is null — check fragment_home.xml R.id.sendBtn"); }
-        if (sendBtn != null) sendBtn.setOnTouchListener((v, ev) -> {
+        sendBtn.setOnTouchListener((v, ev) -> {
             if (ev.getAction() == android.view.MotionEvent.ACTION_DOWN) {
                 sendBtn.animate().scaleX(0.88f).scaleY(0.88f).setDuration(80).start();
             } else if (ev.getAction() == android.view.MotionEvent.ACTION_UP ||
@@ -417,7 +394,6 @@ public class MainActivity extends Activity
         });
 
         // Layer 3: Input field border animation on focus
-        if (inputField == null) return; // Cannot wire input - fatal layout error
         inputField.setOnFocusChangeListener((v, focused) -> {
             android.graphics.drawable.GradientDrawable fieldBg =
                 new android.graphics.drawable.GradientDrawable();
@@ -432,7 +408,6 @@ public class MainActivity extends Activity
         inputField.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
             @Override public void onTextChanged(CharSequence s, int st, int b, int c) {
-                if (sendBtn == null) return;  // guard
                 boolean hasText = s.length() > 0;
                 if (hasText) {
                     // Pulse glow: animate alpha 30→70%
@@ -482,7 +457,7 @@ public class MainActivity extends Activity
         getWindow().getDecorView().getViewTreeObserver()
             .addOnGlobalLayoutListener(keyboardListener);
 
-        if (sendBtn != null) sendBtn.setOnClickListener(v -> {
+        sendBtn.setOnClickListener(v -> {
             // K badge rotates 360° on send
             View kBadge = homeFragment.findViewWithTag("kBadge");
             if (kBadge != null) {
@@ -494,13 +469,13 @@ public class MainActivity extends Activity
             }
             sendMessage();
         });
-        if (inputField != null) inputField.setOnEditorActionListener((v, id, e) -> {
+        inputField.setOnEditorActionListener((v, id, e) -> {
             if (id == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendMessage(); return true; }
             return false;
         });
         buildSuggestions();
 
-        stopSubtitleCycle(); if (headerSubtitle != null) if (headerSubtitle != null) headerSubtitle.setText("ready \u00B7 " + cfg.userName.toLowerCase());
+        stopSubtitleCycle(); headerSubtitle.setText("ready · " + cfg.userName.toLowerCase());
 
         // History
         historyList  = historyFragment.findViewById(R.id.historyList);
@@ -538,7 +513,12 @@ public class MainActivity extends Activity
                     flash.start();
                     // Layer 5: log row tap to Rust for analytics
                     final String rowName = getResources().getResourceEntryName(rid);
-                    // row tap analytics removed (was creating OkHttpClient per tap)
+                    new Thread(() -> { try { new okhttp3.OkHttpClient().newCall(
+                        new okhttp3.Request.Builder()
+                            .url("http://localhost:7070/settings/row_tap")
+                            .post(okhttp3.RequestBody.create(
+                                "{\"row\":\""+rowName+"\"}", okhttp3.MediaType.parse("application/json")))
+                            .build()).execute(); } catch (Exception ignored) {} }).start();
                 }
                 return false;
             });
@@ -668,10 +648,10 @@ public class MainActivity extends Activity
         View rowHistory2 = settingsFragment.findViewById(R.id.rowHistory);
         if (rowHistory2 != null) rowHistory2.setOnClickListener(v -> showConfirmDialog("Clear all history?", () -> { new com.kira.service.ai.KiraMemory(this).clearHistory(); conversation.clear(); chatContainer.removeAllViews(); }));
 
-        { View _acc = settingsFragment.findViewById(R.id.cardAccessibility);
-          if (_acc != null) _acc.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))); }
-        { View _flt = settingsFragment.findViewById(R.id.rowFloating);
-          if (_flt != null) _flt.setOnClickListener(v -> toggleFloating()); }
+        settingsFragment.findViewById(R.id.cardAccessibility).setOnClickListener(v ->
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        // shizuku card click wired via cardShizuku above
+        settingsFragment.findViewById(R.id.rowFloating).setOnClickListener(v -> toggleFloating());
 
         buildToolsList();
         updateSettingsUI();
@@ -693,10 +673,10 @@ public class MainActivity extends Activity
 
     private void showTab(int tab) {
         currentTab = tab;
-        if (homeFragment != null) homeFragment.setVisibility(tab == 0 ? View.VISIBLE : View.GONE);
-        if (toolsFragment != null) toolsFragment.setVisibility(tab == 1 ? View.VISIBLE : View.GONE);
-        if (historyFragment != null) historyFragment.setVisibility(tab == 2 ? View.VISIBLE : View.GONE);
-        if (settingsFragment != null) settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
+        homeFragment.setVisibility(tab == 0 ? View.VISIBLE : View.GONE);
+        toolsFragment.setVisibility(tab == 1 ? View.VISIBLE : View.GONE);
+        historyFragment.setVisibility(tab == 2 ? View.VISIBLE : View.GONE);
+        settingsFragment.setVisibility(tab == 3 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < 4; i++) {
             boolean on = i == tab;
             // Catppuccin: Lavender active, Overlay0 inactive
@@ -722,7 +702,6 @@ public class MainActivity extends Activity
     // -- Chat -- Claude-style ---------------------------------------------------
 
     private void sendMessage() {
-        if (inputField == null) return;
         String text = inputField.getText().toString().trim();
         if (text.isEmpty()) return;
         sendMessage(text);
@@ -730,8 +709,8 @@ public class MainActivity extends Activity
 
     private void sendMessage(String text) {
         if (text.isEmpty()) return;
-        if (inputField != null) inputField.setText("");
-        if (suggestionsScroll != null) suggestionsScroll.setVisibility(View.GONE);
+        inputField.setText("");
+        suggestionsScroll.setVisibility(View.GONE);
 
         // Agent mode: prefix with /agent or /auto
         if (text.startsWith("/kb ")) {
@@ -793,17 +772,11 @@ public class MainActivity extends Activity
         }
 
         startSubtitleCycle(new String[]{"thinking...", "reasoning...", "processing...", "composing..."});
-        if (sendBtn != null) sendBtn.setEnabled(false);
+        sendBtn.setEnabled(false);
 
         // Thinking placeholder
         ConvTurn[] kiraTurn = {null};
 
-        if (ai == null) {
-            if (sendBtn != null) sendBtn.setEnabled(true);
-            stopSubtitleCycle();
-            addSystemNotice("Kira is still starting up, please wait a moment...");
-            return;
-        }
         ai.chat(text, new KiraAI.Callback() {
             @Override public void onThinking() {
                 uiHandler.post(() -> { if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); } });
@@ -823,8 +796,8 @@ public class MainActivity extends Activity
                         conversation.add(kiraTurn[0]);
                         addKiraBubble(kiraTurn[0]);
                     }
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    stopSubtitleCycle(); if (headerSubtitle != null) if (headerSubtitle != null) headerSubtitle.setText("ready \u00B7 " + cfg.userName.toLowerCase());
+                    sendBtn.setEnabled(true);
+                    stopSubtitleCycle(); headerSubtitle.setText("ready · " + cfg.userName.toLowerCase());
                     scrollToBottom();
                 });
             }
@@ -834,8 +807,8 @@ public class MainActivity extends Activity
                     ConvTurn errTurn = new ConvTurn("error", error);
                     conversation.add(errTurn);
                     addErrorBubble(errTurn);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("error");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("error");
                 });
             }
         });
@@ -870,7 +843,6 @@ public class MainActivity extends Activity
         editBtn.setTextColor(t(D_TEXT3, L_TEXT3));
         editBtn.setTextSize(10);
         editBtn.setOnClickListener(v -> {
-            if (inputField == null) return;
             inputField.setText(turn.text);
             inputField.setSelection(turn.text.length());
             inputField.requestFocus();
@@ -901,7 +873,7 @@ public class MainActivity extends Activity
 
         wrap.addView(labelRow);
         wrap.addView(msg);
-        if (chatContainer != null) chatContainer.addView(wrap);
+        chatContainer.addView(wrap);
         // Spring in from right (Layer 2)
         wrap.setTranslationX(dp(40));
         wrap.setAlpha(0f);
@@ -929,7 +901,7 @@ public class MainActivity extends Activity
             return;
         }
         // Replace the "???" with real content
-        if (chatContainer != null) chatContainer.removeView(thinkingView);
+        chatContainer.removeView(thinkingView);
         thinkingView = null;
         conversation.add(turn);
         addKiraBubble(turn);
@@ -962,7 +934,7 @@ public class MainActivity extends Activity
         copyBtn.setOnClickListener(v -> copyText(turn.text));
 
         TextView resendBtn = makeActionBtn("? resend");
-        resendBtn.setOnClickListener(v -> { if (inputField!=null) { inputField.setText(turn.text); inputField.setSelection(turn.text.length()); inputField.requestFocus(); } });
+        resendBtn.setOnClickListener(v -> { inputField.setText(turn.text); inputField.setSelection(turn.text.length()); });
 
         header.addView(label);
         header.addView(copyBtn);
@@ -1007,7 +979,7 @@ public class MainActivity extends Activity
             showBubbleContextMenu(wrap, turn.text);
             return true;
         });
-        if (chatContainer != null) chatContainer.addView(wrap);
+        chatContainer.addView(wrap);
         // Spring in from left (Layer 2)
         wrap.setTranslationX(-dp(40));
         wrap.setAlpha(0f);
@@ -1017,7 +989,6 @@ public class MainActivity extends Activity
             .setInterpolator(new android.view.animation.OvershootInterpolator(1.4f))
             .start();
         // Scroll + burst
-        if (chatScroll == null) return;
         chatScroll.post(() -> chatScroll.fullScroll(android.widget.ScrollView.FOCUS_DOWN));
         onKiraReplied();
     }
@@ -1120,7 +1091,7 @@ public class MainActivity extends Activity
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(1), 0, dp(1));
         tv.setLayoutParams(p);
-        if (chatContainer != null) chatContainer.addView(tv);
+        chatContainer.addView(tv);
         scrollToBottom();
     }
 
@@ -1145,12 +1116,11 @@ public class MainActivity extends Activity
 
         wrap.addView(label);
         wrap.addView(msg);
-        if (chatContainer != null) chatContainer.addView(wrap);
+        chatContainer.addView(wrap);
         scrollToBottom();
     }
 
     private void rebuildChat() {
-        if (chatContainer == null) return;
         chatContainer.removeAllViews();
         for (ConvTurn turn : conversation) {
             switch (turn.role) {
@@ -1168,8 +1138,8 @@ public class MainActivity extends Activity
         ConvTurn userTurn = new ConvTurn("user", "/chain " + goal);
         conversation.add(userTurn);
         addUserBubble(userTurn);
-        if (headerSubtitle != null) headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
-        if (sendBtn != null) sendBtn.setEnabled(false);
+        headerSubtitle.setText("\uD83D\uDD17 ReAct chain...");
+        sendBtn.setEnabled(false);
         addSystemNotice("\uD83E\uDDE0 ReAct mode: reason + act loop");
 
         chain.run(goal, 5, new com.kira.service.ai.KiraChain.ChainCallback() {
@@ -1181,15 +1151,15 @@ public class MainActivity extends Activity
                     ConvTurn t2 = new ConvTurn("kira", answer);
                     conversation.add(t2);
                     addKiraBubble(t2);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("done.");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
             }
             @Override public void onError(String error) {
                 uiHandler.post(() -> {
                     addSystemNotice("\u274C Chain error: " + error);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
+                    sendBtn.setEnabled(true);
                 });
             }
         });
@@ -1199,8 +1169,8 @@ public class MainActivity extends Activity
         ConvTurn userTurn = new ConvTurn("user", "/agent " + goal);
         conversation.add(userTurn);
         addUserBubble(userTurn);
-        if (headerSubtitle != null) headerSubtitle.setText("agent running...");
-        if (sendBtn != null) sendBtn.setEnabled(false);
+        headerSubtitle.setText("agent running...");
+        sendBtn.setEnabled(false);
 
         addSystemNotice("Agent mode: planning task...");
 
@@ -1216,16 +1186,16 @@ public class MainActivity extends Activity
                     ConvTurn turn = new ConvTurn("kira", summary);
                     conversation.add(turn);
                     addKiraBubble(turn);
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("done.");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("done.");
                     scrollToBottom();
                 });
             }
             @Override public void onError(String error) {
                 uiHandler.post(() -> {
                     addErrorBubble(new ConvTurn("error", error));
-                    if (sendBtn != null) sendBtn.setEnabled(true);
-                    if (headerSubtitle != null) headerSubtitle.setText("agent error");
+                    sendBtn.setEnabled(true);
+                    headerSubtitle.setText("agent error");
                 });
             }
         });
@@ -1241,7 +1211,7 @@ public class MainActivity extends Activity
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(MATCH, WRAP);
         p.setMargins(0, dp(2), 0, dp(2));
         tv.setLayoutParams(p);
-        if (chatContainer != null) chatContainer.addView(tv);
+        chatContainer.addView(tv);
         scrollToBottom();
     }
 
@@ -1308,16 +1278,14 @@ public class MainActivity extends Activity
         }
     };
 
-    // Shared OkHttpClient for galaxy poll - never recreate per call
-    private final okhttp3.OkHttpClient animClient = new okhttp3.OkHttpClient.Builder()
-        .connectTimeout(400, java.util.concurrent.TimeUnit.MILLISECONDS)
-        .readTimeout(400, java.util.concurrent.TimeUnit.MILLISECONDS).build();
-
     private void pollGalaxyAnim() {
         if (galaxyView == null) return;
         new Thread(() -> {
             try {
-                okhttp3.Response resp = animClient.newCall(
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS).build();
+                okhttp3.Response resp = client.newCall(
                     new okhttp3.Request.Builder()
                         .url("http://localhost:7070/layer0").get().build()).execute();
                 if (resp.body() == null) return;
@@ -1761,7 +1729,7 @@ public class MainActivity extends Activity
         if (inputBar != null) inputBar.setBackgroundColor(isDarkTheme ? 0xF0090913 : 0xF0F0F0FC);
         if (inputField != null) {
             inputField.setBackgroundColor(isDarkTheme ? D_INPUT_BG : L_INPUT_BG);
-            if (inputField != null) inputField.setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
+            inputField.setTextColor(isDarkTheme ? D_TEXT : L_TEXT);
             inputField.setHintTextColor(isDarkTheme ? D_TEXT3 : L_TEXT3);
         }
 
@@ -2221,13 +2189,13 @@ public class MainActivity extends Activity
                 headerSubtitle.animate().alpha(0f).setDuration(150)
                     .withEndAction(() -> {
                         subtitleIdx = (subtitleIdx + 1) % labels.length;
-                        if (headerSubtitle != null) headerSubtitle.setText(labels[subtitleIdx]);
+                        headerSubtitle.setText(labels[subtitleIdx]);
                         headerSubtitle.animate().alpha(1f).setDuration(150).start();
                     }).start();
                 subtitleHandler.postDelayed(this, 1800);
             }
         };
-        if (headerSubtitle != null) headerSubtitle.setText(labels[0]);
+        headerSubtitle.setText(labels[0]);
         subtitleHandler.postDelayed(subtitleRunnable, 1800);
     }
 
@@ -2241,10 +2209,7 @@ public class MainActivity extends Activity
         new android.os.Handler(android.os.Looper.getMainLooper());
 
     private void showTypingIndicator() {
-        if (chatContainer == null) return; // guard against NPE
-        if (typingIndicator != null) {
-            try { chatContainer.removeView(typingIndicator); } catch (Throwable ignored) {}
-        }
+        if (typingIndicator != null) { chatContainer.removeView(typingIndicator); }
         typingIndicator = new LinearLayout(this);
         typingIndicator.setOrientation(LinearLayout.HORIZONTAL);
         typingIndicator.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -2263,7 +2228,7 @@ public class MainActivity extends Activity
             uiHandler.postDelayed(() -> animateDot(dot), delay);
         }
         typingIndicator.setAlpha(0f);
-        if (chatContainer != null) chatContainer.addView(typingIndicator);
+        chatContainer.addView(typingIndicator);
         typingIndicator.animate().alpha(1f).setDuration(100).start();
         scrollToBottom();
     }
@@ -2290,11 +2255,7 @@ public class MainActivity extends Activity
             final LinearLayout ti = typingIndicator;
             typingIndicator = null;
             ti.animate().alpha(0f).setDuration(150)
-                .withEndAction(() -> {
-                    if (chatContainer != null && ti.getParent() == chatContainer) {
-                        try { chatContainer.removeView(ti); } catch (Throwable ignored) {}
-                    }
-                }).start();
+                .withEndAction(() -> chatContainer.removeView(ti)).start();
         }
     }
 
@@ -2409,7 +2370,7 @@ public class MainActivity extends Activity
                     float perimeter = 2f * (w + h);
                     float arcFraction = dp(30) / perimeter * 360f;
                     canvas.drawArc(rect, rotation, arcFraction, false, haloPaint);
-                    // ObjectAnimator handles redraw via invalidation
+                    postInvalidateDelayed(16);
                 }
 
                 private int dp(int v) {
@@ -2461,7 +2422,7 @@ public class MainActivity extends Activity
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(WRAP, WRAP);
             p.setMargins(0, 0, dp(8), 0);
             chip.setLayoutParams(p);
-            chip.setOnClickListener(v -> { if (inputField != null) inputField.setText(item[1]); sendMessage(); });
+            chip.setOnClickListener(v -> { inputField.setText(item[1]); sendMessage(); });
             suggestionsRow.addView(chip);
         }
     }
@@ -2555,7 +2516,6 @@ public class MainActivity extends Activity
     // -- History -- Claude-style ------------------------------------------------
 
     private void refreshHistory() {
-        if (historyList == null) return;
         historyList.removeAllViews();
         try {
             KiraMemory mem = new KiraMemory(this);
@@ -2607,7 +2567,7 @@ public class MainActivity extends Activity
                 resendBtn.setTextColor(0xFFDC143C);
                 resendBtn.setOnClickListener(v -> {
                     showTab(0);
-                    if (inputField != null) inputField.setText(user);
+                    inputField.setText(user);
                     sendMessage();
                 });
 
@@ -2615,10 +2575,8 @@ public class MainActivity extends Activity
                 TextView continueBtn = makeActionBtn("continue");
                 continueBtn.setOnClickListener(v -> {
                     showTab(0);
-                    if (inputField != null) {
-                        inputField.setText(user);
-                        inputField.setSelection(user.length());
-                    }
+                    inputField.setText(user);
+                    inputField.setSelection(user.length());
                 });
 
                 headerRow.addView(timeTv);
@@ -2668,7 +2626,7 @@ public class MainActivity extends Activity
         showKiraDialogMulti(time, preview,
             new String[]{"RESEND", "COPY", "CLOSE"},
             new Runnable[]{
-                () -> { showTab(0); if (inputField != null) inputField.setText(user); sendMessage(); },
+                () -> { showTab(0); inputField.setText(user); sendMessage(); },
                 () -> copyText(kira),
                 null
             });

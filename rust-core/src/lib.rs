@@ -8979,7 +8979,7 @@ pub fn https_post(
 ").or_else(|| resp_str.find("
 
 ")) {
-        Ok(resp_str[body_start + sep.len()..].to_string())
+        Ok(resp_str[body_start + if resp_str.contains("\r\n\r\n") { 4 } else { 2 }..].to_string())
     } else {
         Ok(resp_str)
     }

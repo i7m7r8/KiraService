@@ -237,8 +237,7 @@ public class MainActivity extends Activity
             }).start();
         }, 800);
 
-        // If launched from CrashActivity — pre-fill input with crash context
-        String crashPrompt = getIntent().getStringExtra("crash_prompt");
+        // crash_prompt already read above (line ~196) — use it here
         if (crashPrompt != null) {
             uiHandler.postDelayed(() -> {
                 if (inputField != null) inputField.setText(crashPrompt);

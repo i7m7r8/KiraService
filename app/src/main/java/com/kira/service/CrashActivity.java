@@ -474,13 +474,16 @@ public class CrashActivity extends Activity {
     }
 
     private void addText(ViewGroup parent, String text, int sp, int color,
-                         int style, int gravity, int topMargin, int bottomMargin) {
+                         Typeface typeface, int gravity, int topMargin, int bottomMargin) {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextSize(sp);
         tv.setTextColor(color);
-        tv.setTypeface(style == Typeface.MONOSPACE ? Typeface.MONOSPACE : null,
-                       style == Typeface.BOLD ? Typeface.BOLD : Typeface.NORMAL);
+        if (typeface == Typeface.MONOSPACE) {
+            tv.setTypeface(Typeface.MONOSPACE);
+        } else if (typeface != null) {
+            tv.setTypeface(typeface);
+        }
         tv.setGravity(gravity);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);
         lp.setMargins(0, topMargin, 0, bottomMargin);

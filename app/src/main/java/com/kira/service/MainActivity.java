@@ -263,8 +263,11 @@ public class MainActivity extends Activity
         // Safety: also attempt Rust server start from main thread in case service delays
         new Thread(() -> {
             try { Thread.sleep(200); } catch (Exception ignored) {}
-            try { RustBridge.startServer(7070); }
-            catch (Throwable ignored) {} // no-op if already running
+            try { RustBridge.startServer(7070); } catch (Throwable ignored) {}
+            // CRITICAL: push loaded config into Rust STATE after server starts
+            // Without this, Rust has empty api_key after every process restart
+            try { cfg.save(MainActivity.this); }
+            catch (Throwable ignored) {}
         }, "kira-rust-init").start();
         // v43: init OTA engine (registers version with Rust, schedules checks)
         initOta();
@@ -789,6 +792,12 @@ public class MainActivity extends Activity
         // Thinking placeholder
         ConvTurn[] kiraTurn = {null};
 
+        if (ai == null) {
+            if (sendBtn != null) sendBtn.setEnabled(true);
+            stopSubtitleCycle();
+            addSystemNotice("Kira is still starting up, please wait a moment...");
+            return;
+        }
         ai.chat(text, new KiraAI.Callback() {
             @Override public void onThinking() {
                 uiHandler.post(() -> { if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); } });

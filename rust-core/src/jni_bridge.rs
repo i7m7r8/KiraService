@@ -1385,8 +1385,11 @@ Context: {}",
             r#"{{"message":"{}","session":"{}","max_tool_steps":{}}}"#,
             esc(&msg), esc(&sess), max_tool_steps
         );
-        // Reuse the HTTP route handler — same logic, no code duplication
-        let result = route_http("POST", "/ai/chat", &body);
+        // catch_unwind prevents Rust panics from crashing the JVM process
+        let result = match std::panic::catch_unwind(|| route_http("POST", "/ai/chat", &body)) {
+            Ok(r)  => r,
+            Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
+        };
         unsafe { jni_str(env, &result) }
     }
 

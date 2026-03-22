@@ -380,6 +380,74 @@ mod jni_bridge {
         if let Some(p) = s.providers.iter().find(|p| p.base_url == bu) { s.active_provider = p.id.clone(); }
     }
 
+
+    /// Returns everything Java needs to make the LLM HTTP call itself.
+    /// Java calls OkHttp directly — no rustls, no Rust networking, no crash.
+    /// Returns JSON: {api_key, base_url, model, system_prompt, messages:[{role,content},...]}
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getChatContext(
+        env: JNIEnv, _c: JObject,
+        user_message: *const c_char,
+    ) -> JString {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let user_msg = cs_safe(user_message, 16384);
+
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+
+            if s.config.api_key.is_empty() {
+                return r#"{"error":"no_api_key"}"#.to_string();
+            }
+
+            // Push user turn
+            s.request_count += 1;
+            push_turn_compressed(&mut s, "user", &user_msg);
+
+            // Build system prompt
+            let persona = if s.config.persona.is_empty() {
+                "You are Kira, a helpful AI agent on Android. Be concise.".to_string()
+            } else {
+                s.config.persona.clone()
+            };
+            let system_prompt = build_system_prompt(&s, &persona);
+
+            // Decompress history for messages array
+            let history = decompress_context(&s);
+
+            // Build messages JSON array
+            let mut msgs = Vec::new();
+            for (role, content) in &history {
+                msgs.push(format!(r#"{{"role":"{}","content":"{}"}}"#,
+                    esc(role), esc(content)));
+            }
+
+            format!(
+                r#"{{"api_key":"{}","base_url":"{}","model":"{}","system_prompt":"{}","messages":[{}]}}"#,
+                esc(&s.config.api_key),
+                esc(&s.config.base_url),
+                esc(&s.config.model),
+                esc(&system_prompt),
+                msgs.join(",")
+            )
+        })).unwrap_or_else(|_| r#"{"error":"panic_in_get_context"}"#.to_string());
+
+        unsafe { jni_str(env, &result) }
+    }
+
+    /// Store the assistant's reply in compressed history.
+    /// Called by Java after OkHttp gets a successful response.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_pushAssistantTurn(
+        _e: JNIEnv, _c: JObject,
+        content: *const c_char,
+    ) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let text = cs_safe(content, 32768);
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            push_turn_compressed(&mut s, "assistant", &text);
+            s.theme.is_thinking = false;
+        }));
+    }
+
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getConfig(
         env: JNIEnv, _c: JObject,

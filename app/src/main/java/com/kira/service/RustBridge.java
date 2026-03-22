@@ -407,4 +407,14 @@ public class RustBridge {
     /** Clear all stored crash entries from Rust memory. */
     public static native void   clearCrashLog();
 
+
+    // ── Chat context for Java-side HTTP calls ─────────────────────────────────
+    /** Get everything needed to make the LLM call from Java.
+     *  Returns JSON: {api_key, base_url, model, system_prompt, messages:[...]}
+     *  Pushes the user message into Rust history as a side effect. */
+    public static native String getChatContext(String userMessage);
+
+    /** Store assistant reply in Rust compressed history. Call after successful HTTP. */
+    public static native void pushAssistantTurn(String content);
+
 }

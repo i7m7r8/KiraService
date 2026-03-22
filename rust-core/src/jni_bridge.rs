@@ -64,6 +64,28 @@ mod jni_bridge {
         if SERVER_STARTED.swap(true, Ordering::SeqCst) {
             return; // already running
         }
+
+        // Install a panic hook that suppresses the default stderr output and
+        // prevents the "panic in panic handler → abort()" double-panic scenario.
+        // catch_unwind at the JNI boundary still catches all panics safely.
+        // This is critical for Android where rustls can panic on bad TLS records.
+        std::panic::set_hook(Box::new(|info| {
+            // Log to Android logcat without panicking ourselves
+            let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = info.payload().downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic".to_string()
+            };
+            let loc = info.location().map(|l| format!("{}:{}", l.file(), l.line()))
+                .unwrap_or_else(|| "unknown".to_string());
+            // Store in state for crash reporting (best-effort, ignore lock errors)
+            if let Ok(mut s) = STATE.try_lock() {
+                s.last_panic = format!("{} @ {}", msg, loc);
+            }
+            // Do NOT call the default hook — it can cause double-panic → abort()
+        }));
         let p = port as u16;
         {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());

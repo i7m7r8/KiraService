@@ -32,6 +32,13 @@ public class KiraAI {
         void onError(String error);
     }
 
+    // Single shared OkHttpClient — connection pooling, one instance for lifetime of app
+    private static final okhttp3.OkHttpClient HTTP_CLIENT = new okhttp3.OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .build();
+
     public KiraAI(Context ctx) {
         this.ctx = ctx.getApplicationContext();
     }
@@ -47,7 +54,21 @@ public class KiraAI {
                 }
 
                 // Step 1: Get context from Rust (stores user turn, returns config+history)
-                String ctxJson = RustBridge.getChatContext(userMessage);
+                String ctxJson;
+                try {
+                    ctxJson = RustBridge.getChatContext(userMessage);
+                } catch (UnsatisfiedLinkError e) {
+                    // Old .so without getChatContext — fall back to legacy chatSync
+                    String legacyResult = RustBridge.chatSync(userMessage, "default", 10);
+                    if (legacyResult == null || legacyResult.isEmpty()) {
+                        if (cb != null) cb.onError("no response");
+                    } else {
+                        String err = parseJsonStr(legacyResult, "error");
+                        if (!err.isEmpty()) { if (cb != null) cb.onError(err); }
+                        else { String reply = parseJsonStr(legacyResult, "content"); if (cb != null) cb.onReply(reply.isEmpty() ? "done." : reply); }
+                    }
+                    return;
+                }
                 if (ctxJson == null || ctxJson.isEmpty()) {
                     if (cb != null) cb.onError("Failed to get chat context");
                     return;
@@ -90,13 +111,8 @@ public class KiraAI {
                 body.put("max_tokens", 2048);
                 body.put("messages", reqMessages);
 
-                // Step 3: Make HTTP call with OkHttp (Android-native, no rustls)
+                // Step 3: Make HTTP call with OkHttp (Android-native TLS, no rustls)
                 String url = baseUrl + "/chat/completions";
-                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                    .build();
-
                 okhttp3.Request request = new okhttp3.Request.Builder()
                     .url(url)
                     .addHeader("Authorization", "Bearer " + apiKey)
@@ -106,7 +122,7 @@ public class KiraAI {
                         okhttp3.MediaType.parse("application/json")))
                     .build();
 
-                okhttp3.Response response = client.newCall(request).execute();
+                okhttp3.Response response = HTTP_CLIENT.newCall(request).execute();
                 if (response.body() == null) {
                     if (cb != null) cb.onError("Empty response from server");
                     return;

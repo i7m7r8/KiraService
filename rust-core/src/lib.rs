@@ -8937,38 +8937,48 @@ pub fn https_post(
     auth_token: &str,
     timeout_s:  u64,
 ) -> Result<String, String> {
-    // Build TLS config with Mozilla root certificates
-    let root_store = {
-        let mut store = rustls::RootCertStore::empty();
-        store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        store
-    };
-    let config = Arc::new({
-        let c = ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-        c
-    });
+    // All rustls operations wrapped in catch_unwind.
+    // rustls can panic (bad MAC, unexpected close_notify, etc.) on MIUI/Android 11.
+    // We convert any panic into an Err so the caller can handle it gracefully.
+    let host_owned    = host.to_string();
+    let path_owned    = path.to_string();
+    let body_owned    = body.to_string();
+    let auth_owned    = auth_token.to_string();
+    let port_c        = port;
+    let timeout_c     = timeout_s;
 
-    // Establish TCP connection
-    let addr   = format!("{}:{}", host, port);
-    let mut stream = std::net::TcpStream::connect(&addr)
-        .map_err(|e| format!("tcp connect {}: {}", addr, e))?;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(timeout_s)))
-        .map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(std::time::Duration::from_secs(15)))
-        .map_err(|e| e.to_string())?;
+    let inner = move || -> Result<Vec<u8>, String> {
+        // Build TLS config with Mozilla root certificates
+        let root_store = {
+            let mut store = rustls::RootCertStore::empty();
+            store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            store
+        };
+        let config = Arc::new(
+            ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth()
+        );
 
-    // TLS handshake
-    let server_name = ServerName::try_from(host.to_string())
-        .map_err(|e| format!("invalid hostname {}: {:?}", host, e))?;
-    let mut conn = rustls::ClientConnection::new(config, server_name)
-        .map_err(|e| format!("tls init: {}", e))?;
-    let mut tls_stream = rustls::Stream::new(&mut conn, &mut stream);
+        // Establish TCP connection
+        let addr = format!("{}:{}", host_owned, port_c);
+        let mut stream = std::net::TcpStream::connect(&addr)
+            .map_err(|e| format!("tcp connect {}: {}", addr, e))?;
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(timeout_c)))
+            .map_err(|e| e.to_string())?;
+        stream.set_write_timeout(Some(std::time::Duration::from_secs(15)))
+            .map_err(|e| e.to_string())?;
 
-    // Write HTTP/1.1 request
-    let request = format!(
-        "POST {} HTTP/1.1
+        // TLS handshake
+        let server_name = ServerName::try_from(host_owned.clone())
+            .map_err(|e| format!("invalid hostname {}: {:?}", host_owned, e))?;
+        let mut conn = rustls::ClientConnection::new(config, server_name)
+            .map_err(|e| format!("tls init: {}", e))?;
+        let mut tls_stream = rustls::Stream::new(&mut conn, &mut stream);
+
+        // Write HTTP/1.1 request
+        let request = format!(
+            "POST {} HTTP/1.1
 Host: {}
 Authorization: Bearer {}
 Content-Type: application/json
@@ -8976,24 +8986,35 @@ Content-Length: {}
 Connection: close
 
 {}",
-        path, host, auth_token, body.len(), body
-    );
-    tls_stream.write_all(request.as_bytes())
-        .map_err(|e| format!("write: {}", e))?;
+            path_owned, host_owned, auth_owned, body_owned.len(), body_owned
+        );
+        tls_stream.write_all(request.as_bytes())
+            .map_err(|e| format!("write: {}", e))?;
 
-    // Read response
-    let mut response = Vec::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        match tls_stream.read(&mut buf) {
-            Ok(0)  => break,
-            Ok(n)  => response.extend_from_slice(&buf[..n]),
-            Err(e) if e.kind() == std::io::ErrorKind::ConnectionAborted => break,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof     => break,
-            Err(e) => return Err(format!("read: {}", e)),
+        // Read response
+        let mut response = Vec::new();
+        let mut buf = [0u8; 8192];
+        loop {
+            match tls_stream.read(&mut buf) {
+                Ok(0)  => break,
+                Ok(n)  => response.extend_from_slice(&buf[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::ConnectionAborted => break,
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof     => break,
+                Err(e) => return Err(format!("read: {}", e)),
+            }
+            if response.len() > 10 * 1024 * 1024 { break; }
         }
-        if response.len() > 10 * 1024 * 1024 { break; } // 10MB cap
-    }
+        Ok(response)
+    };
+
+    // Catch any rustls panic (bad MAC, unexpected record, etc.)
+    let raw_response = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(inner)) {
+        Ok(Ok(bytes))  => bytes,
+        Ok(Err(e))     => return Err(e),
+        Err(_panic)    => return Err("TLS error (rustls panicked — try again)".to_string()),
+    };
+
+    let response = Vec::from(raw_response);
 
     let resp_str = String::from_utf8_lossy(&response).into_owned();
     // Strip HTTP headers — find blank line

@@ -414,3 +414,43 @@ Added `RustBridge.isLoaded()` pre-flight check with clear error message.
 - Dashboard: uptime, requests, tool_calls, memory, skills, cron, sub-agents, Telegram, voice status
 - Chat, Memory add/search, Agent status, Cron management — all via fetch to Rust endpoints
 - CONTROL_UI_HTML constant — ~50 lines vanilla JS
+
+## v62 — Session 20: Real Streaming AI + Integration Fixes (2026-03-22)
+
+### The Real Gap Fixed
+Previous sessions added HTTP routes that Java never called. This session
+rewrites the actual Java-Rust integration to deliver OpenClaw-parity features.
+
+### KiraAI.java — Full SSE Streaming (447 lines)
+- `callLlmStreaming()` — OkHttp SSE stream parser
+  - Reads `data: {...}` lines, accumulates `delta.content` chunks
+  - Fires `cb.onPartial(text)` throttled to 200ms for real-time UI updates
+  - Handles `tool_calls` deltas — accumulates for Rust to parse
+  - Reconstructs non-streaming JSON response for Rust `processLlmReply`
+- New `Callback.onPartial(String)` method — streaming chunk callback
+- `SimpleCallback` adapter for callers that don't need streaming
+- Added `write_file:` shell job handler (was missing)
+- Fixed tool loop to properly handle all tool result formats
+
+### KiraTelegram.java — Streaming Telegram Replies (291 lines)
+- Sends "🤔 Thinking..." placeholder message immediately
+- `onPartial()` → `editMessageText()` every 800ms — live streaming in Telegram
+- `onTool()` → shows "🔧 toolname..." prefix while tools execute
+- `onReply()` → final edit to clean response (removes spinner)
+- Edit failure fallback → sends new message
+- Proper JSON escaping in all API calls
+
+### KiraNotificationService.java — Proactive AI
+- Now calls `RustBridge.onNotification(pkg, title, text, importance)` 
+  in addition to `pushNotification`
+- Passes channel importance (0-5) — keyword triggers only fire for importance≥3
+- This completes the Session 14 notification intelligence pipeline
+
+### What actually works end-to-end now
+1. User sends Telegram message → KiraTelegram polls getUpdates
+2. "Thinking..." message appears instantly
+3. KiraAI starts streaming LLM call
+4. Every 800ms: Telegram message edits in-place with current text
+5. Tool calls execute → "🔧 tool..." prefix shown
+6. Final reply replaces placeholder
+7. Notifications with keywords → proactive AI agent fires automatically

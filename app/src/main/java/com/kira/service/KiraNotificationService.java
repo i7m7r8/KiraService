@@ -68,6 +68,16 @@ public class KiraNotificationService extends NotificationListenerService {
 
             Log.d(TAG, "notif: " + pkg + " | " + title + " | " + text.substring(0, Math.min(50, text.length())));
             try { RustBridge.pushNotification(pkg, title, text); } catch (Throwable ignored) {}
+            // Session 14: also call onNotification with importance for keyword triggers
+            try {
+                int importance = 0;
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    android.app.NotificationChannel ch = getSystemService(android.app.NotificationManager.class)
+                        .getNotificationChannel(sbn.getNotification().getChannelId());
+                    if (ch != null) importance = ch.getImportance();
+                }
+                RustBridge.onNotification(pkg, title, text, importance);
+            } catch (Throwable ignored) {}
 
             // Also fire EventBus for in-app subscribers
             KiraEventBus.post(new KiraEventBus.NotifReceived(pkg, title, text));

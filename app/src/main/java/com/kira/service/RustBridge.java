@@ -436,4 +436,29 @@ public class RustBridge {
     /** Get agent_max_steps config value */
     public static native int getAgentMaxSteps();
 
+
+    // ── Session 12: Browser control ─────────────────────────────────────────
+    /** Called by Java after capturing WebView DOM as accessibility JSON */
+    public static native void onBrowserSnapshot(String snapshotJson);
+    /** Java polls this every 100ms to get the next browser command */
+    public static native String getBrowserPendingCommand();
+
+    // ── Session 13: Voice / TTS ──────────────────────────────────────────────
+    /** Java calls this with base64-encoded PCM audio chunk from microphone */
+    public static native void onVoiceChunk(String base64Pcm);
+    /** Java calls this when TTS audio has finished playing */
+    public static native void onVoiceTtsReady(String text);
+    /** Java polls this to get text to speak via Android TTS */
+    public static native String getVoiceTtsText();
+
+    // ── Session 14: Notification intelligence ───────────────────────────────
+    /** Called for each notification — carries importance for proactive AI */
+    public static native void onNotification(String pkg, String title, String text, int importance);
+
+    // ── Session 15: Java action queue ────────────────────────────────────────
+    /** Java polls this to get the next device action to execute */
+    public static native String getPendingJavaAction();
+    /** Java calls this with the result of an executed action */
+    public static native void deliverJavaActionResult(String actionId, String resultJson);
+
 }

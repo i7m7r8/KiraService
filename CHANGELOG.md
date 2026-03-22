@@ -254,3 +254,163 @@ Added `RustBridge.isLoaded()` pre-flight check with clear error message.
 ### Internal
 - `register_channel_shims()` called at startServer
 - `channel_ai_reply_tg()` / `channel_ai_reply_wa()` — wired to full ReAct loop
+
+## v60 — Sessions 11-19 (2026-03-22)
+
+### Session 11 — Canvas (A2UI)
+- Routes: GET /canvas (serves HTML), POST /canvas/push, POST /canvas/reset,
+  GET /canvas/state, GET /canvas/stream (SSE for WebView)
+- KiraState: canvas_state, canvas_seq
+- CANVAS_HTML constant — full A2UI host with SSE long-poll loop
+
+### Session 12 — Browser Tool
+- Routes: POST /browser/navigate, POST /browser/snapshot, GET /browser/snapshot,
+  POST /browser/act, GET /browser/pending_command, GET /browser/status
+- JNI: onBrowserSnapshot(), getBrowserPendingCommand()
+- KiraState: browser_snapshot, browser_snapshot_ts, browser_pending_cmd
+
+### Session 13 — Voice / TTS
+- Routes: POST /voice/start, POST /voice/audio_chunk, POST /voice/stop,
+  POST /voice/transcript, GET /voice/status, GET /voice/tts_text
+- JNI: onVoiceChunk(), onVoiceTtsReady(), getVoiceTtsText()
+- KiraState: voice_status, voice_audio_chunks, voice_tts_pending, voice_transcript
+
+### Session 14 — Notification Intelligence
+- Routes: POST /notifications/trigger/add, DELETE /notifications/trigger,
+  GET /notifications/triggers, POST /notifications/clear
+- JNI: onNotification() with importance-based proactive AI firing
+- check_notif_keyword_triggers(): spawns AI agent for HIGH importance matches
+- KiraState: notif_keyword_triggers
+
+### Session 15 — Java Action Queue
+- Routes: GET /java/pending_action, POST /java/action_result, GET /java/action_result
+- JNI: getPendingJavaAction(), deliverJavaActionResult()
+- KiraState: pending_java_actions, java_action_results
+
+### Session 16 — Multi-Agent Routing
+- Routes: GET /routing/agents, POST /routing/agents, DELETE /routing/agents
+- Struct: AgentRouteConfig (id, name, persona, model, channels, skill_ids)
+- KiraState: agent_configs
+
+### Session 17 — Model Failover
+- Routes: GET /models/failover, POST /models/failover/add,
+  POST /models/failover/mark_error, POST /models/failover/pick
+- Struct: ModelEntry (id, provider, model, priority, error_count, rate_limit_ms)
+- KiraState: model_failover_chain
+
+### Session 18 — Security / DM Policy + Allowlists
+- Routes: GET /security/pairing/pending, POST /security/pairing/approve,
+  GET /security/allowlists, POST /security/allowlists/add, DELETE /security/allowlists
+- KiraState: pairing_codes, channel_allowlists
+
+### Session 19 — Control UI (Web Dashboard)
+- Routes: GET /ui, GET /ui/dashboard
+- CONTROL_UI_HTML constant — full dashboard (chat, memory, agents, cron)
+- Real-time stats via /ui/dashboard JSON: uptime, requests, tools, memory, etc.
+
+## v60 — Sessions 11-19: Canvas, Browser, Voice, Notifications, Device Tools, Routing, Failover, Security, Control UI (2026-03-22)
+
+### Session 11 — Canvas (A2UI)
+- Routes: GET /canvas (serves HTML), POST /canvas/push, POST /canvas/reset,
+  GET /canvas/state, GET /canvas/stream (SSE for WebView)
+- CANVAS_HTML constant — full A2UI WebView host with SSE polling
+
+### Session 12 — Browser Tool
+- Routes: POST /browser/navigate, POST /browser/snapshot, GET /browser/snapshot,
+  POST /browser/act, GET /browser/pending_command, GET /browser/status
+- JNI: onBrowserSnapshot(), getBrowserPendingCommand()
+- State: browser_snapshot, browser_snapshot_ts, browser_pending_cmd
+
+### Session 13 — Voice / TTS
+- Routes: POST /voice/start, POST /voice/audio_chunk, POST /voice/stop,
+  POST /voice/transcript, GET /voice/status, GET /voice/tts_text
+- JNI: onVoiceChunk(), onVoiceTtsReady(), getVoiceTtsText()
+- State: voice_status, voice_audio_chunks, voice_tts_pending, voice_transcript
+- Full ReAct loop triggered from voice transcript
+
+### Session 14 — Notification Intelligence
+- Proactive AI on keyword-matched notifications (importance >= HIGH)
+- Routes: POST /notifications/trigger/add, DELETE /notifications/trigger,
+  GET /notifications/triggers, POST /notifications/clear
+- JNI: onNotification() with importance level
+- State: notif_keyword_triggers
+
+### Session 15 — Java Action Queue
+- Routes: GET /java/pending_action, POST /java/action_result, GET /java/action_result
+- JNI: getPendingJavaAction(), deliverJavaActionResult()
+- State: pending_java_actions, java_action_results
+
+### Session 16 — Multi-Agent Routing
+- Routes: GET /routing/agents, POST /routing/agents, DELETE /routing/agents
+- State: agent_configs (Vec<AgentRouteConfig>)
+- AgentRouteConfig: id, name, persona, model, channels, skill_ids, memory_scope
+
+### Session 17 — Model Failover
+- Routes: GET /models/failover, POST /models/failover/add,
+  POST /models/failover/mark_error, POST /models/failover/pick
+- State: model_failover_chain (Vec<ModelEntry>)
+- Priority-based selection, error counting, rate-limit tracking
+
+### Session 18 — Security
+- Routes: GET /security/pairing/pending, POST /security/pairing/approve,
+  GET /security/allowlists, POST /security/allowlists/add, DELETE /security/allowlists
+- State: pairing_codes, channel_allowlists
+
+### Session 19 — Control UI
+- Routes: GET /ui, GET /ui/dashboard
+- CONTROL_UI_HTML — full dashboard: chat, memory, agents, cron
+- Live refresh every 5s, uses /ai/run + /ai/run/status for streaming
+
+### RustBridge.java
+- Added: onBrowserSnapshot, getBrowserPendingCommand
+- Added: onVoiceChunk, onVoiceTtsReady, getVoiceTtsText
+- Added: onNotification, getPendingJavaAction, deliverJavaActionResult
+
+## v60 — Sessions 11-19: Canvas, Browser, Voice, Notifications, Device Tools, Routing, Failover, Security, Control UI (2026-03-22)
+
+### Session 11 — Canvas (A2UI)
+- Routes: GET /canvas (serves HTML), POST /canvas/push, POST /canvas/reset, GET /canvas/state, GET /canvas/stream (SSE)
+- CANVAS_HTML constant — A2UI host page, polls /canvas/stream every 500ms, renders text/html payloads
+- AI tools: canvas.push, canvas.reset via dispatch
+
+### Session 12 — Browser Tool
+- JNI: onBrowserSnapshot(json), getBrowserPendingCommand()
+- Routes: POST /browser/navigate, POST /browser/snapshot, GET /browser/snapshot, POST /browser/act, GET /browser/pending_command, GET /browser/status
+- RustBridge.java: +onBrowserSnapshot, +getBrowserPendingCommand
+
+### Session 13 — Voice / TTS
+- JNI: onVoiceChunk(base64pcm), onVoiceTtsReady(text), getVoiceTtsText()
+- Routes: POST /voice/start, POST /voice/audio_chunk, POST /voice/stop, POST /voice/transcript, GET /voice/status, GET /voice/tts_text
+- Full AI loop on transcript, result queued for Java TTS
+- RustBridge.java: +onVoiceChunk, +onVoiceTtsReady, +getVoiceTtsText
+
+### Session 14 — Notification Intelligence
+- JNI: onNotification(pkg, title, text, importance) — fires proactive AI on keyword match
+- Routes: POST /notifications/trigger/add, DELETE /notifications/trigger, GET /notifications/triggers, POST /notifications/clear
+- Proactive: importance≥3 notifications matched against keyword triggers → isolated AI agent
+- RustBridge.java: +onNotification
+
+### Session 15 — Java Action Queue (Device Tools)
+- JNI: getPendingJavaAction(), deliverJavaActionResult(id, json)
+- Routes: GET /java/pending_action, POST /java/action_result, GET /java/action_result?id=
+- KiraState: +pending_java_actions VecDeque, +java_action_results HashMap
+- RustBridge.java: +getPendingJavaAction, +deliverJavaActionResult
+
+### Session 16 — Multi-Agent Routing
+- KiraState: +agent_configs Vec<AgentRouteConfig>
+- Routes: GET /routing/agents, POST /routing/agents, DELETE /routing/agents
+
+### Session 17 — Model Failover
+- KiraState: +model_failover_chain Vec<ModelEntry>
+- Routes: GET /models/failover, POST /models/failover/add, POST /models/failover/mark_error, POST /models/failover/pick
+
+### Session 18 — Security: DM Policy + Allowlists
+- KiraState: +pairing_codes HashMap, +channel_allowlists HashMap
+- Routes: GET /security/pairing/pending, POST /security/pairing/approve, GET /security/allowlists, POST /security/allowlists/add, DELETE /security/allowlists
+
+### Session 19 — Control UI
+- GET /ui → full single-page dashboard (HTML/JS, no external deps)
+- GET /ui/dashboard → JSON metrics snapshot
+- Dashboard: uptime, requests, tool_calls, memory, skills, cron, sub-agents, Telegram, voice status
+- Chat, Memory add/search, Agent status, Cron management — all via fetch to Rust endpoints
+- CONTROL_UI_HTML constant — ~50 lines vanilla JS

@@ -1173,6 +1173,38 @@ struct KiraState {
 
     // ── OTA Update Engine (v43) ─────────────────────────────────────────────
     ota: OtaEngine,
+
+    // ── Session 11: Canvas (A2UI) ───────────────────────────────────────────
+    canvas_state:     String,   // current A2UI JSON pushed to WebView
+    canvas_seq:       u64,      // sequence number, incremented on each push
+
+    // ── Session 12: Browser control ────────────────────────────────────────
+    browser_snapshot:    String,  // latest DOM accessibility tree from WebView
+    browser_snapshot_ts: u128,
+    browser_pending_cmd: Option<String>,  // next command for Java to execute
+
+    // ── Session 13: Voice / TTS ─────────────────────────────────────────────
+    voice_status:       String,   // idle|listening|processing|speaking
+    voice_audio_chunks: Vec<String>, // base64 PCM chunks from mic
+    voice_tts_pending:  String,   // text for Java TTS to speak
+    voice_transcript:   String,   // last recognised speech
+
+    // ── Session 14: Notification intelligence ──────────────────────────────
+    notif_keyword_triggers: Vec<(String, String)>, // (keyword, ai_goal)
+
+    // ── Session 15: Java action queue ──────────────────────────────────────
+    pending_java_actions: std::collections::VecDeque<String>, // JSON action objects
+    java_action_results:  std::collections::HashMap<String, String>,
+
+    // ── Session 16: Multi-agent routing ────────────────────────────────────
+    agent_configs:   Vec<AgentRouteConfig>,
+
+    // ── Session 17: Model failover ──────────────────────────────────────────
+    model_failover_chain: Vec<ModelEntry>,
+
+    // ── Session 18: Security / pairing ─────────────────────────────────────
+    pairing_codes:   std::collections::HashMap<String, String>, // sender → code
+    channel_allowlists: std::collections::HashMap<String, Vec<String>>,
 }
 
 // Sub-structs (v7, unchanged)
@@ -1208,7 +1240,34 @@ struct CacheEntry { value:String, expires_at:u128 }
 struct KbEntry { id:String, title:String, content:String, tags:Vec<String>, ts:u128 }
 #[derive(Clone)]
 struct EventFeedEntry { event:String, data:String, ts:u128 }
-struct Notif { pkg:String, title:String, text:String, time:u128 }
+pub struct Notif { pub pkg:String, pub title:String, pub text:String, pub time:u128 }
+
+// ── Session 16: Multi-agent routing ──────────────────────────────────────────
+#[derive(Clone, Default)]
+struct AgentRouteConfig {
+    id:           String,
+    name:         String,
+    persona:      String,
+    model:        String,
+    channels:     Vec<String>, // "telegram" | "whatsapp" | "*"
+    skill_ids:    Vec<String>,
+    memory_scope: String,
+    enabled:      bool,
+}
+
+// ── Session 17: Model failover ────────────────────────────────────────────────
+#[derive(Clone, Default)]
+struct ModelEntry {
+    id:            String,
+    provider:      String,
+    model:         String,
+    api_key:       String,
+    base_url:      String,
+    priority:      u32,
+    enabled:       bool,
+    error_count:   u32,
+    rate_limit_ms: u128,
+}
 
 // ── LZ4 compression helpers for conversation history (Session B) ──────────
 
@@ -1262,6 +1321,7 @@ lazy_static! {
         active_provider: "groq".to_string(),
         active_profile:  "default".to_string(),
         soul_md: "You are Kira, a powerful Android AI agent. You are helpful, proactive, and autonomous.".to_string(),
+        voice_status:    "idle".to_string(),
         theme:   ThemeConfig::catppuccin_mocha(),
         config:  KiraConfig::default(),
         setup:   SetupState::default(),
@@ -3722,6 +3782,116 @@ Context: {}",
         unsafe { jni_str(env, &hex) }
     }
 
+    // ── Session 12: Browser JNI ───────────────────────────────────────────────
+
+    /// Java calls this after capturing WebView DOM as accessibility JSON
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_onBrowserSnapshot(
+        _e: JNIEnv, _c: JObject, snapshot_json: *const c_char,
+    ) {
+        let json = cs_safe(snapshot_json, 524288);
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        s.browser_snapshot    = json;
+        s.browser_snapshot_ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default().as_millis();
+    }
+
+    /// Java polls this to get the next browser command to execute
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getBrowserPendingCommand(
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let cmd = s.browser_pending_cmd.take().unwrap_or_default();
+        unsafe { jni_str(env, &cmd) }
+    }
+
+    // ── Session 13: Voice JNI ────────────────────────────────────────────────
+
+    /// Java calls this when microphone audio chunk is ready (base64 PCM)
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_onVoiceChunk(
+        _e: JNIEnv, _c: JObject, base64_pcm: *const c_char,
+    ) {
+        let chunk = cs_safe(base64_pcm, 131072);
+        if !chunk.is_empty() {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.voice_audio_chunks.push(chunk);
+        }
+    }
+
+    /// Java calls this to deliver TTS text Rust should speak
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_onVoiceTtsReady(
+        _e: JNIEnv, _c: JObject, text: *const c_char,
+    ) {
+        let t = cs_safe(text, 4096);
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        s.voice_tts_pending = t;
+    }
+
+    /// Java polls this to get text to speak via Android TTS
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getVoiceTtsText(
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let text = s.voice_tts_pending.clone();
+        if !text.is_empty() { s.voice_tts_pending.clear(); }
+        unsafe { jni_str(env, &text) }
+    }
+
+    // ── Session 14: Notification intelligence JNI ────────────────────────────
+
+    /// Java calls this for each notification — already handled by signalNotif
+    /// This version carries more metadata for proactive AI
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_onNotification(
+        _e: JNIEnv, _c: JObject,
+        pkg: *const c_char, title: *const c_char,
+        text: *const c_char, importance: i32,
+    ) {
+        let (p, ti, tx) = (cs_safe(pkg, 256), cs_safe(title, 256), cs_safe(text, 512));
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        s.notifications.push_back(super::Notif {
+            pkg: p.clone(), title: ti.clone(), text: tx.clone(),
+            time: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_millis(),
+        });
+        if s.notifications.len() > 200 { s.notifications.pop_front(); }
+        // Check notification triggers for proactive AI
+        fire_notif_triggers(&mut s, &p, &ti, &tx);
+        drop(s);
+        // Proactive: check keyword triggers
+        check_notif_keyword_triggers(&p, &ti, &tx, importance);
+    }
+
+    // ── Session 15: Device data JNI ──────────────────────────────────────────
+
+    /// Java delivers location result after `get_location` tool request
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_deliverJavaActionResult(
+        _e: JNIEnv, _c: JObject,
+        action_id: *const c_char, result_json: *const c_char,
+    ) {
+        let (id, result) = (cs_safe(action_id, 128), cs_safe(result_json, 65536));
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        s.java_action_results.insert(id, result);
+    }
+
+    /// Java polls for the next pending action to execute
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getPendingJavaAction(
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let action = s.pending_java_actions.pop_front()
+            .unwrap_or_default();
+        unsafe { jni_str(env, &action) }
+    }
+
 }
 
 
@@ -5348,6 +5518,8 @@ You are executing a multi-step task autonomously.
             if let Some(r) = route_openclaw_modules(method, path_clean, body) { r }
             // ── Sessions 7+8: Channel routes
             else if let Some(r) = route_channels(method, path_clean, body) { r }
+            // ── Sessions 11-19: Advanced routes
+            else if let Some(r) = route_advanced(method, path_clean, body) { r }
             else if let Some(r) = route_openclaw_v3(method, path_clean, body) { r }
             else if let Some(r) = route_vlm_agent(method, path_clean, body) { r }
             else if let Some(r) = route_roboru(method, path_clean, body) { r }
@@ -5671,6 +5843,719 @@ fn route_channels(method: &str, path: &str, body: &str) -> Option<String> {
     }
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Sessions 11-19 — Advanced features
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Session 14: fire proactive AI if notification matches a keyword trigger
+fn check_notif_keyword_triggers(pkg: &str, title: &str, text: &str, importance: i32) {
+    if importance < 3 { return; } // only HIGH importance (3+)
+    let triggers = {
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        s.notif_keyword_triggers.clone()
+    };
+    let haystack = format!("{} {} {}", pkg, title, text).to_lowercase();
+    for (keyword, goal) in triggers {
+        if haystack.contains(&keyword.to_lowercase()) {
+            let goal_with_context = format!(
+                "{}. Context: notification from '{}' — title: '{}', text: '{}'",
+                goal, pkg, title, &text[..text.len().min(200)]
+            );
+            thread::spawn(move || {
+                let (api_key, base_url, model, sys, _) = get_llm_config_snapshot();
+                if api_key.is_empty() { return; }
+                let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                let cfg = crate::ai::runner::AgentRunConfig {
+                    api_key, base_url, model,
+                    system_prompt: format!("{}\n\nYou are reacting to a notification.", sys),
+                    session_id: format!("notif_{}", now_ms()),
+                    user_message: goal_with_context,
+                    history: vec![], max_steps: 8, tools_json,
+                };
+                crate::ai::runner::run_agent(cfg);
+            });
+            break; // one trigger per notification
+        }
+    }
+}
+
+/// Sessions 11-19 route handler
+fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
+    match (method, path) {
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 11 — Canvas (A2UI)
+        // ════════════════════════════════════════════════════════════════════
+
+        ("GET", "/canvas") => {
+            // Serve the A2UI host HTML — FloatingWindowService WebView loads this
+            Some(CANVAS_HTML.to_string())
+        }
+
+        ("POST", "/canvas/push") => {
+            let a2ui_json = extract_json_str(body, "payload")
+                .unwrap_or_else(|| body.to_string());
+            if a2ui_json.is_empty() {
+                return Some(r#"{"error":"payload required"}"#.to_string());
+            }
+            let seq = {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.canvas_seq += 1;
+                s.canvas_state = a2ui_json.clone();
+                s.canvas_seq
+            };
+            s_push_event("canvas_push", &format!("seq:{}", seq));
+            Some(format!(r#"{{"ok":true,"seq":{}}}"#, seq))
+        }
+
+        ("POST", "/canvas/reset") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.canvas_state = String::new();
+            s.canvas_seq  += 1;
+            let seq = s.canvas_seq;
+            drop(s);
+            s_push_event("canvas_reset", "");
+            Some(format!(r#"{{"ok":true,"seq":{}}}"#, seq))
+        }
+
+        ("GET", "/canvas/state") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            Some(format!(r#"{{"seq":{},"state":{}}}"#,
+                s.canvas_seq,
+                if s.canvas_state.is_empty() { "null".to_string() }
+                else { s.canvas_state.clone() }
+            ))
+        }
+
+        // SSE stream for canvas updates — WebView long-polls this
+        ("GET", "/canvas/stream") => {
+            // Return current state as SSE event (WebView reconnects for each update)
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let data = format!(r#"{{"seq":{},"state":{}}}"#,
+                s.canvas_seq,
+                if s.canvas_state.is_empty() { "null".to_string() }
+                else { s.canvas_state.clone() }
+            );
+            Some(format!("data: {}\n\n", data))
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 12 — Browser tool
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/browser/navigate") => {
+            let url = extract_json_str(body, "url").unwrap_or_default();
+            if url.is_empty() { return Some(r#"{"error":"url required"}"#.to_string()); }
+            let cmd = format!(r#"{{"action":"navigate","url":"{}"}}"#, esc(&url));
+            STATE.lock().unwrap_or_else(|e| e.into_inner())
+                .browser_pending_cmd = Some(cmd);
+            Some(format!(r#"{{"ok":true,"url":"{}","status":"navigating"}}"#, esc(&url)))
+        }
+
+        ("POST", "/browser/snapshot") => {
+            // Queue snapshot request — Java captures and calls onBrowserSnapshot
+            let cmd = r#"{"action":"snapshot"}"#.to_string();
+            STATE.lock().unwrap_or_else(|e| e.into_inner())
+                .browser_pending_cmd = Some(cmd);
+            Some(r#"{"ok":true,"status":"capturing"}"#.to_string())
+        }
+
+        ("GET", "/browser/snapshot") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if s.browser_snapshot.is_empty() {
+                Some(r#"{"ok":false,"error":"no snapshot yet"}"#.to_string())
+            } else {
+                Some(format!(r#"{{"ok":true,"ts":{},"snapshot":{}}}"#,
+                    s.browser_snapshot_ts, s.browser_snapshot))
+            }
+        }
+
+        ("POST", "/browser/act") => {
+            let selector = extract_json_str(body, "selector").unwrap_or_default();
+            let action   = extract_json_str(body, "action").unwrap_or_default();
+            let value    = extract_json_str(body, "value").unwrap_or_default();
+            let cmd = format!(
+                r#"{{"action":"act","selector":"{}","act":"{}","value":"{}"}}"#,
+                esc(&selector), esc(&action), esc(&value)
+            );
+            STATE.lock().unwrap_or_else(|e| e.into_inner())
+                .browser_pending_cmd = Some(cmd);
+            Some(r#"{"ok":true,"status":"queued"}"#.to_string())
+        }
+
+        ("GET", "/browser/pending_command") => {
+            // Java polls this every 100ms
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            match s.browser_pending_cmd.take() {
+                Some(cmd) => Some(cmd),
+                None      => Some(r#"{"action":"none"}"#.to_string()),
+            }
+        }
+
+        ("GET", "/browser/status") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            Some(format!(
+                r#"{{"has_snapshot":{},"snapshot_ts":{},"pending_cmd":{}}}"#,
+                !s.browser_snapshot.is_empty(),
+                s.browser_snapshot_ts,
+                s.browser_pending_cmd.is_some()
+            ))
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 13 — Voice / TTS
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/voice/start") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.voice_status = "listening".to_string();
+            s.voice_audio_chunks.clear();
+            s.voice_transcript.clear();
+            Some(r#"{"ok":true,"status":"listening"}"#.to_string())
+        }
+
+        ("POST", "/voice/audio_chunk") => {
+            // Java posts base64 PCM chunks here during recording
+            let chunk = extract_json_str(body, "data")
+                .or_else(|| if !body.is_empty() { Some(body.to_string()) } else { None })
+                .unwrap_or_default();
+            if !chunk.is_empty() {
+                STATE.lock().unwrap_or_else(|e| e.into_inner())
+                    .voice_audio_chunks.push(chunk);
+            }
+            Some(r#"{"ok":true}"#.to_string())
+        }
+
+        ("POST", "/voice/stop") => {
+            // Collect chunks, send to transcription, run AI
+            let (chunks, api_key, base_url, model) = {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.voice_status = "processing".to_string();
+                let chunks = s.voice_audio_chunks.drain(..).collect::<Vec<_>>();
+                (chunks, s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
+            };
+
+            if api_key.is_empty() {
+                STATE.lock().unwrap_or_else(|e| e.into_inner()).voice_status = "idle".to_string();
+                return Some(r#"{"error":"no API key"}"#.to_string());
+            }
+
+            let chunk_count = chunks.len();
+
+            thread::spawn(move || {
+                // Transcription via Whisper (OpenAI /audio/transcriptions)
+                // For now: use accumulated chunks as proxy text until Whisper integration
+                // Full Whisper: Session 13 advanced — would assemble WAV and POST to API
+                let transcript = if chunk_count > 0 {
+                    // Signal to Java that we need transcription
+                    // Java should call /voice/transcript with the result
+                    format!("audio_{}_chunks_pending_transcription", chunk_count)
+                } else {
+                    String::new()
+                };
+
+                {
+                    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    s.voice_transcript = transcript.clone();
+                }
+
+                // If we have a transcript, run AI
+                if !transcript.is_empty() && !transcript.contains("pending") {
+                    let (sys, history) = {
+                        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                        let persona = s.config.persona.clone();
+                        (build_system_prompt(&s, &persona), decompress_context(&s))
+                    };
+                    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                    let cfg = crate::ai::runner::AgentRunConfig {
+                        api_key, base_url, model, system_prompt: sys,
+                        session_id: "voice_default".to_string(),
+                        user_message: transcript,
+                        history, max_steps: 10, tools_json,
+                    };
+                    let result = crate::ai::runner::run_agent(cfg);
+                    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    s.voice_tts_pending = result.content.clone();
+                    s.voice_status = "speaking".to_string();
+                    if !result.content.is_empty() {
+                        push_turn_compressed(&mut s, "assistant", &result.content);
+                    }
+                } else {
+                    STATE.lock().unwrap_or_else(|e| e.into_inner()).voice_status = "idle".to_string();
+                }
+            });
+
+            Some(format!(r#"{{"ok":true,"status":"processing","chunks":{}}}"#, chunk_count))
+        }
+
+        ("POST", "/voice/transcript") => {
+            // Java posts the Whisper/speech-to-text result here
+            let text = extract_json_str(body, "text").unwrap_or_default();
+            if text.is_empty() {
+                STATE.lock().unwrap_or_else(|e| e.into_inner()).voice_status = "idle".to_string();
+                return Some(r#"{"ok":false}"#.to_string());
+            }
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.voice_transcript = text.clone();
+                s.voice_status = "processing".to_string();
+                push_turn_compressed(&mut s, "user", &text);
+            }
+            // Run AI on transcript
+            let (api_key, base_url, model, sys, history) = get_llm_config_snapshot();
+            let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+            let cfg = crate::ai::runner::AgentRunConfig {
+                api_key, base_url, model, system_prompt: sys,
+                session_id: "voice_default".to_string(),
+                user_message: text,
+                history, max_steps: 10, tools_json,
+            };
+            thread::spawn(move || {
+                let result = crate::ai::runner::run_agent(cfg);
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.voice_tts_pending = result.content.clone();
+                s.voice_status = "speaking".to_string();
+                if !result.content.is_empty() {
+                    push_turn_compressed(&mut s, "assistant", &result.content);
+                }
+            });
+            Some(r#"{"ok":true,"status":"processing"}"#.to_string())
+        }
+
+        ("GET", "/voice/status") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            Some(format!(
+                r#"{{"status":"{}","transcript":"{}","tts_pending":{}}}"#,
+                s.voice_status,
+                esc(&s.voice_transcript),
+                !s.voice_tts_pending.is_empty()
+            ))
+        }
+
+        ("GET", "/voice/tts_text") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let text = s.voice_tts_pending.clone();
+            if !text.is_empty() {
+                s.voice_tts_pending.clear();
+                s.voice_status = "idle".to_string();
+            }
+            Some(format!(r#"{{"has_text":{},"text":"{}"}}"#, !text.is_empty(), esc(&text)))
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 14 — Notification intelligence
+        // ════════════════════════════════════════════════════════════════════
+
+        ("POST", "/notifications/trigger/add") => {
+            let keyword = extract_json_str(body, "keyword").unwrap_or_default();
+            let goal    = extract_json_str(body, "goal").unwrap_or_default();
+            if keyword.is_empty() || goal.is_empty() {
+                return Some(r#"{"error":"keyword and goal required"}"#.to_string());
+            }
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.notif_keyword_triggers.retain(|(k,_)| k != &keyword);
+            s.notif_keyword_triggers.push((keyword.clone(), goal));
+            Some(format!(r#"{{"ok":true,"keyword":"{}","total":{}}}"#,
+                keyword, s.notif_keyword_triggers.len()))
+        }
+
+        ("DELETE", "/notifications/trigger") => {
+            let keyword = extract_json_str(body, "keyword").unwrap_or_default();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let before = s.notif_keyword_triggers.len();
+            s.notif_keyword_triggers.retain(|(k,_)| k != &keyword);
+            Some(format!(r#"{{"ok":true,"removed":{}}}"#,
+                before - s.notif_keyword_triggers.len()))
+        }
+
+        ("GET", "/notifications/triggers") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.notif_keyword_triggers.iter()
+                .map(|(k,g)| format!(r#"{{"keyword":"{}","goal":"{}"}}"#, esc(k), esc(g)))
+                .collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+
+        ("POST", "/notifications/clear") => {
+            let pkg = extract_json_str(body, "pkg");
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let before = s.notifications.len();
+            if let Some(p) = &pkg {
+                s.notifications.retain(|n| &n.pkg != p);
+            } else {
+                s.notifications.clear();
+            }
+            Some(format!(r#"{{"ok":true,"cleared":{}}}"#,
+                before - s.notifications.len()))
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 15 — Java action queue (device tools)
+        // ════════════════════════════════════════════════════════════════════
+
+        ("GET", "/java/pending_action") => {
+            // Java polls this every 200ms to get device actions to execute
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            match s.pending_java_actions.pop_front() {
+                Some(action) => Some(action),
+                None         => Some(r#"{"action":"none"}"#.to_string()),
+            }
+        }
+
+        ("POST", "/java/action_result") => {
+            let id     = extract_json_str(body, "id").unwrap_or_default();
+            let result = extract_json_str(body, "result")
+                .unwrap_or_else(|| body.to_string());
+            if !id.is_empty() {
+                STATE.lock().unwrap_or_else(|e| e.into_inner())
+                    .java_action_results.insert(id.clone(), result);
+            }
+            Some(format!(r#"{{"ok":true,"id":"{}"}}"#, id))
+        }
+
+        ("GET", "/java/action_result") => {
+            let id = path.split('?').nth(1)
+                .and_then(|q| q.split('=').nth(1))
+                .map(|s| s.to_string())
+                .or_else(|| extract_json_str(body, "id"))
+                .unwrap_or_default();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            match s.java_action_results.get(&id) {
+                Some(r) => Some(format!(r#"{{"ok":true,"id":"{}","result":{}}}"#,
+                    id, r)),
+                None    => Some(format!(r#"{{"ok":false,"id":"{}","error":"not ready"}}"#, id)),
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 16 — Multi-agent routing
+        // ════════════════════════════════════════════════════════════════════
+
+        ("GET", "/routing/agents") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.agent_configs.iter().map(|a| {
+                format!(r#"{{"id":"{}","name":"{}","channels":[{}],"enabled":{}}}"#,
+                    esc(&a.id), esc(&a.name),
+                    a.channels.iter().map(|c| format!("\"{}\"",c)).collect::<Vec<_>>().join(","),
+                    a.enabled)
+            }).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+
+        ("POST", "/routing/agents") => {
+            let id       = extract_json_str(body, "id")
+                .unwrap_or_else(|| format!("agent_{}", now_ms()));
+            let name     = extract_json_str(body, "name").unwrap_or_else(|| id.clone());
+            let persona  = extract_json_str(body, "persona").unwrap_or_default();
+            let model    = extract_json_str(body, "model").unwrap_or_default();
+            let channels_str = extract_json_str(body, "channels").unwrap_or_else(|| "*".into());
+            let channels: Vec<String> = channels_str.split(',')
+                .map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
+            let cfg = AgentRouteConfig {
+                id: id.clone(), name, persona, model,
+                channels, skill_ids: vec![],
+                memory_scope: "global".into(), enabled: true,
+            };
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.agent_configs.retain(|a| a.id != id);
+            s.agent_configs.push(cfg);
+            Some(format!(r#"{{"ok":true,"id":"{}"}}"#, id))
+        }
+
+        ("DELETE", "/routing/agents") => {
+            let id = extract_json_str(body, "id").unwrap_or_default();
+            STATE.lock().unwrap_or_else(|e| e.into_inner())
+                .agent_configs.retain(|a| a.id != id);
+            Some(format!(r#"{{"ok":true,"id":"{}"}}"#, id))
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 17 — Model failover
+        // ════════════════════════════════════════════════════════════════════
+
+        ("GET", "/models/failover") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.model_failover_chain.iter().map(|m| {
+                format!(r#"{{"id":"{}","provider":"{}","model":"{}","priority":{},"enabled":{},"error_count":{}}}"#,
+                    esc(&m.id), esc(&m.provider), esc(&m.model),
+                    m.priority, m.enabled, m.error_count)
+            }).collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+
+        ("POST", "/models/failover/add") => {
+            let entry = ModelEntry {
+                id:       extract_json_str(body, "id")
+                    .unwrap_or_else(|| format!("m_{}", now_ms())),
+                provider: extract_json_str(body, "provider").unwrap_or_default(),
+                model:    extract_json_str(body, "model").unwrap_or_default(),
+                api_key:  extract_json_str(body, "api_key").unwrap_or_default(),
+                base_url: extract_json_str(body, "base_url").unwrap_or_default(),
+                priority: extract_json_num(body, "priority").unwrap_or(0.0) as u32,
+                enabled:  true,
+                error_count: 0,
+                rate_limit_ms: 0,
+            };
+            let id = entry.id.clone();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.model_failover_chain.retain(|m| m.id != id);
+            s.model_failover_chain.push(entry);
+            s.model_failover_chain.sort_by_key(|m| m.priority);
+            Some(format!(r#"{{"ok":true,"id":"{}"}}"#, id))
+        }
+
+        ("POST", "/models/failover/mark_error") => {
+            let id   = extract_json_str(body, "id").unwrap_or_default();
+            let limit_ms = extract_json_num(body, "rate_limit_ms").unwrap_or(0.0) as u128;
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(m) = s.model_failover_chain.iter_mut().find(|m| m.id == id) {
+                m.error_count   += 1;
+                m.rate_limit_ms  = if limit_ms > 0 { now_ms() + limit_ms } else { m.rate_limit_ms };
+            }
+            Some(r#"{"ok":true}"#.to_string())
+        }
+
+        ("POST", "/models/failover/pick") => {
+            // Returns the best available model based on priority + error state
+            let now = now_ms();
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let best = s.model_failover_chain.iter()
+                .filter(|m| m.enabled && m.error_count < 5 && m.rate_limit_ms < now)
+                .min_by_key(|m| m.priority);
+            match best {
+                Some(m) => Some(format!(
+                    r#"{{"ok":true,"id":"{}","provider":"{}","model":"{}","base_url":"{}"}}"#,
+                    esc(&m.id), esc(&m.provider), esc(&m.model), esc(&m.base_url)
+                )),
+                None => Some(r#"{"ok":false,"error":"no available models"}"#.to_string()),
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 18 — Security: DM policy + allowlists
+        // ════════════════════════════════════════════════════════════════════
+
+        ("GET", "/security/pairing/pending") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.pairing_codes.iter()
+                .map(|(sender, code)| format!(r#"{{"sender":"{}","code":"{}"}}"#,
+                    esc(sender), code))
+                .collect();
+            Some(format!("[{}]", items.join(",")))
+        }
+
+        ("POST", "/security/pairing/approve") => {
+            let sender  = extract_json_str(body, "sender").unwrap_or_default();
+            let code    = extract_json_str(body, "code").unwrap_or_default();
+            let channel = extract_json_str(body, "channel")
+                .unwrap_or_else(|| "telegram".into());
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let stored  = s.pairing_codes.get(&sender).cloned();
+            match stored {
+                Some(c) if c == code => {
+                    s.pairing_codes.remove(&sender);
+                    s.channel_allowlists
+                        .entry(channel.clone())
+                        .or_default()
+                        .push(sender.clone());
+                    Some(format!(r#"{{"ok":true,"sender":"{}","channel":"{}"}}"#,
+                        sender, channel))
+                }
+                _ => Some(r#"{"ok":false,"error":"invalid code"}"#.to_string()),
+            }
+        }
+
+        ("GET", "/security/allowlists") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.channel_allowlists.iter()
+                .map(|(ch, senders)| {
+                    let ss: Vec<String> = senders.iter()
+                        .map(|s| format!("\"{}\"", esc(s))).collect();
+                    format!(r#""{}":[{}]"#, ch, ss.join(","))
+                })
+                .collect();
+            Some(format!("{{{}}}", items.join(",")))
+        }
+
+        ("POST", "/security/allowlists/add") => {
+            let channel = extract_json_str(body, "channel").unwrap_or_default();
+            let sender  = extract_json_str(body, "sender").unwrap_or_default();
+            if channel.is_empty() || sender.is_empty() {
+                return Some(r#"{"error":"channel and sender required"}"#.to_string());
+            }
+            STATE.lock().unwrap_or_else(|e| e.into_inner())
+                .channel_allowlists.entry(channel.clone()).or_default()
+                .push(sender.clone());
+            Some(format!(r#"{{"ok":true,"channel":"{}","sender":"{}"}}"#, channel, sender))
+        }
+
+        ("DELETE", "/security/allowlists") => {
+            let channel = extract_json_str(body, "channel").unwrap_or_default();
+            let sender  = extract_json_str(body, "sender").unwrap_or_default();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(list) = s.channel_allowlists.get_mut(&channel) {
+                list.retain(|s| s != &sender);
+            }
+            Some(r#"{"ok":true}"#.to_string())
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // SESSION 19 — Control UI
+        // ════════════════════════════════════════════════════════════════════
+
+        ("GET", "/ui") | ("GET", "/ui/") => {
+            Some(CONTROL_UI_HTML.to_string())
+        }
+
+        ("GET", "/ui/dashboard") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            Some(format!(
+                r#"{{"version":"0.1.5","uptime_ms":{},"requests":{},"tool_calls":{},"memory_entries":{},"skills":{},"cron_jobs":{},"sub_agents":{},"telegram":{},"whatsapp":{},"canvas_seq":{},"voice_status":"{}"}}"#,
+                now_ms() - s.uptime_start,
+                s.request_count,
+                s.tool_call_count,
+                s.memory_index.len(),
+                s.skills.len(),
+                s.cron_jobs.len(),
+                crate::ai::SUBAGENT_REGISTRY.lock().unwrap_or_else(|e|e.into_inner()).running_count(),
+                !s.config.tg_token.is_empty(),
+                crate::channels::WA_STATE.lock().unwrap_or_else(|e|e.into_inner()).config.is_configured(),
+                s.canvas_seq,
+                s.voice_status
+            ))
+        }
+
+        _ => None,
+    }
+}
+
+// ── Canvas A2UI HTML ──────────────────────────────────────────────────────────
+const CANVAS_HTML: &str = r#"<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kira Canvas</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0f0e17; color: #e8e3ff; font-family: sans-serif; height: 100vh; overflow: hidden; }
+#canvas { width: 100%; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#content { width: 100%; max-width: 480px; padding: 16px; }
+.kira-text { font-size: 16px; line-height: 1.5; white-space: pre-wrap; }
+.kira-button { display: inline-block; padding: 10px 20px; margin: 4px; background: #7c6af6; color: #fff; border-radius: 12px; cursor: pointer; }
+</style>
+</head><body>
+<div id="canvas"><div id="content"><div class="kira-text" id="main">Kira Canvas ready.</div></div></div>
+<script>
+var seq = 0;
+function poll() {
+  fetch('/canvas/stream').then(r=>r.text()).then(txt => {
+    var m = txt.match(/data: (.*)/); if (!m) { setTimeout(poll,1000); return; }
+    try { var d = JSON.parse(m[1]); if (d.seq > seq) { seq = d.seq; render(d.state); } } catch(e) {}
+    setTimeout(poll, 500);
+  }).catch(()=>setTimeout(poll,2000));
+}
+function render(state) {
+  if (!state) return;
+  var el = document.getElementById('main');
+  if (typeof state === 'string') { el.textContent = state; return; }
+  if (state.type === 'text') { el.textContent = state.content || ''; }
+  else if (state.type === 'html') { el.innerHTML = state.content || ''; }
+  else { el.textContent = JSON.stringify(state, null, 2); }
+}
+poll();
+</script></body></html>"#;
+
+// ── Control UI HTML ───────────────────────────────────────────────────────────
+const CONTROL_UI_HTML: &str = r#"<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kira Control</title>
+<style>
+* { box-sizing: border-box; } body { background:#0f0e17; color:#e8e3ff; font-family:sans-serif; padding:16px; margin:0; }
+h1 { color:#7c6af6; font-size:20px; margin-bottom:16px; } h2 { color:#c792ea; font-size:14px; margin:12px 0 6px; }
+.card { background:#1c1b2a; border-radius:12px; padding:12px; margin-bottom:12px; }
+.stat { display:inline-block; background:#272539; border-radius:8px; padding:8px 12px; margin:4px; font-size:13px; }
+.stat b { color:#7c6af6; } input,textarea { width:100%; background:#14131e; color:#e8e3ff; border:1px solid #4e4b6e; border-radius:8px; padding:8px; margin:4px 0; font-size:13px; }
+button { background:#7c6af6; color:#fff; border:none; border-radius:8px; padding:8px 16px; margin:4px; cursor:pointer; font-size:13px; }
+button.danger { background:#ff6b80; } pre { background:#14131e; padding:8px; border-radius:8px; font-size:11px; overflow-x:auto; white-space:pre-wrap; max-height:200px; overflow-y:auto; }
+</style></head><body>
+<h1>⚡ Kira Control</h1>
+<div class="card" id="stats"><h2>Dashboard</h2><div id="dash">Loading...</div></div>
+<div class="card"><h2>Chat</h2>
+<textarea id="msg" rows="2" placeholder="Message..."></textarea>
+<button onclick="sendMsg()">Send</button>
+<pre id="reply"></pre></div>
+<div class="card"><h2>Memory</h2>
+<input id="mem_content" placeholder="Content to remember...">
+<input id="mem_tags" placeholder="Tags (comma-separated)">
+<button onclick="addMem()">Add</button>
+<input id="mem_query" placeholder="Search query...">
+<button onclick="searchMem()">Search</button>
+<pre id="mem_result"></pre></div>
+<div class="card"><h2>Agent Status</h2>
+<button onclick="loadAgents()">Refresh</button>
+<pre id="agents_out"></pre></div>
+<div class="card"><h2>Cron Jobs</h2>
+<input id="cron_expr" placeholder='Expression (e.g. "every 1h")'>
+<input id="cron_goal" placeholder="Goal / action">
+<button onclick="addCron()">Add</button>
+<button onclick="loadCron()">List</button>
+<pre id="cron_out"></pre></div>
+<script>
+var BASE = '';
+function api(method, path, body) {
+  return fetch(BASE+path, {method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined}).then(r=>r.json());
+}
+function loadDash() {
+  api('GET','/ui/dashboard').then(d => {
+    document.getElementById('dash').innerHTML =
+      '<span class="stat">Uptime <b>'+Math.floor(d.uptime_ms/1000)+'s</b></span>'+
+      '<span class="stat">Requests <b>'+d.requests+'</b></span>'+
+      '<span class="stat">Tool calls <b>'+d.tool_calls+'</b></span>'+
+      '<span class="stat">Memories <b>'+d.memory_entries+'</b></span>'+
+      '<span class="stat">Skills <b>'+d.skills+'</b></span>'+
+      '<span class="stat">Cron <b>'+d.cron_jobs+'</b></span>'+
+      '<span class="stat">Sub-agents <b>'+d.sub_agents+'</b></span>'+
+      '<span class="stat">Telegram <b>'+(d.telegram?'✓':'✗')+'</b></span>'+
+      '<span class="stat">Voice <b>'+d.voice_status+'</b></span>';
+  });
+}
+function sendMsg() {
+  var msg = document.getElementById('msg').value;
+  if (!msg) return;
+  api('POST','/ai/run',{message:msg,session:'ui',max_steps:15}).then(()=>{
+    var poll = setInterval(()=>{
+      api('GET','/ai/run/status').then(s=>{
+        if (s.status==='done'||s.status==='error') {
+          clearInterval(poll);
+          document.getElementById('reply').textContent = s.result ? s.result.content : s.status;
+        }
+      });
+    }, 800);
+  });
+}
+function addMem() {
+  var c = document.getElementById('mem_content').value;
+  var t = document.getElementById('mem_tags').value;
+  api('POST','/memory/add',{content:c,tags:t}).then(r=>{ document.getElementById('mem_result').textContent = JSON.stringify(r); });
+}
+function searchMem() {
+  var q = document.getElementById('mem_query').value;
+  api('GET','/memory/v2/search?q='+encodeURIComponent(q)).then(r=>{ document.getElementById('mem_result').textContent = JSON.stringify(r,null,2); });
+}
+function loadAgents() {
+  api('GET','/agents/list').then(r=>{ document.getElementById('agents_out').textContent = JSON.stringify(r,null,2); });
+}
+function addCron() {
+  var expr = document.getElementById('cron_expr').value;
+  var goal = document.getElementById('cron_goal').value;
+  api('POST','/cron/create',{expression:expr,action:goal}).then(r=>{ document.getElementById('cron_out').textContent = JSON.stringify(r); });
+}
+function loadCron() {
+  api('GET','/cron/v2').then(r=>{ document.getElementById('cron_out').textContent = JSON.stringify(r,null,2); });
+}
+loadDash();
+setInterval(loadDash, 5000);
+</script></body></html>"#;
+
+/// Session 9: push to event feed without holding lock long
 fn s_push_event(event: &str, data: &str) {
     let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
     s.event_feed.push_back(EventFeedEntry {

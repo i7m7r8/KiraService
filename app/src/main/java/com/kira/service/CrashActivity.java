@@ -186,9 +186,9 @@ public class CrashActivity extends Activity {
             : currentTrace;
         if (firstLine.length() > 120) firstLine = firstLine.substring(0, 120) + "\u2026";
 
-        addText(summaryCard, "\u2715 Exception", 10, RED, Typeface.BOLD, Gravity.LEFT, 0, dp(4));
-        addText(summaryCard, firstLine, 11, YELLOW, Typeface.NORMAL, Gravity.LEFT, 0, 0);
-        addText(summaryCard, "Thread: " + currentThread, 10, MUTED, Typeface.MONOSPACE, Gravity.LEFT, dp(6), 0);
+        addText(summaryCard, "\u2715 Exception", 10, RED, true,  false, Gravity.LEFT, 0, dp(4));
+        addText(summaryCard, firstLine, 11, YELLOW, false, false, Gravity.LEFT, 0, 0);
+        addText(summaryCard, "Thread: " + currentThread, 10, MUTED, false, true,  Gravity.LEFT, dp(6), 0);
 
         // Full stack trace card
         LinearLayout traceCard = new LinearLayout(this);
@@ -198,7 +198,7 @@ public class CrashActivity extends Activity {
         lp(traceCard, 0, 0);
         col.addView(traceCard);
 
-        addText(traceCard, "STACK TRACE", 9, PEACH, Typeface.BOLD, Gravity.LEFT, 0, dp(8));
+        addText(traceCard, "STACK TRACE", 9, PEACH, true,  false, Gravity.LEFT, 0, dp(8));
 
         HorizontalScrollView hs = new HorizontalScrollView(this);
         hs.setLayoutParams(new LinearLayout.LayoutParams(MATCH, WRAP));
@@ -227,7 +227,7 @@ public class CrashActivity extends Activity {
         col.setPadding(dp(12), dp(12), dp(12), dp(12));
         scroll.addView(col, new ScrollView.LayoutParams(MATCH, WRAP));
 
-        addText(col, "CRASH HISTORY", 10, PEACH, Typeface.BOLD, Gravity.LEFT, 0, dp(12));
+        addText(col, "CRASH HISTORY", 10, PEACH, true,  false, Gravity.LEFT, 0, dp(12));
 
         // Load from SharedPrefs (always available, even if Rust is dead)
         SharedPreferences p = getSharedPreferences(KiraApp.PREFS_CRASH, MODE_PRIVATE);
@@ -269,11 +269,11 @@ public class CrashActivity extends Activity {
                         org.json.JSONArray crashes = root.getJSONArray("crashes");
                         if (crashes.length() == 0) {
                             addText(col, "No crashes in Rust log \u2713", 11, GREEN,
-                                Typeface.MONOSPACE, Gravity.LEFT, 0, 0);
+                                false, true,  Gravity.LEFT, 0, 0);
                             return;
                         }
                         addText(col, crashes.length() + " entries in Rust log", 10,
-                            MUTED, Typeface.MONOSPACE, Gravity.LEFT, 0, dp(8));
+                            MUTED, false, true,  Gravity.LEFT, 0, dp(8));
                         // Show newest first
                         for (int i = crashes.length()-1; i >= 0; i--) {
                             org.json.JSONObject c = crashes.getJSONObject(i);
@@ -284,14 +284,14 @@ public class CrashActivity extends Activity {
                         }
                     } catch (Exception e) {
                         addText(col, "Parse error: " + e.getMessage(), 10, RED,
-                            Typeface.MONOSPACE, Gravity.LEFT, 0, 0);
+                            false, true,  Gravity.LEFT, 0, 0);
                     }
                 });
             } catch (Throwable e) {
                 new Handler(Looper.getMainLooper()).post(() -> {
                     col.removeView(loadingTv);
                     addText(col, "Rust engine offline (crash log unavailable)", 10, MUTED,
-                        Typeface.MONOSPACE, Gravity.LEFT, 0, 0);
+                        false, true,  Gravity.LEFT, 0, 0);
                 });
             }
         }).start();
@@ -332,7 +332,7 @@ public class CrashActivity extends Activity {
         // First error line
         String first = trace.contains("\n") ? trace.substring(0, trace.indexOf("\n")) : trace;
         if (first.length() > 100) first = first.substring(0, 100) + "\u2026";
-        addText(card, first, 10, RED, Typeface.MONOSPACE, Gravity.LEFT, dp(6), dp(4));
+        addText(card, first, 10, RED, false, true,  Gravity.LEFT, dp(6), dp(4));
 
         // Expand on tap
         final boolean[] expanded = {false};
@@ -473,16 +473,18 @@ public class CrashActivity extends Activity {
         bar.addView(btn);
     }
 
+    /** bold=true → Typeface.BOLD, mono=true → MONOSPACE (mono takes precedence) */
     private void addText(ViewGroup parent, String text, int sp, int color,
-                         Typeface typeface, int gravity, int topMargin, int bottomMargin) {
+                         boolean bold, boolean mono, int gravity,
+                         int topMargin, int bottomMargin) {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextSize(sp);
         tv.setTextColor(color);
-        if (typeface == Typeface.MONOSPACE) {
-            tv.setTypeface(Typeface.MONOSPACE);
-        } else if (typeface != null) {
-            tv.setTypeface(typeface);
+        if (mono) {
+            tv.setTypeface(Typeface.MONOSPACE, bold ? Typeface.BOLD : Typeface.NORMAL);
+        } else {
+            tv.setTypeface(null, bold ? Typeface.BOLD : Typeface.NORMAL);
         }
         tv.setGravity(gravity);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(MATCH, WRAP);

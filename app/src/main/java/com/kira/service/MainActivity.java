@@ -924,13 +924,9 @@ public class MainActivity extends Activity
     }
 
     private void updateThinkingBubble(ConvTurn turn, String reply) {
-        if (thinkingView == null) {
-            conversation.add(turn);
-            addKiraBubble(turn);
-            return;
-        }
-        // Replace the "???" with real content
-        if (chatContainer != null) chatContainer.removeView(thinkingView);
+        // MUST go through destroyTypingIndicator to cancel dot ValueAnimators.
+        // Direct removeView() without cancelling animators = crash with no stacktrace.
+        destroyTypingIndicator();
         thinkingView = null;
         conversation.add(turn);
         addKiraBubble(turn);
@@ -2211,20 +2207,19 @@ public class MainActivity extends Activity
         new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable subtitleRunnable;
     private int subtitleIdx = 0;
+    private volatile boolean subtitleCycleActive = false;
 
     private void startSubtitleCycle(String[] labels) {
         subtitleIdx = 0;
+        subtitleCycleActive = true;
         subtitleHandler.removeCallbacks(subtitleRunnable);
         subtitleRunnable = new Runnable() {
             @Override public void run() {
-                if (headerSubtitle == null) return;
-                // Fade out → change → fade in
-                headerSubtitle.animate().alpha(0f).setDuration(150)
-                    .withEndAction(() -> {
-                        subtitleIdx = (subtitleIdx + 1) % labels.length;
-                        if (headerSubtitle != null) headerSubtitle.setText(labels[subtitleIdx]);
-                        headerSubtitle.animate().alpha(1f).setDuration(150).start();
-                    }).start();
+                if (headerSubtitle == null || isFinishing() || isDestroyed()) return;
+                if (!subtitleCycleActive) return;
+                // Simple setText — no nested animate withEndAction to avoid race crashes
+                subtitleIdx = (subtitleIdx + 1) % labels.length;
+                headerSubtitle.setText(labels[subtitleIdx]);
                 subtitleHandler.postDelayed(this, 1800);
             }
         };
@@ -2233,70 +2228,92 @@ public class MainActivity extends Activity
     }
 
     private void stopSubtitleCycle() {
+        subtitleCycleActive = false;
         subtitleHandler.removeCallbacks(subtitleRunnable);
     }
 
     // ── Layer 2: Animated typing indicator (three sine-wave dots) ────────
     private LinearLayout typingIndicator;
-    private android.os.Handler typingHandler =
-        new android.os.Handler(android.os.Looper.getMainLooper());
+    // Flag set to false when indicator is being hidden — stops all dot animation loops
+    private volatile boolean dotAnimating = false;
+    // ValueAnimators for the 3 dots — kept so we can cancel() them cleanly
+    private final android.animation.ValueAnimator[] dotAnimators =
+        new android.animation.ValueAnimator[3];
 
     private void showTypingIndicator() {
-        if (chatContainer == null) return; // guard against NPE
-        if (typingIndicator != null) {
-            try { chatContainer.removeView(typingIndicator); } catch (Throwable ignored) {}
-        }
+        if (chatContainer == null) return;
+        // Cancel + remove any existing indicator first
+        destroyTypingIndicator();
+
         typingIndicator = new LinearLayout(this);
         typingIndicator.setOrientation(LinearLayout.HORIZONTAL);
         typingIndicator.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        typingIndicator.setPadding(dp(16), dp(8), dp(16), dp(8));
+        typingIndicator.setPadding(dp(16), dp(10), dp(16), dp(10));
         typingIndicator.setTag("typing_indicator");
-        // 3 Lavender dots with staggered sine-wave bounce
+
+        dotAnimating = true;
         for (int i = 0; i < 3; i++) {
             View dot = new View(this);
-            dot.setBackgroundColor(0xFFB4BEFE);  // Lavender
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(6), dp(6));
+            dot.setBackgroundColor(0xFFB4BEFE);
+            android.graphics.drawable.GradientDrawable dotBg =
+                new android.graphics.drawable.GradientDrawable();
+            dotBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            dotBg.setColor(0xFFB4BEFE);
+            dot.setBackground(dotBg);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(7), dp(7));
             lp.setMargins(dp(3), 0, dp(3), 0);
             dot.setLayoutParams(lp);
             typingIndicator.addView(dot);
-            // Stagger: 0ms, 120ms, 240ms
-            final int delay = i * 120;
-            uiHandler.postDelayed(() -> animateDot(dot), delay);
+
+            // Use ValueAnimator — can be cancelled cleanly, no withEndAction recursion
+            android.animation.ValueAnimator anim =
+                android.animation.ValueAnimator.ofFloat(0f, -dp(5), 0f);
+            anim.setDuration(500);
+            anim.setStartDelay(i * 160L);
+            anim.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            anim.setRepeatMode(android.animation.ValueAnimator.RESTART);
+            anim.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+            final View fDot = dot;
+            anim.addUpdateListener(a -> {
+                // Only animate if dot is still attached
+                if (dotAnimating && fDot.getParent() != null) {
+                    fDot.setTranslationY((float) a.getAnimatedValue());
+                }
+            });
+            dotAnimators[i] = anim;
+            anim.start();
         }
+
         typingIndicator.setAlpha(0f);
-        if (chatContainer != null) chatContainer.addView(typingIndicator);
-        typingIndicator.animate().alpha(1f).setDuration(100).start();
+        chatContainer.addView(typingIndicator);
+        typingIndicator.animate().alpha(1f).setDuration(150).start();
         scrollToBottom();
     }
 
-    private void animateDot(View dot) {
-        dot.animate()
-            .translationY(-dp(4))
-            .setDuration(300)
-            .setInterpolator(new android.view.animation.OvershootInterpolator(1.5f))
-            .withEndAction(() -> dot.animate()
-                .translationY(0)
-                .setDuration(300)
-                .withEndAction(() -> {
-                    // Repeat if still visible
-                    if (typingIndicator != null && typingIndicator.getParent() != null) {
-                        uiHandler.postDelayed(() -> animateDot(dot), 200);
-                    }
-                }).start())
-            .start();
-    }
-
-    private void hideTypingIndicator() {
+    /** Cancel all dot animators and remove the typing indicator from the hierarchy. */
+    private void destroyTypingIndicator() {
+        // Stop all ValueAnimators immediately — no withEndAction, no recursion
+        dotAnimating = false;
+        for (int i = 0; i < 3; i++) {
+            if (dotAnimators[i] != null) {
+                dotAnimators[i].cancel();
+                dotAnimators[i] = null;
+            }
+        }
         if (typingIndicator != null) {
             final LinearLayout ti = typingIndicator;
             typingIndicator = null;
-            ti.animate().alpha(0f).setDuration(150)
-                .withEndAction(() -> {
-                    if (chatContainer != null && ti.getParent() == chatContainer) {
-                        try { chatContainer.removeView(ti); } catch (Throwable ignored) {}
-                    }
-                }).start();
+            // Cancel any pending animations on the container itself
+            ti.animate().cancel();
+            // Remove immediately — no fade-out animation that could race
+            if (chatContainer != null && ti.getParent() == chatContainer) {
+                try { chatContainer.removeView(ti); } catch (Throwable ignored) {}
+            }
         }
+    }
+
+    private void hideTypingIndicator() {
+        destroyTypingIndicator();
     }
 
     // ── Layer 5: Section header underline animation ─────────────────────────

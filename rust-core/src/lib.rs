@@ -2322,6 +2322,8 @@ mod jni_bridge {
             ];
         }
         install_builtin_templates(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
+        // Session 2: register runner shims (dispatch + LLM call function pointers)
+        register_runner_shims();
         thread::spawn(move || run_http(p));
         thread::spawn(run_trigger_watcher);
         thread::spawn(run_cron_scheduler);
@@ -5338,7 +5340,7 @@ You are executing a multi-step task autonomously.
             }
         }
         _ => {
-            // ── Session 1: OpenClaw module routes ────────────────────────────
+// ── Session 1: OpenClaw module routes ────────────────────────────────────────
             if let Some(r) = route_openclaw_modules(method, path_clean, body) { r }
             else if let Some(r) = route_openclaw_v3(method, path_clean, body) { r }
             else if let Some(r) = route_vlm_agent(method, path_clean, body) { r }
@@ -5350,7 +5352,111 @@ You are executing a multi-step task autonomously.
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session 1 — OpenClaw module routes
+// Session 2 — ReAct loop support helpers
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Build a minimal OpenAI tools schema JSON for tools in the allowlist.
+/// Expanded per tool as more sessions add proper schemas.
+fn build_kira_tools_schema(allowlist: &[String]) -> String {
+    // Tool definitions: (name, description, params: [(name, desc, required)])
+    let all_tools: &[(&str, &str, &[(&str, &str, bool)])] = &[
+        ("add_memory",     "Store information in persistent memory",    &[("content","The info to remember",true), ("tags","Comma-separated tags",false)]),
+        ("search_memory",  "Search stored memories by keyword",         &[("query","Search query",true), ("limit","Max results",false)]),
+        ("get_battery",    "Get current battery level and charge state",&[]),
+        ("get_wifi",       "Get current WiFi connection status",        &[]),
+        ("get_notifications","Get recent Android notifications",        &[("limit","Max items",false), ("pkg","Filter by package",false)]),
+        ("get_device_state","Get battery + wifi + foreground app + notifications summary",&[]),
+        ("get_foreground_app","Get currently active app",               &[]),
+        ("run_shell",      "Run a shell command via Shizuku",           &[("cmd","Shell command",true), ("timeout_ms","Timeout ms",false)]),
+        ("read_file",      "Read contents of a file",                   &[("path","File path",true), ("max_bytes","Max bytes",false)]),
+        ("write_file",     "Write content to a file",                   &[("path","File path",true), ("content","Content to write",true)]),
+        ("list_files",     "List files in a directory",                 &[("path","Directory path",true)]),
+        ("set_variable",   "Store a named variable",                    &[("key","Variable name",true), ("value","Value",true)]),
+        ("get_variable",   "Retrieve a named variable",                 &[("key","Variable name",true)]),
+        ("web_search",     "Search the web via DuckDuckGo",             &[("query","Search query",true)]),
+        ("think",          "Reason step by step before acting",         &[("thoughts","Your reasoning",true)]),
+        ("open_app",       "Open an Android app by package name",       &[("package","Package name",true)]),
+        ("send_sms",       "Send an SMS message",                       &[("to","Phone number",true), ("body","Message text",true)]),
+        ("get_location",   "Get current GPS location",                  &[]),
+        ("list_contacts",  "Search contacts by name or number",         &[("query","Name or number to search",true)]),
+        ("list_calendar",  "List calendar events",                      &[("from_ms","Start time unix ms",false), ("to_ms","End time unix ms",false)]),
+        ("take_photo",     "Capture a photo from device camera",        &[("camera","front or back",false)]),
+    ];
+
+    let defs: Vec<String> = all_tools.iter()
+        .filter(|(name, _, _)| allowlist.is_empty() || allowlist.iter().any(|a| a == name))
+        .map(|(name, desc, params)| {
+            let props: Vec<String> = params.iter().map(|(pname, pdesc, _)| {
+                format!(r#""{}":{{"type":"string","description":"{}"}}"#, pname, esc(pdesc))
+            }).collect();
+            let required: Vec<String> = params.iter()
+                .filter(|(_, _, req)| *req)
+                .map(|(n, _, _)| format!("\"{}\"", n))
+                .collect();
+            format!(
+                r#"{{"type":"function","function":{{"name":"{}","description":"{}","parameters":{{"type":"object","properties":{{{}}},"required":[{}]}}}}}}"#,
+                name, esc(desc), props.join(","), required.join(",")
+            )
+        })
+        .collect();
+
+    format!("[{}]", defs.join(","))
+}
+
+/// LLM call shim for runner — wraps the existing https_post infrastructure
+fn llm_call_for_runner(api_key: &str, base_url: &str, body: &str) -> Result<String, String> {
+    let fallback = "https://api.groq.com/openai/v1";
+    let safe_url = if base_url.is_ascii()
+        && (base_url.starts_with("http://") || base_url.starts_with("https://"))
+        && base_url.len() < 512
+    { base_url } else { fallback };
+
+    let url_clean = safe_url.trim_end_matches('/');
+    let (host, port, base_path) = parse_api_url(url_clean)?;
+    let path = format!("{}/chat/completions", base_path.trim_end_matches('/'));
+
+    if port == 443 || safe_url.starts_with("https://") {
+        https_post(&host, port, &path, body, api_key, 90)
+    } else {
+        use std::io::{Write, BufRead, BufReader};
+        let addr = format!("{}:{}", host, port);
+        let mut stream = std::net::TcpStream::connect(&addr)
+            .map_err(|e| format!("connect {}: {}", addr, e))?;
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(90)))
+            .map_err(|e| e.to_string())?;
+        let request = format!(
+            "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            path, host, api_key, body.len(), body
+        );
+        stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(stream);
+        let mut in_body = false;
+        let mut resp = String::new();
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    if !in_body { if line == "\r\n" { in_body = true; } }
+                    else { resp.push_str(&line); }
+                }
+                Err(_) => break,
+            }
+        }
+        Ok(resp)
+    }
+}
+
+/// Dispatch shim for runner — bridges into existing dispatch_tool()
+fn dispatch_for_runner(name: &str, params: &std::collections::HashMap<String, String>) -> String {
+    dispatch_tool(name, params)
+}
+
+/// Called once at startup to wire the runner's function pointers
+fn register_runner_shims() {
+    crate::ai::runner::register_dispatch(dispatch_for_runner);
+    crate::ai::runner::register_llm_call(llm_call_for_runner);
+}
 //
 // These are NEW endpoints added as part of the OpenClaw integration.
 // They delegate to the module types created in ai/, memory/, skills/,
@@ -5364,15 +5470,111 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
 
     match (method, path) {
 
-        // ── AI run status (stub — Session 2 fills this) ──────────────────────
+        // ── AI run status — live from RUN_STATE ──────────────────────────────
         ("GET", "/ai/run/status") => {
-            let s = s_lock();
-            // For now report based on existing agent_tasks queue
-            let running = s.agent_tasks.iter().any(|t| t.status == "running");
-            if running {
-                Some(r#"{"status":"running"}"#.to_string())
+            let rs = crate::ai::runner::RUN_STATE.lock()
+                .unwrap_or_else(|e| e.into_inner());
+            Some(rs.to_json())
+        }
+
+        // ── POST /ai/run — spawn non-blocking ReAct loop ─────────────────────
+        // body: {"message":"..","session":"default","max_steps":25}
+        ("POST", "/ai/run") => {
+            let req = crate::ai::runner::AiRunRequest::from_json(body);
+            if req.message.is_empty() {
+                return Some(r#"{"error":"message required"}"#.to_string());
+            }
+
+            // Reject if already running
+            {
+                let rs = crate::ai::runner::RUN_STATE.lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                if rs.status == crate::ai::runner::RunStatus::Running {
+                    return Some(r#"{"error":"already running","hint":"POST /ai/run/abort first"}"#.to_string());
+                }
+            }
+
+            // Snapshot everything needed from STATE before spawning thread
+            let (api_key, base_url, model, system_prompt, history) = {
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                let cfg = &s.config;
+                let persona = if cfg.persona.is_empty() {
+                    "You are Kira, a powerful Android AI agent. Use tools to get real data — never guess.".to_string()
+                } else { cfg.persona.clone() };
+                let sys = build_system_prompt(&s, &persona);
+                let hist = decompress_context(&s);
+                let model = if let Some(m) = &req.model { m.clone() } else { cfg.model.clone() };
+                (cfg.api_key.clone(), cfg.base_url.clone(), model, sys, hist)
+            };
+
+            if api_key.is_empty() {
+                return Some(r#"{"error":"no API key configured"}"#.to_string());
+            }
+
+            // Push user message to compressed history
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                push_turn_compressed(&mut s, "user", &req.message);
+                s.theme.is_thinking = true;
+            }
+
+            // Build tool schema from allowlist
+            let tools_json = {
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                if s.tool_allowlist.is_empty() { "[]".to_string() }
+                else {
+                    // Minimal schema for the tools Kira has — expanded in Session 2+
+                    build_kira_tools_schema(&s.tool_allowlist)
+                }
+            };
+
+            let session_id = req.session_id.clone();
+            let user_msg   = req.message.clone();
+            let max_steps  = req.max_steps;
+
+            // Spawn worker thread
+            thread::spawn(move || {
+                let cfg = crate::ai::runner::AgentRunConfig {
+                    api_key, base_url, model,
+                    system_prompt,
+                    session_id: session_id.clone(),
+                    user_message: user_msg,
+                    history,
+                    max_steps,
+                    tools_json,
+                };
+                let result = crate::ai::runner::run_agent(cfg);
+
+                // Push assistant reply to compressed history
+                {
+                    let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    if !result.content.is_empty() {
+                        push_turn_compressed(&mut s, "assistant", &result.content);
+                    }
+                    s.theme.is_thinking = false;
+                    s.tool_call_count += result.tools_used.len() as u64;
+                }
+            });
+
+            Some(format!(
+                r#"{{"ok":true,"session":"{}","status":"running","hint":"poll GET /ai/run/status"}}"#,
+                req.session_id
+            ))
+        }
+
+        // ── POST /ai/run/abort — signal the running loop to stop ─────────────
+        ("POST", "/ai/run/abort") => {
+            let mut rs = crate::ai::runner::RUN_STATE.lock()
+                .unwrap_or_else(|e| e.into_inner());
+            if rs.status == crate::ai::runner::RunStatus::Running {
+                rs.abort  = true;
+                rs.status = crate::ai::runner::RunStatus::Aborting;
+                // Also stop theme indicator
+                drop(rs);
+                STATE.lock().unwrap_or_else(|e| e.into_inner()).theme.is_thinking = false;
+                Some(r#"{"ok":true,"status":"aborting"}"#.to_string())
             } else {
-                Some(crate::ai::runner::AiRunStatus::Idle.to_json())
+                Some(r#"{"ok":false,"error":"not running"}"#.to_string())
             }
         }
 

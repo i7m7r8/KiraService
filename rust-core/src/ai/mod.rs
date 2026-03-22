@@ -10,14 +10,24 @@
 // Session 17: fill model failover.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// kira-core :: ai  (Session 2: runner fully implemented)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 pub mod runner;
 pub mod models;
 pub mod tools;
 pub mod subagents;
 pub mod compaction;
 
-// ── Public re-exports ────────────────────────────────────────────────────────
-pub use runner::{AiRunStatus, AiRunRequest, AiRunResult};
+pub use runner::{
+    AiRunStatus, AiRunRequest, AiRunResult,
+    RunState, RunStatus, RUN_STATE,
+    AgentRunConfig, run_agent,
+    register_dispatch, register_llm_call,
+    parse_tool_calls_json, build_messages_json,
+    JsonToolCall,
+};
 pub use models::{ModelConfig, ModelProvider, FailoverChain};
 pub use tools::{ToolCall, ToolResult, ToolRegistry};
 pub use subagents::{SubAgentState, SubAgentRegistry};

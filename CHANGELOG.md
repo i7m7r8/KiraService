@@ -156,3 +156,26 @@ Added `RustBridge.isLoaded()` pre-flight check with clear error message.
 - `Cargo.toml` — Bumped version to 0.1.2
 
 ### No breaking changes — all existing functionality preserved
+
+## v57 — Session 2: ReAct AI Loop (2026-03-22)
+
+### Added
+- `ai/runner.rs` — Full ReAct loop implementation (`run_agent()`)
+  - Multi-step THINK→ACT→OBSERVE with configurable `max_steps` (default 25)
+  - `parse_tool_calls_json()` — OpenAI function-calling JSON format parser
+  - `build_messages_json()` — assembles Turn slice into LLM messages array
+  - `LoopDetector` — detects repeated (tool, params) within a window of 6
+  - In-place context compaction at >100 non-system turns (keeps last 60)
+  - `RUN_STATE` global (lazy_static Arc<Mutex>) — live status for polling
+  - `register_dispatch()` + `register_llm_call()` — OnceLock function pointers
+    avoid circular dependency between runner and lib.rs
+- `lib.rs` — New routes:
+  - `POST /ai/run` — non-blocking, spawns worker thread, returns immediately
+  - `POST /ai/run/abort` — sets abort flag, worker exits cleanly next step
+  - `GET /ai/run/status` — live status from RUN_STATE (replaces v56 stub)
+- `lib.rs` — `build_kira_tools_schema()` — builds OpenAI tool schema JSON
+  for all 20 registered tools from the allowlist
+- `lib.rs` — `register_runner_shims()` called at startServer, wires
+  `dispatch_for_runner` and `llm_call_for_runner` into runner module
+
+### No breaking changes — POST /ai/chat continues to work unchanged

@@ -57,17 +57,15 @@ public class KiraAI {
                 String ctxJson;
                 try {
                     ctxJson = RustBridge.getChatContext(userMessage);
-                } catch (UnsatisfiedLinkError e) {
-                    // Old .so without getChatContext — fall back to legacy chatSync
-                    String legacyResult = RustBridge.chatSync(userMessage, "default", 10);
-                    if (legacyResult == null || legacyResult.isEmpty()) {
-                        if (cb != null) cb.onError("no response");
-                    } else {
-                        String err = parseJsonStr(legacyResult, "error");
-                        if (!err.isEmpty()) { if (cb != null) cb.onError(err); }
-                        else { String reply = parseJsonStr(legacyResult, "content"); if (cb != null) cb.onReply(reply.isEmpty() ? "done." : reply); }
+                } catch (UnsatisfiedLinkError ule) {
+                    // Old .so: getChatContext not compiled yet — build context from KiraConfig
+                    // and call Java HTTP directly (never fall back to rustls chatSync)
+                    Log.w(TAG, "getChatContext not in .so, using KiraConfig fallback");
+                    ctxJson = buildContextFromConfig(userMessage);
+                    if (ctxJson == null) {
+                        if (cb != null) cb.onError("Please update the app — restart to apply");
+                        return;
                     }
-                    return;
                 }
                 if (ctxJson == null || ctxJson.isEmpty()) {
                     if (cb != null) cb.onError("Failed to get chat context");
@@ -186,6 +184,35 @@ public class KiraAI {
         } catch (Exception e) {
             // Fallback: manual parse for content field
             return parseJsonStr(json, "content");
+        }
+    }
+
+    /**
+     * Fallback for old .so without getChatContext: read config from KiraConfig.java
+     * and build the context JSON manually so we can still use Java OkHttp.
+     */
+    private String buildContextFromConfig(String userMessage) {
+        try {
+            com.kira.service.ai.KiraConfig cfg = com.kira.service.ai.KiraConfig.load(ctx);
+            if (cfg.apiKey == null || cfg.apiKey.isEmpty()) return null;
+            String baseUrl = (cfg.baseUrl == null || cfg.baseUrl.isEmpty())
+                ? "https://api.groq.com/openai/v1" : cfg.baseUrl;
+            String model = (cfg.model == null || cfg.model.isEmpty())
+                ? "llama-3.1-8b-instant" : cfg.model;
+            String system = (cfg.persona == null || cfg.persona.isEmpty())
+                ? "You are Kira, a helpful AI agent on Android. Be concise."
+                : cfg.persona;
+            // Escape for JSON
+            String safeMsg = userMessage.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+            String safeSys = system.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+            return "{\"api_key\":\"" + cfg.apiKey + "\"," +
+                   "\"base_url\":\"" + baseUrl + "\"," +
+                   "\"model\":\"" + model + "\"," +
+                   "\"system_prompt\":\"" + safeSys + "\"," +
+                   "\"messages\":[{\"role\":\"user\",\"content\":\"" + safeMsg + "\"}]}";
+        } catch (Exception e) {
+            Log.e(TAG, "buildContextFromConfig failed", e);
+            return null;
         }
     }
 

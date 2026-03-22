@@ -123,7 +123,7 @@ fn call_llm_for_summary(
     model:    &str,
     user_msg: &str,
 ) -> Result<String, String> {
-    use crate::{call_llm_sync, esc};
+    use crate::call_llm_sync;
 
     let history = vec![("user".to_string(), user_msg.to_string())];
     let raw = call_llm_sync(api_key, base_url, model, COMPACTION_PROMPT, &history)?;

@@ -516,7 +516,10 @@ fn extract_str(json: &str, key: &str) -> Option<String> {
 
 fn extract_u64(json: &str, key: &str) -> u64 {
     let needle = format!("\"{}\":", key);
-    let start  = json.find(&needle).map(|i| i + needle.len())?;
+    let start  = match json.find(&needle).map(|i| i + needle.len()) {
+        Some(i) => i,
+        None    => return 0,
+    };
     let rest   = json[start..].trim_start();
     let end    = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
     rest[..end].parse().unwrap_or(0)

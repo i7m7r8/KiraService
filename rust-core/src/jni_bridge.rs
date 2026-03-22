@@ -31,19 +31,25 @@ mod jni_bridge {
     /// Falls back to manual vtable[169] if env is null.
     unsafe fn jni_str(env: JNIEnv, s: &str) -> JString {
         use jni::JNIEnv as SafeEnv;
-        // jni crate wraps env pointer safely
-        if env.is_null() {
-            return std::ptr::null_mut();
-        }
-        let mut safe_env = SafeEnv::from_raw(env as *mut jni::sys::JNIEnv)
-            .expect("invalid JNIEnv");
-        match safe_env.new_string(s) {
+        if env.is_null() { return std::ptr::null_mut(); }
+        // Sanitize: remove embedded nulls which cause NewStringUTF to abort
+        let safe_s: String = s.chars()
+            .filter(|c| *c != '\0')
+            .collect();
+        // Clamp to 512KB to avoid OOM in JVM string allocation
+        let clamped = if safe_s.len() > 524288 {
+            &safe_s[..524288]
+        } else {
+            &safe_s
+        };
+        // from_raw can fail — use match instead of expect/unwrap
+        let mut safe_env = match SafeEnv::from_raw(env as *mut jni::sys::JNIEnv) {
+            Ok(e)  => e,
+            Err(_) => return std::ptr::null_mut(),
+        };
+        match safe_env.new_string(clamped) {
             Ok(jstr) => jstr.into_raw() as JString,
-            Err(_)   => {
-                // Fallback: empty string
-                safe_env.new_string("").map(|j| j.into_raw() as JString)
-                    .unwrap_or(std::ptr::null_mut())
-            }
+            Err(_)   => std::ptr::null_mut(),
         }
     }
 
@@ -1388,19 +1394,19 @@ Context: {}",
             r#"{{"message":"{}","session":"{}","max_tool_steps":{}}}"#,
             esc(&msg), esc(&sess), max_tool_steps
         );
-        // Run on thread with large stack — rustls TLS handshake needs ~2MB
-        let result = std::thread::Builder::new()
-            .stack_size(8 * 1024 * 1024) // 8MB
-            .spawn(move || {
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| route_http("POST", "/ai/chat", &body))) {
-                    Ok(r)  => r,
-                    Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
-                }
-            })
-            .map(|h| h.join().unwrap_or_else(|_| r#"{"error":"thread join failed","done":true}"#.to_string()))
-            .unwrap_or_else(|_| r#"{"error":"thread spawn failed","done":true}"#.to_string());
+        // IMPORTANT: do NOT spawn a new thread here.
+        // KiraAI-Chat thread already has 8MB stack (set in Java KiraAI.java).
+        // Spawning another thread inside JNI doubles stack usage → stack overflow → SIGABRT.
+        // catch_unwind here catches any Rust panic before it crosses the JNI boundary.
+        let result = match std::panic::catch_unwind(
+            std::panic::AssertUnwindSafe(|| route_http("POST", "/ai/chat", &body))
+        ) {
+            Ok(r)  => r,
+            Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
+        };
         unsafe { jni_str(env, &result) }
     }
+
 
     /// Get next queued shell command for Java to execute via Shizuku.
     /// Returns JSON {"id":"..","cmd":"..","timeout":5000} or {"empty":true}
@@ -1511,14 +1517,16 @@ Context: {}",
     pub extern "C" fn Java_com_kira_service_RustBridge_getLatestCrash(
         env: JNIEnv, _c: JObject,
     ) -> JString {
-        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        let result = match s.crash_log.back() {
-            Some(c) => format!(
-                r#"{{"has_crash":true,"ts":{},"thread":"{}","message":"{}"}}"#,
-                c.ts, esc(&c.thread), esc(&c.message)
-            ),
-            None => r#"{"has_crash":false}"#.to_string(),
-        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            match s.crash_log.back() {
+                Some(c) => format!(
+                    r#"{{"has_crash":true,"ts":{},"thread":"{}","message":"{}"}}"#,
+                    c.ts, esc(&c.thread), esc(&c.message)
+                ),
+                None => r#"{"has_crash":false}"#.to_string(),
+            }
+        })).unwrap_or_else(|_| r#"{"has_crash":false}"#.to_string());
         unsafe { jni_str(env, &result) }
     }
 

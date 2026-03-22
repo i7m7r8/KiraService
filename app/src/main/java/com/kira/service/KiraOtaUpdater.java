@@ -150,8 +150,8 @@ public class KiraOtaUpdater {
                         doInstall, doSkip));
                 }
 
-                // Auto-install silently if Shizuku available
-                if (ShizukuShell.isAvailable()) startDownload(fTag, fUrl, fBytes, isDelta);
+                // Note: do NOT auto-start here — user must tap INSTALL
+                // (prevents double-download when Shizuku is available)
 
             } catch (Exception e) {
                 Log.e(TAG, "checkForUpdate: " + e.getMessage());
@@ -323,7 +323,10 @@ public class KiraOtaUpdater {
             PendingIntent pi2 = PendingIntent.getBroadcast(ctx, sid,
                 new Intent(ctx, OtaInstallReceiver.class).putExtra("tag", tag),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
-            pi.openSession(sid).commit(pi2.getIntentSender());
+            // Open a FRESH session reference for commit (not the same object as above)
+            try (PackageInstaller.Session commitSession = pi.openSession(sid)) {
+                commitSession.commit(pi2.getIntentSender());
+            }
             apk.delete();
         } catch (Exception e) { installViaIntent(apk, tag); }
     }
@@ -334,9 +337,44 @@ public class KiraOtaUpdater {
                 ctx.getPackageName() + ".provider", apk);
             Intent i = new Intent(Intent.ACTION_VIEW);
             i.setDataAndType(uri, "application/vnd.android.package-archive");
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                     | Intent.FLAG_ACTIVITY_NEW_TASK
+                     | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             ctx.startActivity(i);
-        } catch (Exception e) { Log.e(TAG, "Intent install: " + e); }
+            Log.i(TAG, "installViaIntent: launched system installer");
+        } catch (Exception e) {
+            Log.e(TAG, "Intent install failed: " + e);
+            // Last resort: show a notification with the APK path
+            sendInstallNotification(apk, tag);
+        }
+    }
+
+    private void sendInstallNotification(File apk, String tag) {
+        try {
+            Uri uri = androidx.core.content.FileProvider.getUriForFile(ctx,
+                ctx.getPackageName() + ".provider", apk);
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            PendingIntent pi = PendingIntent.getActivity(ctx, 0xABC1,
+                i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            NotificationManager nm =
+                (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+
+            String channelId = KiraApp.CHANNEL_OTA;
+            Notification.Builder nb = android.os.Build.VERSION.SDK_INT >= 26
+                ? new Notification.Builder(ctx, channelId)
+                : new Notification.Builder(ctx);
+            nb.setSmallIcon(android.R.drawable.stat_sys_download_done)
+              .setContentTitle("Kira " + tag + " ready to install")
+              .setContentText("Tap to install the update")
+              .setContentIntent(pi)
+              .setAutoCancel(true);
+            nm.notify(0xABC1, nb.build());
+        } catch (Exception ignored) {}
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

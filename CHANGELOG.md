@@ -85,3 +85,54 @@
 - Neural Glass UI — 10 animation layers
 - Catppuccin Mocha/Latte theme with auto system detection
 - OTA update via GitHub Releases
+
+## v0.0.3 — Crash Reporter Fixed + OTA Fixed
+
+### Crash Reporter — Why It Never Appeared
+
+**Root cause:** `startActivity(CrashActivity)` inside `UncaughtExceptionHandler` is
+silently blocked by Android 10+ when called from a dying background thread.
+The process is dead before Android allows a background activity start.
+
+**Fix:** Replaced `startActivity()` with `AlarmManager.setExact()`.
+AlarmManager is a system-level mechanism that fires 600ms after the dying process
+schedules it — the process itself is already dead by then, but Android still fires
+the alarm and launches CrashActivity. This is the standard reliable pattern.
+
+Added `SCHEDULE_EXACT_ALARM` + `USE_EXACT_ALARM` to manifest (required Android 12+).
+
+### Crash Notification — Why It Didn't Show
+
+**Root cause:** Deprecated `Notification.PRIORITY_MAX` field was set on API 26+ where
+channel importance controls priority — not the field. The notification channel was
+`IMPORTANCE_HIGH` but the deprecated field conflicted.
+
+**Fix:** Only set `PRIORITY_MAX` on API < 26. On API 26+ let channel importance control it.
+
+### OTA Install — Why Tapping Install Did Nothing
+
+**Bug 1 — Double download:** `startDownload()` was called twice simultaneously —
+once by user tapping INSTALL (via `doInstall` runnable) and once automatically
+when `ShizukuShell.isAvailable()`. The `AtomicBoolean` guard blocked the second call,
+but race conditions meant neither completed properly.
+**Fix:** Removed auto-start. User tap is the only trigger.
+
+**Bug 2 — PackageInstaller session reuse:** `installViaPackageInstaller` called
+`pi.openSession(sid)` twice — once to write the APK, once to commit.
+The second `openSession()` on an already-written session threw `IllegalStateException`,
+silently caught and fell to `installViaIntent` which also failed in background context.
+**Fix:** Use separate try-with-resources for commit session.
+
+**Bug 3 — Intent install background restriction:** `installViaIntent` with
+`ApplicationContext` fails on Android 10+ from background.
+**Fix:** Added `FLAG_ACTIVITY_CLEAR_TOP`, plus notification fallback that posts
+a "tap to install" notification if all else fails.
+
+### KiraAI — Why Send Crashes Silently
+
+**Root cause:** `catch (Exception e)` does NOT catch JNI errors. Rust panics,
+`UnsatisfiedLinkError`, `OutOfMemoryError`, `StackOverflowError` are all `Error`
+subclasses — they bypass `Exception` catches and propagate to `UncaughtExceptionHandler`
+which then can't show CrashActivity (see above).
+**Fix:** Changed to `catch (Throwable e)` — catches both `Exception` and `Error`.
+Added `RustBridge.isLoaded()` pre-flight check with clear error message.

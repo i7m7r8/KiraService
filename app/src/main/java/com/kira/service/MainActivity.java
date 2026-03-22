@@ -828,9 +828,11 @@ public class MainActivity extends Activity
                 });
             }
             @Override public void onError(String error) {
+                final String safeError = (error != null && !error.isEmpty())
+                    ? error : "Unknown error — check logcat for details";
                 uiHandler.post(() -> {
                     removeThinkingBubble();
-                    ConvTurn errTurn = new ConvTurn("error", error);
+                    ConvTurn errTurn = new ConvTurn("error", safeError);
                     conversation.add(errTurn);
                     addErrorBubble(errTurn);
                     if (sendBtn != null) sendBtn.setEnabled(true);

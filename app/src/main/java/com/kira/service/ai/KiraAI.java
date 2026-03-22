@@ -39,6 +39,12 @@ public class KiraAI {
             try {
                 if (cb != null) cb.onThinking();
 
+                // Pre-flight: verify Rust is loaded before calling JNI
+                if (!RustBridge.isLoaded()) {
+                    if (cb != null) cb.onError("Rust engine not loaded. Check if libkira_core.so is present.");
+                    return;
+                }
+
                 // ── Single Rust call — runs entire AI turn ─────────────────
                 String resultJson = RustBridge.chatSync(userMessage, "default", MAX_STEPS);
 
@@ -65,9 +71,14 @@ public class KiraAI {
                 }
                 if (cb != null) cb.onReply(reply.isEmpty() ? "done." : reply);
 
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // Catch Throwable to also catch JNI errors (UnsatisfiedLinkError,
+                // OutOfMemoryError, StackOverflowError) not just Exception
                 Log.e(TAG, "chat error", e);
-                if (cb != null) cb.onError(e.getMessage());
+                String msg = e.getMessage();
+                if (msg == null) msg = e.getClass().getSimpleName() + " (no message)";
+                final String errMsg = msg;
+                if (cb != null) cb.onError(errMsg);
             }
         }, "KiraAI-Chat", 8 * 1024 * 1024).start(); // 8MB stack for Rust TLS
     }
@@ -90,7 +101,7 @@ public class KiraAI {
                 RustBridge.postShellResult(id, result != null ? result : "");
                 if (cb != null) cb.onTool(cmd.split(" ")[0], result != null ? result : "");
 
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 Log.w(TAG, "shell job error: " + e.getMessage());
                 break;
             }

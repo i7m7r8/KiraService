@@ -1388,11 +1388,17 @@ Context: {}",
             r#"{{"message":"{}","session":"{}","max_tool_steps":{}}}"#,
             esc(&msg), esc(&sess), max_tool_steps
         );
-        // catch_unwind prevents Rust panics from crashing the JVM process
-        let result = match std::panic::catch_unwind(|| route_http("POST", "/ai/chat", &body)) {
-            Ok(r)  => r,
-            Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
-        };
+        // Run on thread with large stack — rustls TLS handshake needs ~2MB
+        let result = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024) // 8MB
+            .spawn(move || {
+                match std::panic::catch_unwind(|| route_http("POST", "/ai/chat", &body)) {
+                    Ok(r)  => r,
+                    Err(_) => r#"{"error":"Rust engine crashed — try again","done":true}"#.to_string(),
+                }
+            })
+            .map(|h| h.join().unwrap_or_else(|_| r#"{"error":"thread join failed","done":true}"#.to_string()))
+            .unwrap_or_else(|_| r#"{"error":"thread spawn failed","done":true}"#.to_string());
         unsafe { jni_str(env, &result) }
     }
 

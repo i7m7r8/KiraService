@@ -35,7 +35,7 @@ public class KiraAI {
     }
 
     public void chat(String userMessage, Callback cb) {
-        new Thread(() -> {
+        new Thread(null, () -> {
             try {
                 if (cb != null) cb.onThinking();
 
@@ -69,7 +69,7 @@ public class KiraAI {
                 Log.e(TAG, "chat error", e);
                 if (cb != null) cb.onError(e.getMessage());
             }
-        }, "KiraAI-Chat").start();
+        }, "KiraAI-Chat", 8 * 1024 * 1024).start(); // 8MB stack for Rust TLS
     }
 
     /** Execute pending shell jobs queued by Rust AI engine */

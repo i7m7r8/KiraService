@@ -483,7 +483,7 @@ You are executing a multi-step task autonomously.
             }
 
             let tools_json: String = tools_used.iter()
-                .map(|t| format!(""{}"", esc(t))).collect::<Vec<_>>().join(",");
+                .map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(",");
             format!(
                 r#"{{"final":"{}","steps":{},"tools_used":[{}],"success":{}}}"#,
                 esc(&final_summary), steps_run, tools_json, success
@@ -534,7 +534,7 @@ You are executing a multi-step task autonomously.
             if conclusion.is_empty() { conclusion = clean_reply(&response); }
 
             let steps_json: String = reasoning.iter()
-                .map(|s| format!(""{}"", esc(s))).collect::<Vec<_>>().join(",");
+                .map(|s| format!("\"{}\"", esc(s))).collect::<Vec<_>>().join(",");
             format!(r#"{{"reasoning":[{}],"conclusion":"{}","steps":{}}}"#,
                 steps_json, esc(&conclusion), reasoning.len())
         }
@@ -670,7 +670,7 @@ You are executing a multi-step task autonomously.
             }
 
             let tools_json: String = tools_used.iter()
-                .map(|t| format!(""{}"", esc(t))).collect::<Vec<_>>().join(",");
+                .map(|t| format!("\"{}\"", esc(t))).collect::<Vec<_>>().join(",");
             format!(
                 r#"{{"role":"assistant","content":"{}","tools_used":[{}],"done":true}}"#,
                 esc(&reply), tools_json

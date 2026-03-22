@@ -23,7 +23,7 @@ import org.json.JSONObject;
  */
 public class KiraAI {
     private static final String TAG      = "KiraAI";
-    private static final int    MAX_STEPS = 8;
+    private static final int    MAX_STEPS = 12;
 
     private final Context ctx;
 
@@ -102,6 +102,10 @@ public class KiraAI {
 
                     if (done) {
                         String reply = result.optString("reply", "done.");
+                        // Persist memory if add_memory was used this turn
+                        if (toolsUsed.contains("add_memory") || toolsUsed.contains("search_memory")) {
+                            saveMemory();
+                        }
                         if (cb != null) cb.onReply(reply.isEmpty() ? "done." : reply);
                         return;
                     }
@@ -169,7 +173,7 @@ public class KiraAI {
 
             JSONObject body = new JSONObject();
             body.put("model", model);
-            body.put("max_tokens", 2048);
+            body.put("max_tokens", 8192);
             body.put("messages", msgs);
 
             okhttp3.Request request = new okhttp3.Request.Builder()
@@ -207,6 +211,22 @@ public class KiraAI {
             if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "HTTP error");
             return null;
         }
+    }
+
+    /** Extract clean search result snippets from raw DuckDuckGo text */
+    private String extractSearchSnippets(String text) {
+        // After HTML stripping, DDG results have result titles and snippets as text
+        // Just trim whitespace and take first 3000 chars of meaningful content
+        String[] lines = text.split("\n");
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            line = line.trim();
+            if (line.length() > 30) { // skip very short lines (navigation etc)
+                sb.append(line).append("\n");
+                if (sb.length() > 3000) break;
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : text.substring(0, Math.min(3000, text.length()));
     }
 
     /** Drain Rust's shell job queue — execute open_app, run_shell, http_get via Java */
@@ -255,9 +275,22 @@ public class KiraAI {
             if (cmd.startsWith("http_get:")) {
                 String url = cmd.substring("http_get:".length()).trim();
                 okhttp3.Response r = HTTP_CLIENT.newCall(
-                    new okhttp3.Request.Builder().url(url).get().build()).execute();
+                    new okhttp3.Request.Builder()
+                        .url(url)
+                        .addHeader("User-Agent", "Mozilla/5.0 (Android) KiraAI/1.0")
+                        .get().build()).execute();
                 String body = r.body() != null ? r.body().string() : "";
-                return body.length() > 2000 ? body.substring(0, 2000) + "..." : body;
+                // Strip HTML tags for cleaner LLM consumption
+                body = body.replaceAll("<style[^>]*>.*?</style>", " ")
+                           .replaceAll("<script[^>]*>.*?</script>", " ")
+                           .replaceAll("<[^>]+>", " ")
+                           .replaceAll("\\s{2,}", " ")
+                           .trim();
+                // For DuckDuckGo results: extract just the snippets
+                if (url.contains("duckduckgo.com")) {
+                    body = extractSearchSnippets(body);
+                }
+                return body.length() > 3000 ? body.substring(0, 3000) + "..." : body;
             }
 
             // http_post:https://url (body in remaining args — best effort)
@@ -367,6 +400,17 @@ public class KiraAI {
             Log.e(TAG, "buildFallbackContext", e);
             return null;
         }
+    }
+
+    /** Persist Rust memory to SharedPrefs so it survives process death */
+    private void saveMemory() {
+        try {
+            String json = RustBridge.saveMemory();
+            if (json != null && !json.equals("[]")) {
+                ctx.getSharedPreferences("kira_memory", android.content.Context.MODE_PRIVATE)
+                   .edit().putString("memory_json", json).apply();
+            }
+        } catch (Throwable ignored) {}
     }
 
     private String extractContent(String json) {

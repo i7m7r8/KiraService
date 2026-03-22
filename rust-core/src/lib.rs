@@ -1209,7 +1209,7 @@ pub fn push_turn_compressed(state: &mut KiraState, role: &str, content: &str) {
     let packed = lz4_pack_turn(role, content);
     state.context_turns_lz4.push_back(packed);
     // Keep at most 40 compressed turns (~160KB raw → ~35KB compressed)
-    if state.context_turns_lz4.len() > 40 {
+    if state.context_turns_lz4.len() > 80 {
         state.context_turns_lz4.pop_front();
     }
 }
@@ -1742,18 +1742,61 @@ fn action_to_json(a: &MacroAction) -> String {
 
 /// Build the system prompt for the AI, including memory context
 pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
-    let mem_context: String = state.memory_index.iter().take(8)
-        .map(|m| format!("- {}", m.value))
-        .collect::<Vec<_>>().join("\n");
+    let mem_lines: Vec<String> = state.memory_index.iter().take(20)
+        .map(|m| format!("• {}", m.value))
+        .collect();
+    let mem_context = if mem_lines.is_empty() {
+        "(none yet — use add_memory to remember things)".to_string()
+    } else {
+        mem_lines.join("\n")
+    };
 
-    let tools = "Tools (output XML to use them):\nopen_app:     <tool name=\"open_app\"><param k=\"package\" v=\"com.package.name\"/></tool>\nhttp_get:     <tool name=\"http_get\"><param k=\"url\" v=\"https://...\"/></tool>\nrun_shell:    <tool name=\"run_shell\"><param k=\"cmd\" v=\"shell command\"/></tool>\nread_file:    <tool name=\"read_file\"><param k=\"path\" v=\"/sdcard/file\"/></tool>\nwrite_file:   <tool name=\"write_file\"><param k=\"path\" v=\"/sdcard/f\"/><param k=\"content\" v=\"...\"/></tool>\nlist_files:   <tool name=\"list_files\"><param k=\"path\" v=\"/sdcard/\"/></tool>\nsend_message: <tool name=\"send_message\"><param k=\"to\" v=\"name_or_number\"/></tool>\nadd_memory:   <tool name=\"add_memory\"><param k=\"content\" v=\"fact\"/></tool>\nsearch_memory:<tool name=\"search_memory\"><param k=\"query\" v=\"...\"/></tool>\nget_battery:  <tool name=\"get_battery\"/>\nget_wifi:     <tool name=\"get_wifi\"/>\nset_variable: <tool name=\"set_variable\"><param k=\"key\" v=\"k\"/><param k=\"value\" v=\"v\"/></tool>\nget_variable: <tool name=\"get_variable\"><param k=\"key\" v=\"k\"/></tool>";
+    // Include variable state if any exist
+    let var_context: String = if state.variables.is_empty() {
+        String::new()
+    } else {
+        let vars: Vec<String> = state.variables.iter().take(10)
+            .map(|(k, v)| format!("  {} = {}", k, v.value))
+            .collect();
+        format!("\n\nVariables:\n{}", vars.join("\n"))
+    };
+
+    let tools = r#"TOOLS — output XML anywhere in your reply to execute them:
+
+<tool name="open_app"><param k="package" v="com.google.android.youtube"/></tool>
+<tool name="http_get"><param k="url" v="https://wttr.in/London?format=3"/></tool>
+<tool name="web_search"><param k="query" v="search terms"/></tool>
+<tool name="run_shell"><param k="cmd" v="shell command"/></tool>
+<tool name="read_file"><param k="path" v="/sdcard/file.txt"/></tool>
+<tool name="write_file"><param k="path" v="/sdcard/file.txt"/><param k="content" v="text"/></tool>
+<tool name="list_files"><param k="path" v="/sdcard/"/></tool>
+<tool name="send_message"><param k="to" v="name_or_number"/><param k="message" v="text"/></tool>
+<tool name="add_memory"><param k="content" v="fact to remember forever"/></tool>
+<tool name="search_memory"><param k="query" v="what to recall"/></tool>
+<tool name="get_battery"/><tool name="get_wifi"/>
+<tool name="set_variable"><param k="key" v="k"/><param k="value" v="v"/></tool>
+<tool name="get_variable"><param k="key" v="k"/></tool>
+<tool name="think"><param k="thoughts" v="your step-by-step reasoning"/></tool>
+
+TOOL NOTES:
+- web_search: searches DuckDuckGo, returns results. Use for current events, facts, weather.
+- weather: use http_get url="https://wttr.in/CITY?format=3" (no API key needed)
+- think: use this to reason through complex problems before answering. NOT shown to user.
+- open_app: use exact package name (e.g. com.google.android.youtube, com.whatsapp)
+- You can use MULTIPLE tools in one response — just include multiple <tool> tags
+- After tool results come back, synthesize them into a final answer"#;
 
     format!(
-        "{}\n\n{}\n\nMemory:\n{}\n\nUse tools when the user asks you to DO something (open apps, search web, get info). Respond in the user's language.",
-        persona, tools,
-        if mem_context.is_empty() { "(none)".to_string() } else { mem_context }
+        "{}\n\n{}\n\nLong-term memory:\n{}{}\n\nGuidelines:\n\
+        • Think deeply before responding. Use the 'think' tool for complex questions.\n\
+        • Use tools proactively — if asked about weather, get it. If asked to open an app, open it.\n\
+        • Remember important things the user tells you using add_memory.\n\
+        • Be thorough but concise. Show your work when solving problems.\n\
+        • You have persistent memory across conversations — use it.",
+        persona, tools, mem_context, var_context
     )
 }
+
 
 /// Synchronous LLM call via std::net::TcpStream (OpenAI-compatible).
 /// Returns the raw assistant response or an error message.
@@ -2024,10 +2067,32 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
             } else { "disconnected".into() }
         }
         // Shell, file, and intent tools: queue for Java
+        // "think" tool: chain-of-thought. Not shown to user, just returns ack.
+        "think" => {
+            // The LLM's reasoning is in the 'thoughts' param — we acknowledge it
+            // and let the loop continue to produce a final response.
+            "Reasoning noted. Continue with your response.".to_string()
+        }
+        // "web_search" → DuckDuckGo HTML lite (no API key needed)
+        "web_search" => {
+            let query = params.get("query").cloned().unwrap_or_default();
+            if query.is_empty() { return "error: query required".to_string(); }
+            let encoded = query.replace(' ', "+").replace('&', "%26");
+            // Queue as http_get so Java does the actual fetch
+            let url = format!("https://html.duckduckgo.com/html/?q={}", encoded);
+            let arg = url;
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id:      format!("websearch_{}", now_ms()),
+                cmd:     format!("http_get:{}", arg),
+                timeout: 15_000,
+                created: now_ms(),
+            });
+            "__shell__:web_search:queued".to_string()
+        }
         "run_shell" | "open_app" | "read_file" | "write_file" | "list_files" |
         "http_get"  | "http_post" | "send_message" => {
             // Queue for Java execution — Java handles network/intents/shell
-            // The cmd field in ShellJob is "tool_name:argument"
             let arg = params.get("cmd")
                 .or_else(|| params.get("package"))
                 .or_else(|| params.get("url"))
@@ -2078,7 +2143,11 @@ pub fn build_llm_request_json(state: &KiraState) -> String {
 /// Different from esc() which escapes for embedding inside a JSON string.
 /// This wraps the entire value in quotes for use as a JSON string literal.
 pub fn serde_json_str_escape(s: &str) -> String {
-    format!(""{}"", esc(s))
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    out.push_str(&esc(s));
+    out.push('"');
+    out
 }
 
 
@@ -2119,7 +2188,7 @@ mod jni_bridge {
         if env.is_null() {
             return std::ptr::null_mut();
         }
-        let mut safe_env = SafeEnv::from_raw(env as *mut jni::sys::JNIEnv)
+        let safe_env = SafeEnv::from_raw(env as *mut jni::sys::JNIEnv)
             .expect("invalid JNIEnv");
         match safe_env.new_string(s) {
             Ok(jstr) => jstr.into_raw() as JString,

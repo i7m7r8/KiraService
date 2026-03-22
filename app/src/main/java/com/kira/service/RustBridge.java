@@ -427,4 +427,13 @@ public class RustBridge {
      */
     public static native String processLlmReply(String rawResponse, int step);
 
+
+    // ── Persistent memory ──────────────────────────────────────────────────────
+    /** Serialize all memories to JSON string for storage in SharedPrefs */
+    public static native String saveMemory();
+    /** Load memories from JSON string (call on startup) */
+    public static native void loadMemory(String json);
+    /** Get agent_max_steps config value */
+    public static native int getAgentMaxSteps();
+
 }

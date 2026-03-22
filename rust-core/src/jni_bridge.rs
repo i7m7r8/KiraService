@@ -1665,6 +1665,66 @@ Context: {}",
     }
 
 
+    /// Serialize memory index to JSON for persistent storage in Java SharedPrefs.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_saveMemory(
+        env: JNIEnv, _c: JObject,
+    ) -> JString {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let items: Vec<String> = s.memory_index.iter()
+                .map(|m| format!(r#"{{"k":"{}","v":"{}","ts":{}}}"#,
+                    esc(&m.key), esc(&m.value), m.ts))
+                .collect();
+            format!("[{}]", items.join(","))
+        })).unwrap_or_else(|_| "[]".to_string());
+        unsafe { jni_str(env, &result) }
+    }
+
+    /// Load memory index from JSON (call on startup with SharedPrefs data).
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_loadMemory(
+        _e: JNIEnv, _c: JObject,
+        json: *const c_char,
+    ) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let j = cs_safe(json, 65536);
+            if j.is_empty() || j == "[]" { return; }
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            // Simple JSON array parser: extract "v" fields
+            let mut rest = j.as_str();
+            while let Some(v_start) = rest.find(r#""v":""#) {
+                rest = &rest[v_start + 5..];
+                if let Some(v_end) = rest.find('"') {
+                    let value = &rest[..v_end];
+                    let already = s.memory_index.iter().any(|m| m.value == value);
+                    if !already {
+                        let idx = s.memory_index.len();
+                        s.memory_index.push(MemoryEntry {
+                            key: format!("mem_{}", idx),
+                            value: value.to_string(),
+                            tags: vec![],
+                            ts: now_ms(),
+                            relevance: 1.0,
+                            access_count: 0,
+                        });
+                    }
+                    rest = &rest[v_end + 1..];
+                } else { break; }
+            }
+        }));
+    }
+
+    /// Get the agent_max_steps config value.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_getAgentMaxSteps(
+        _e: JNIEnv, _c: JObject,
+    ) -> i32 {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            STATE.lock().unwrap_or_else(|e| e.into_inner()).config.agent_max_steps as i32
+        })).unwrap_or(5)
+    }
+
     /// Get next queued shell command for Java to execute via Shizuku.
     /// Returns JSON {"id":"..","cmd":"..","timeout":5000} or {"empty":true}
     #[no_mangle]

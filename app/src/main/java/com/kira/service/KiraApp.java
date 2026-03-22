@@ -189,4 +189,14 @@ public class KiraApp extends Application {
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
     }
+
+    public void saveMemoryToPrefs() {
+        try {
+            String json = com.kira.service.RustBridge.saveMemory();
+            if (json != null && !json.equals("[]")) {
+                getSharedPreferences("kira_memory", android.content.Context.MODE_PRIVATE)
+                    .edit().putString("memory_json", json).apply();
+            }
+        } catch (Throwable ignored) {}
+    }
 }

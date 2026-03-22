@@ -1806,7 +1806,14 @@ pub fn call_llm_sync(
         stream.set_read_timeout(Some(std::time::Duration::from_secs(60)))
             .map_err(|e| e.to_string())?;
         let request = format!(
-            "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST {} HTTP/1.1
+Host: {}
+Authorization: Bearer {}
+Content-Type: application/json
+Content-Length: {}
+Connection: close
+
+{}",
             path, host, api_key, body.len(), body
         );
         stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
@@ -1817,7 +1824,8 @@ pub fn call_llm_sync(
             let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => break, Ok(_) => {
-                    if !in_body { if line == "\r\n" { in_body = true; } }
+                    if !in_body { if line == "
+" { in_body = true; } }
                     else { body_buf.push_str(&line); }
                 } Err(_) => break,
             }
@@ -3534,9 +3542,17 @@ fn handle_http(mut stream: TcpStream) {
     let first = req.lines().next().unwrap_or("");
     let parts: Vec<&str> = first.split_whitespace().collect();
     if parts.len() < 2 { return; }
-    let body = req.find("\r\n\r\n").map(|i| req[i+4..].trim().to_string()).unwrap_or_default();
+    let body = req.find("
+
+").map(|i| req[i+4..].trim().to_string()).unwrap_or_default();
     let resp = route_http_with_raw(parts[0], parts[1], &body, &req.to_string());
-    let http = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nX-Kira-Engine: rust-v9\r\n\r\n{}", resp.len(), resp);
+    let http = format!("HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: {}
+Access-Control-Allow-Origin: *
+X-Kira-Engine: rust-v9
+
+{}", resp.len(), resp);
     let _ = stream.write_all(http.as_bytes());
     STATE.lock().unwrap_or_else(|e| e.into_inner()).request_count += 1;
 }
@@ -8952,7 +8968,14 @@ pub fn https_post(
 
     // Write HTTP/1.1 request
     let request = format!(
-        "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "POST {} HTTP/1.1
+Host: {}
+Authorization: Bearer {}
+Content-Type: application/json
+Content-Length: {}
+Connection: close
+
+{}",
         path, host, auth_token, body.len(), body
     );
     tls_stream.write_all(request.as_bytes())

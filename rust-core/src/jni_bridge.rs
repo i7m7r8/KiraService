@@ -452,7 +452,10 @@ mod jni_bridge {
             };
 
             let tool_calls = parse_tool_calls(&raw);
-            let reply      = clean_reply(&raw);
+            // Extract the text content from the LLM JSON envelope first,
+            // then strip any <tool> XML tags from the content.
+            let content    = extract_llm_content(&raw).unwrap_or_default();
+            let reply      = clean_reply(&content);
 
             if tool_calls.is_empty() || step_n >= max_steps {
                 // Done — no tools or step limit hit

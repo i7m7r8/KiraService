@@ -94,6 +94,7 @@ public class KiraHeartbeat {
                     Log.d(TAG, "running scheduled task: " + task);
                     ai.chat(task, new KiraAI.Callback() {
                         @Override public void onThinking() {}
+                        @Override public void onPartial(String p) {}
                         @Override public void onTool(String n, String r) {}
                         @Override public void onReply(String reply) {
                             sendTelegram("Scheduled task done:\n" + reply.substring(0, Math.min(300, reply.length())));
@@ -115,6 +116,7 @@ public class KiraHeartbeat {
                     final String finalAction = action;
                     ai.chat(finalAction, new KiraAI.Callback() {
                         @Override public void onThinking() {}
+                        @Override public void onPartial(String p) {}
                         @Override public void onTool(String n, String r) {}
                         @Override public void onReply(String reply) {
                             sendTelegram("Trigger action result:\n" + reply.substring(0, Math.min(300, reply.length())));

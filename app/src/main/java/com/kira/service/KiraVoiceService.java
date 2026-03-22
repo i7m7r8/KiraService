@@ -126,6 +126,7 @@ public class KiraVoiceService {
 
         ai.chat(command, new KiraAI.Callback() {
             @Override public void onThinking() {}
+            @Override public void onPartial(String p) {}
             @Override public void onTool(String name, String result) {}
             @Override public void onReply(String reply) {
                 // Strip markdown for TTS

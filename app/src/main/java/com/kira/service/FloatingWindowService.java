@@ -315,6 +315,7 @@ public class FloatingWindowService extends Service {
             @Override public void onThinking() {
                 handler.post(() -> responseView.setText("\u23F3 ..."));
             }
+            @Override public void onPartial(String p) {}
             @Override public void onTool(String name, String result) {
                 handler.post(() -> responseView.setText("\u26A1 " + name));
             }

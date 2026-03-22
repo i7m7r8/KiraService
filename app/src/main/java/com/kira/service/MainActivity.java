@@ -811,6 +811,7 @@ public class MainActivity extends Activity
                     } catch (Throwable t) { android.util.Log.e("Kira","onThinking crash",t); }
                 });
             }
+            @Override public void onPartial(String p) {}
             @Override public void onTool(String name, String result) {
                 ConvTurn toolTurn = new ConvTurn("tool", "? " + name + ": " + result.substring(0, Math.min(100, result.length())));
                 conversation.add(toolTurn);

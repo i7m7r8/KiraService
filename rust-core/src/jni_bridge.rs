@@ -725,21 +725,6 @@ mod jni_bridge {
         }));
     }
 
-    /// Store the assistant's reply in compressed history.
-    /// Called by Java after OkHttp gets a successful response.
-    #[no_mangle]
-    pub extern "C" fn Java_com_kira_service_RustBridge_pushAssistantTurn(
-        _e: JNIEnv, _c: JObject,
-        content: *const c_char,
-    ) {
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let text = cs_safe(content, 32768);
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            push_turn_compressed(&mut s, "assistant", &text);
-            s.theme.is_thinking = false;
-        }));
-    }
-
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getConfig(
         env: JNIEnv, _c: JObject,

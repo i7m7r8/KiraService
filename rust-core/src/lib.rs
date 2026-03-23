@@ -1943,10 +1943,8 @@ pub fn call_llm_sync(
         stream.set_read_timeout(Some(std::time::Duration::from_secs(60)))
             .map_err(|e| e.to_string())?;
         let request = format!(
-            "POST {} HTTP/1.1
-Host: {}
-Authorization: Bearer {}
-Content-Type: application/json
+            "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            path_owned, host_owned, auth_owned, body_owned.len(), body_owned
 Content-Length: {}
 Connection: close
 
@@ -11522,10 +11520,8 @@ pub fn https_post(
 
         // Write HTTP/1.1 request
         let request = format!(
-            "POST {} HTTP/1.1
-Host: {}
-Authorization: Bearer {}
-Content-Type: application/json
+            "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            path_owned, host_owned, auth_owned, body_owned.len(), body_owned
 Content-Length: {}
 Connection: close
 
@@ -11590,10 +11586,7 @@ pub fn https_get(host: &str, port: u16, path: &str, timeout_s: u64) -> Result<St
     let mut stream = rustls::Stream::new(&mut conn, &mut tcp);
 
     let request = format!(
-        "GET {} HTTP/1.1
-Host: {}
-Connection: close
-
+        "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: KiraAI/1.0\r\nConnection: close\r\n\r\n",
 ",
         path, host
     );

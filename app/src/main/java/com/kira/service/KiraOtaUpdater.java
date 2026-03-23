@@ -108,13 +108,18 @@ public class KiraOtaUpdater {
                 String installedTag = getInstalledTag();
                 Log.i(TAG, "OTA check: local=" + localVer + " remote=" + remoteVer
                     + " tag=" + tag + " installedTag=" + installedTag);
-                // Up to date if: same tag OR remote version not newer
-                boolean sameTag = !installedTag.isEmpty() && installedTag.equals(tag);
-                boolean notNewer = remoteVer > 0 && localVer >= remoteVer;
-                if (sameTag || notNewer) {
+                // Up to date if: same full tag (exact match including build number)
+                // OR remote semver is strictly older
+                boolean sameTag  = !installedTag.isEmpty() && installedTag.equals(tag);
+                // Different tag but same semver = new build of same version → UPDATE
+                boolean sameVer  = remoteVer > 0 && localVer == remoteVer;
+                boolean older    = remoteVer > 0 && localVer > remoteVer;
+                if (sameTag || older) {
                     if (callback != null) handler.post(callback::onUpToDate);
                     return;
                 }
+                // sameVer but different tag = rebuild/hotfix → allow update
+                // remoteVer == -1 means unparseable tag → still try to update
 
                 JSONArray assets = rel.optJSONArray("assets");
                 String apkUrl = null; long apkBytes = 0;
@@ -165,7 +170,10 @@ public class KiraOtaUpdater {
     public void startDownload(String tag, String url, long totalBytes, boolean tryDelta) {
         if (!downloading.compareAndSet(false, true)) return;
         new Thread(() -> {
-            File apk = new File(ctx.getCacheDir(), "kira_update.apk");
+            // Store in filesDir for reliable PackageInstaller access
+            File apkDir = ctx.getFilesDir();
+            apkDir.mkdirs();
+            File apk = new File(apkDir, "kira_update.apk");
             try {
                 // Delta baseline: use the installed APK (most accurate) or cached update
                 File baseline = getInstalledApkBaseline();
@@ -403,16 +411,23 @@ public class KiraOtaUpdater {
         return uAny;
     }
 
-    /** Parse semver from tag like "v0.0.5-20260320" → int 5 (major*10000+minor*100+patch) */
+    /** Parse semver from tag — handles: v0.0.5, v0.0.5-20260320, v0.1.9-fix1, #176 */
     private int parseTagVersion(String tag) {
+        if (tag == null || tag.isEmpty()) return -1;
         try {
-            // Extract "0.0.5" from "v0.0.5-20260320-1234"
-            String s = tag.replaceFirst("^v","").split("-")[0];
+            // Strip leading v or #
+            String s = tag.replaceFirst("^[v#]", "");
+            // If it's a pure number (like GitHub run number "#176"), use it directly
+            if (s.matches("\\d+")) return Integer.parseInt(s);
+            // Take the part before the first dash (semver part)
+            s = s.split("-")[0];
             String[] p = s.split("\\.");
             if (p.length >= 3)
                 return Integer.parseInt(p[0])*10000 + Integer.parseInt(p[1])*100 + Integer.parseInt(p[2]);
             if (p.length == 2)
                 return Integer.parseInt(p[0])*10000 + Integer.parseInt(p[1])*100;
+            if (p.length == 1 && !p[0].isEmpty())
+                return Integer.parseInt(p[0]);
         } catch (Exception ignored) {}
         return -1;
     }
@@ -524,13 +539,26 @@ public class KiraOtaUpdater {
     public static class OtaInstallReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context ctx, Intent intent) {
             int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -1);
+            String tag = intent.getStringExtra("tag");
             if (status == PackageInstaller.STATUS_SUCCESS) {
-                try { RustBridge.otaOnInstalled(
-                    ctx.getPackageManager().getPackageInfo(ctx.getPackageName(),0).versionName);
+                try {
+                    String ver = ctx.getPackageManager()
+                        .getPackageInfo(ctx.getPackageName(), 0).versionName;
+                    RustBridge.otaOnInstalled(ver);
+                    // Save installed tag so next OTA check knows the exact build
+                    if (tag != null && !tag.isEmpty()) {
+                        ctx.getSharedPreferences("kira_ota", Context.MODE_PRIVATE)
+                            .edit().putString("installed_tag", tag).apply();
+                    }
                 } catch (Exception ignored) {}
             } else if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
                 Intent ci = (Intent) intent.getParcelableExtra(Intent.EXTRA_INTENT);
                 if (ci != null) { ci.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(ci); }
+            } else if (status != -1) {
+                // Install failed — report to Rust
+                String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+                try { RustBridge.otaOnFailed(msg != null ? msg : "install_failed_" + status); }
+                catch (Exception ignored) {}
             }
         }
     }

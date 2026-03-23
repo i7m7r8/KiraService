@@ -40,18 +40,33 @@ public class KiraConfig {
 
         // One-time migration: wipe old encrypted keys that cause "unknown scheme" crash
         if (p.getInt("config_version", 0) < VERSION) {
-            // v5: nuke entire prefs — old encrypted values corrupt baseUrl/apiKey
-            boolean wasDone = p.getBoolean("setupDone", false);
+            // Migration: preserve valid plaintext values, clear only corrupt/encrypted ones
+            boolean wasDone  = p.getBoolean("setupDone", false);
             String savedName = p.getString("userName", "User");
-            String savedModel = p.getString("model", "llama-3.1-8b-instant");
+            String savedModel= p.getString("model", "llama-3.1-8b-instant");
+            // Preserve apiKey if it looks like a valid key (printable ASCII, not a binary blob)
+            String savedKey  = p.getString("apiKey", "");
+            if (!isAscii(savedKey) || savedKey.length() > 512) savedKey = "";
+            // Preserve baseUrl if valid
+            String savedUrl  = p.getString("baseUrl", "https://api.groq.com/openai/v1");
+            if (!isAscii(savedUrl) || (!savedUrl.startsWith("http://") && !savedUrl.startsWith("https://"))) {
+                savedUrl = "https://api.groq.com/openai/v1";
+            }
+            // Preserve tgToken and persona if valid ASCII
+            String savedTg   = p.getString("tgToken", "");
+            if (!isAscii(savedTg) || savedTg.length() > 256) savedTg = "";
+            String savedPer  = p.getString("persona", "");
+            if (!isAscii(savedPer)) savedPer = "";
             p.edit().clear()
-                .putBoolean("setupDone", wasDone)
-                .putString("userName",   savedName)
-                .putString("model",      savedModel)
-                .putString("baseUrl",    "https://api.groq.com/openai/v1")
-                .putInt("config_version", VERSION)
+                .putBoolean("setupDone",      wasDone)
+                .putString("userName",        savedName)
+                .putString("model",           savedModel)
+                .putString("apiKey",          savedKey)
+                .putString("baseUrl",         savedUrl)
+                .putString("tgToken",         savedTg)
+                .putString("persona",         savedPer)
+                .putInt("config_version",     VERSION)
                 .commit();
-            // apiKey is intentionally cleared — user re-enters once in Settings
         }
 
         KiraConfig c = new KiraConfig();

@@ -4282,8 +4282,9 @@ Context: {}",
                     push_turn_compressed(&mut s, "assistant", &final_reply);
                     s.theme.is_thinking = false;
                     // Emit Done ACP event
+                    let acp_session_id = s.active_session.clone();
                     s.acp_bus.emit(crate::acp::AcpEvent::Done {
-                        session:     s.active_session.clone(),
+                        session:     acp_session_id,
                         stop_reason: crate::acp::StopReason::EndTurn,
                         usage:       crate::acp::Usage::default(),
                     });
@@ -4655,8 +4656,8 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 code:    crate::acp::ErrorCode::Aborted,
                 message: "Session aborted by client".to_string(),
             });
-            // Signal abort via existing abort flag mechanism
-            s.agent_abort.store(true, std::sync::atomic::Ordering::Relaxed);
+            // Signal abort via the RunState abort flag
+            if let Ok(mut rs) = crate::ai::runner::RUN_STATE.lock() { rs.abort = true; }
             format!(r#"{{"ok":true,"session":"{}"}}"#, esc(&acp_session))
         }
         // GET /acp/sessions  -  list all sessions with ACP metadata
@@ -4677,9 +4678,10 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         ("DELETE", p) if p.starts_with("/acp/sessions/") => {
             let sid = &p["/acp/sessions/".len()..];
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            let deleted = s.session_store.delete_and_purge(sid);
+            let exists = s.session_store.get(sid).is_some();
+            s.session_store.delete_and_purge(sid);
             s.acp_bus.purge(sid);
-            format!(r#"{{"ok":{},"session_id":"{}"}}"#, deleted, esc(sid))
+            format!(r#"{{"ok":{},"session_id":"{}"}}"#, exists, esc(sid))
         }
         // PATCH /acp/sessions/:id  -  apply a SessionPatch
         ("PATCH", p) if p.starts_with("/acp/sessions/") => {

@@ -59,7 +59,7 @@ impl RunState {
             RunStatus::Error    => "error",
         };
         let thinking: Vec<String> = self.thinking_log.iter()
-            .map(|l| format!(""{}"", l.replace('\\', "\\\\").replace('"', "\\"")))
+            .map(|l| format!("\"{}\"", l.replace('\\', "\\\\").replace('"', "\\"")))
             .collect();
         match &self.last_result {
             Some(r) if self.status == RunStatus::Done || self.status == RunStatus::Error =>
@@ -72,7 +72,7 @@ impl RunState {
                 format!(
                     r#"{{"status":"{}","session":"{}","step":{},"partial_text":"{}","current_tool":"{}","thinking":[{}]}}"#,
                     status_str, self.session_id, self.step,
-                    self.partial_text.replace('\\', "\\\\").replace('"', "\\"").replace('\n', "\\n"),
+                    self.partial_text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"),
                     self.current_tool.replace('"', "\\""),
                     thinking.join(",")
                 ),

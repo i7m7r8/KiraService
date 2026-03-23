@@ -59,7 +59,7 @@ impl RunState {
             RunStatus::Error    => "error",
         };
         let thinking: Vec<String> = self.thinking_log.iter()
-            .map(|l| format!("\"{}\"", l.replace('\\', "\\\\").replace('"', "\\\")))
+            .map(|l| format!("\"{}\"", l.replace('\\', "\\\\").replace('"', "\\\"")))
             .collect();
         match &self.last_result {
             Some(r) if self.status == RunStatus::Done || self.status == RunStatus::Error =>
@@ -72,8 +72,8 @@ impl RunState {
                 format!(
                     r#"{{"status":"{}","session":"{}","step":{},"partial_text":"{}","current_tool":"{}","thinking":[{}]}}"#,
                     status_str, self.session_id, self.step,
-                    self.partial_text.replace('\\', "\\\\").replace('"', "\\\").replace('\n', "\\n"),
-                    self.current_tool.replace('"', "\\\"),
+                    self.partial_text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"),
+                    self.current_tool.replace('"', "\\\""),
                     thinking.join(",")
                 ),
         }
@@ -104,7 +104,7 @@ impl AiRunStatus {
                 format!(r#"{{"status":"done","session":"{}","steps":{}}}"#, session_id, steps),
             AiRunStatus::Error { message } =>
                 format!(r#"{{"status":"error","message":"{}"}}"#,
-                    message.replace('"', "\\\")),
+                    message.replace('"', "\\\"")),
         }
     }
 }
@@ -147,11 +147,11 @@ pub struct AiRunResult {
 impl AiRunResult {
     pub fn to_json(&self) -> String {
         let tools = self.tools_used.iter()
-            .map(|t| format!("\"{}\"", t.replace('"', "\\\")))
+            .map(|t| format!("\"{}\"", t.replace('"', "\\\"")))
             .collect::<Vec<_>>()
             .join(",");
         let err = self.error.as_deref()
-            .map(|e| format!(",\"error\":\"{}\"", e.replace('"', "\\\")))
+            .map(|e| format!(",\"error\":\"{}\"", e.replace('"', "\\\"")))
             .unwrap_or_default();
         format!(
             r#"{{"content":{},"tools_used":[{}],"steps":{},"tokens_in":{},"tokens_out":{},"done":{}{}}}"#,

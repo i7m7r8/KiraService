@@ -2858,8 +2858,14 @@ mod jni_bridge {
         let v_persona= cs(persona);
         let v_tg     = cs(tg_token);
         if !v_user.is_empty()   { s.config.user_name    = v_user; }
-        if !v_key.is_empty()    { s.config.api_key      = v_key; }
-        if !v_url.is_empty()    { s.config.base_url     = v_url; }
+        // Validate api_key: must be printable ASCII, no control chars
+        if !v_key.is_empty() && v_key.bytes().all(|b| b >= 32 && b <= 126) {
+            s.config.api_key = v_key;
+        }
+        // Validate base_url: must start with http:// or https://
+        if !v_url.is_empty() && (v_url.starts_with("http://") || v_url.starts_with("https://")) {
+            s.config.base_url = v_url;
+        }
         if !v_model.is_empty()  { s.config.model        = v_model; }
         if !v_vision.is_empty() { s.config.vision_model = v_vision; }
         if !v_persona.is_empty(){ s.config.persona      = v_persona; }

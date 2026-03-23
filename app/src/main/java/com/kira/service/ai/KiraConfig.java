@@ -9,7 +9,7 @@ import android.content.SharedPreferences;
  */
 public class KiraConfig {
     private static final String PREFS   = "kira_config";
-    private static final int    VERSION = 5; // v5: nuke entire prefs to clear all corrupt data // v3: clear encrypted prefs on all existing installs
+    private static final int    VERSION = 6; // v6: stricter api_key validation - reject encrypted garbage
 
     public String  userName          = "User";
     public String  apiKey            = "";
@@ -46,7 +46,22 @@ public class KiraConfig {
             String savedModel= p.getString("model", "llama-3.1-8b-instant");
             // Preserve apiKey if it looks like a valid key (printable ASCII, not a binary blob)
             String savedKey  = p.getString("apiKey", "");
-            if (!isAscii(savedKey) || savedKey.length() > 512) savedKey = "";
+            // Validate API key: must be clean printable ASCII and look like a real key
+            if (!isAscii(savedKey) || savedKey.length() > 512 || savedKey.length() < 10) {
+                savedKey = "";
+            }
+            // Extra check: reject keys with chars that encrypted blobs sometimes have
+            // Real keys only use letters, digits, hyphens, underscores, dots
+            if (!savedKey.isEmpty()) {
+                boolean looksReal = true;
+                for (int i = 0; i < savedKey.length(); i++) {
+                    char ch = savedKey.charAt(i);
+                    if (!Character.isLetterOrDigit(ch) && ch != '-' && ch != '_' && ch != '.') {
+                        looksReal = false; break;
+                    }
+                }
+                if (!looksReal) savedKey = "";
+            }
             // Preserve baseUrl if valid
             String savedUrl  = p.getString("baseUrl", "https://api.groq.com/openai/v1");
             if (!isAscii(savedUrl) || (!savedUrl.startsWith("http://") && !savedUrl.startsWith("https://"))) {
@@ -72,7 +87,18 @@ public class KiraConfig {
         KiraConfig c = new KiraConfig();
         c.userName          = p.getString ("userName",          "User");
         String rawKey = p.getString("apiKey", "");
-        c.apiKey = isAscii(rawKey) ? rawKey : "";
+        // Strict validation: reject encrypted garbage
+        c.apiKey = "";
+        if (rawKey != null && !rawKey.isEmpty() && isAscii(rawKey) && rawKey.length() >= 10) {
+            boolean keyOk = true;
+            for (int i = 0; i < rawKey.length(); i++) {
+                char ch = rawKey.charAt(i);
+                if (!Character.isLetterOrDigit(ch) && ch != '-' && ch != '_' && ch != '.') {
+                    keyOk = false; break;
+                }
+            }
+            if (keyOk) c.apiKey = rawKey;
+        }
         String rawUrl = p.getString("baseUrl", "https://api.groq.com/openai/v1");
         c.baseUrl = (isAscii(rawUrl) && (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")))
             ? rawUrl : "https://api.groq.com/openai/v1";

@@ -412,6 +412,124 @@ mod jni_bridge {
     /// Step 1: Prepare a chat turn. Pushes user message to history,
     /// returns JSON with everything Java needs to call the LLM:
     /// {api_key, base_url, model, messages:[{role,content},...]}
+    /// THE MAIN CHAT JNI — routes through the proper OpenAI function-calling runner.
+    /// Replaces getChatContext + processLlmReply with a single synchronous call.
+    ///
+    /// Returns JSON: {"reply":"...","tools_used":["x","y"],"steps":3,"done":true}
+    ///           or  {"error":"...","done":true}
+    ///
+    /// Called from KiraAI.java chat() on a background thread.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_chatViaRunner(
+        env: JNIEnv, _c: JObject,
+        message:    *const c_char,
+        session_id: *const c_char,
+        max_steps:  i32,
+    ) -> JString {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let user_msg   = cs_safe(message, 32768);
+            let session    = cs_safe(session_id, 64);
+            let session    = if session.is_empty() { "default".to_string() } else { session };
+            let max_steps  = if max_steps > 0 { max_steps as u32 } else { 15 };
+
+            // Read config and history from STATE
+            let (api_key, base_url, model, system_prompt, history, tools_json) = {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                if s.config.api_key.is_empty() {
+                    return r#"{"error":"No API key configured. Go to Settings.","done":true}"#.to_string();
+                }
+                // Validate base_url
+                let base_url = if s.config.base_url.is_ascii()
+                    && (s.config.base_url.starts_with("http://") || s.config.base_url.starts_with("https://"))
+                    && s.config.base_url.len() < 512
+                {
+                    s.config.base_url.clone()
+                } else {
+                    s.config.base_url = "https://api.groq.com/openai/v1".to_string();
+                    s.config.base_url.clone()
+                };
+                let persona = if s.config.persona.is_empty() {
+                    "You are Kira, a powerful Android AI agent. Use tools to get real data — never guess or hallucinate.".to_string()
+                } else {
+                    s.config.persona.clone()
+                };
+                let sys      = build_system_prompt(&s, &persona);
+                let history  = decompress_context(&s);
+                let tools    = build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist);
+                s.theme.is_thinking = true;
+                s.request_count += 1;
+                (s.config.api_key.clone(), base_url, s.config.model.clone(), sys, history, tools)
+            };
+
+            // Run the proper ReAct loop (OpenAI function-calling format)
+            let cfg = crate::ai::runner::AgentRunConfig {
+                api_key,
+                base_url,
+                model,
+                system_prompt,
+                session_id: session,
+                user_message: user_msg.clone(),
+                history,
+                max_steps,
+                tools_json,
+            };
+
+            let result = crate::ai::runner::run_agent(cfg);
+
+            // Persist: push user + assistant turns to compressed history
+            {
+                let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                push_turn_compressed(&mut s, "user", &user_msg);
+                if !result.content.is_empty() {
+                    push_turn_compressed(&mut s, "assistant", &result.content);
+                }
+                s.theme.is_thinking = false;
+                s.tool_call_count += result.tools_used.len() as u64;
+            }
+
+            // Auto-save memory if add_memory was used
+            if result.tools_used.iter().any(|t| t == "add_memory") {
+                if let Ok(s) = STATE.lock() {
+                    let items: Vec<String> = s.memory_index.iter()
+                        .map(|m| format!(r#"{{"k":"{}","v":"{}","ts":{}}}"#,
+                            esc(&m.key), esc(&m.value), m.ts))
+                        .collect();
+                    drop(s);
+                    // Store JSON in a variable for Java to persist via SharedPrefs
+                    if let Ok(mut s) = STATE.lock() {
+                        let ts = now_ms();
+                        s.variables.entry("_memory_json_pending".to_string())
+                            .and_modify(|v| { v.value = format!("[{}]", items.join(",")); v.updated_ms = ts; })
+                            .or_insert(AutoVariable {
+                                name: "_memory_json_pending".to_string(),
+                                value: format!("[{}]", items.join(",")),
+                                var_type: "string".to_string(),
+                                persistent: false,
+                                created_ms: ts, updated_ms: ts,
+                            });
+                    }
+                }
+            }
+
+            // Build response JSON
+            let tools_json_arr: String = result.tools_used.iter()
+                .map(|t| format!(""{}"", esc(t)))
+                .collect::<Vec<_>>().join(",");
+
+            if let Some(err) = &result.error {
+                format!(r#"{{"error":"{}","done":true,"steps":{}}}"#,
+                    esc(err), result.steps)
+            } else {
+                format!(r#"{{"reply":"{}","tools_used":[{}],"steps":{},"done":true}}"#,
+                    esc(&result.content), tools_json_arr, result.steps)
+            }
+        })).unwrap_or_else(|_| {
+            if let Ok(mut s) = STATE.lock() { s.theme.is_thinking = false; }
+            r#"{"error":"Internal error in chat runner","done":true}"#.to_string()
+        });
+        unsafe { jni_str(env, &result) }
+    }
+
     /// Java calls OkHttp with this, then passes raw LLM response to processLlmReply.
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_getChatContext(

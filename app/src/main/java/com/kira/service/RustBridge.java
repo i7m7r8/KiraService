@@ -409,6 +409,18 @@ public class RustBridge {
 
 
     // ── Chat context for Java-side HTTP calls ─────────────────────────────────
+    /**
+     * THE MAIN CHAT JNI — routes through the proper OpenAI function-calling runner.
+     * Single synchronous call: push user turn + run full ReAct loop + store reply.
+     *
+     * @param message    user's message
+     * @param sessionId  session identifier (e.g. "default")
+     * @param maxSteps   max tool-call iterations (typically 15)
+     * @return JSON {"reply":"...","tools_used":[...],"steps":N,"done":true}
+     *           or {"error":"...","done":true}
+     */
+    public static native String chatViaRunner(String message, String sessionId, int maxSteps);
+
     /** Get everything needed to make the LLM call from Java.
      *  Returns JSON: {api_key, base_url, model, system_prompt, messages:[...]}
      *  Pushes the user message into Rust history as a side effect. */

@@ -5597,7 +5597,7 @@ fn channel_ai_reply_tg(text: &str, chat_id: i64, username: &str) -> String {
     let session = format!("tg_{}", chat_id);
     let (api_key, base_url, model, sys, history) = get_llm_config_snapshot();
     if api_key.is_empty() { return "API key not configured.".to_string(); }
-    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
     let cfg = crate::ai::runner::AgentRunConfig {
         api_key, base_url, model,
         system_prompt: sys,
@@ -5619,7 +5619,7 @@ fn channel_ai_reply_wa(text: &str, from: &str, name: &str) -> String {
     let session = format!("wa_{}", from.replace(['+','-',' '], ""));
     let (api_key, base_url, model, sys, history) = get_llm_config_snapshot();
     if api_key.is_empty() { return String::new(); }
-    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
     let cfg = crate::ai::runner::AgentRunConfig {
         api_key, base_url, model,
         system_prompt: sys,
@@ -5872,7 +5872,7 @@ fn check_notif_keyword_triggers(pkg: &str, title: &str, text: &str, importance: 
             thread::spawn(move || {
                 let (api_key, base_url, model, sys, _) = get_llm_config_snapshot();
                 if api_key.is_empty() { return; }
-                let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
                 let cfg = crate::ai::runner::AgentRunConfig {
                     api_key, base_url, model,
                     system_prompt: format!("{}\n\nYou are reacting to a notification.", sys),
@@ -6074,7 +6074,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
                         let persona = s.config.persona.clone();
                         (build_system_prompt(&s, &persona), decompress_context(&s))
                     };
-                    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                    let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
                     let cfg = crate::ai::runner::AgentRunConfig {
                         api_key, base_url, model, system_prompt: sys,
                         session_id: "voice_default".to_string(),
@@ -6111,7 +6111,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
             }
             // Run AI on transcript
             let (api_key, base_url, model, sys, history) = get_llm_config_snapshot();
-            let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+            let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
             let cfg = crate::ai::runner::AgentRunConfig {
                 api_key, base_url, model, system_prompt: sys,
                 session_id: "voice_default".to_string(),
@@ -6594,7 +6594,7 @@ fn register_subagent_shims() {
         get_llm_config_snapshot,
         || {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            build_kira_tools_schema(&s.tool_allowlist)
+            build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist)
         },
     );
 }
@@ -6650,6 +6650,26 @@ fn build_kira_tools_schema(allowlist: &[String]) -> String {
 
     format!("[{}]", defs.join(","))
 }
+/// Like build_kira_tools_schema but: empty allowlist = all tools, denylist always respected.
+fn build_kira_tools_schema_filtered(allowlist: &[String], denylist: &[String]) -> String {
+    let all_names: Vec<&str> = vec![
+        "add_memory","search_memory","get_battery","get_wifi","get_notifications",
+        "get_device_state","get_foreground_app","run_shell","read_file","write_file",
+        "list_files","set_variable","get_variable","web_search","think",
+        "open_app","send_sms","get_location","list_contacts","list_calendar","take_photo",
+    ];
+    // If allowlist non-empty, restrict to it; otherwise all tools
+    let effective: Vec<&str> = all_names.iter().copied()
+        .filter(|name| {
+            let allowed = allowlist.is_empty() || allowlist.iter().any(|a| a == name);
+            let denied  = denylist.iter().any(|d| d == name);
+            allowed && !denied
+        })
+        .collect();
+    build_kira_tools_schema(&effective.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+}
+
+
 
 /// LLM call shim for runner — wraps the existing https_post infrastructure
 fn llm_call_for_runner(api_key: &str, base_url: &str, body: &str) -> Result<String, String> {
@@ -6766,14 +6786,11 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 s.theme.is_thinking = true;
             }
 
-            // Build tool schema from allowlist
+            // Build tool schema: empty allowlist = all tools enabled (denylist only)
             let tools_json = {
                 let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-                if s.tool_allowlist.is_empty() { "[]".to_string() }
-                else {
-                    // Minimal schema for the tools Kira has — expanded in Session 2+
-                    build_kira_tools_schema(&s.tool_allowlist)
-                }
+                // Pass empty slice to get ALL tools; filter by denylist only
+                build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist)
             };
 
             let session_id = req.session_id.clone();
@@ -7197,7 +7214,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                     thread::spawn(move || {
                         let (api_key, base_url, model, sys, _) = get_llm_config_snapshot();
                         if api_key.is_empty() { return; }
-                        let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                        let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
                         let cfg = crate::ai::runner::AgentRunConfig {
                             api_key, base_url, model,
                             system_prompt: format!("{}\n\nAutomated cron task — complete and stop.", sys),
@@ -7327,7 +7344,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                         thread::spawn(move || {
                             let (api_key, base_url, model, sys, _) = get_llm_config_snapshot();
                             if api_key.is_empty() { return; }
-                            let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema(&s.tool_allowlist) };
+                            let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
                             let cfg = crate::ai::runner::AgentRunConfig {
                                 api_key, base_url, model,
                                 system_prompt: format!("{}\n\nYou are processing an inbound webhook.", sys),
@@ -7445,7 +7462,7 @@ fn run_cron_scheduler() {
 
                 let tools_json = {
                     let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-                    build_kira_tools_schema(&s.tool_allowlist)
+                    build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist)
                 };
 
                 let cfg = crate::ai::runner::AgentRunConfig {

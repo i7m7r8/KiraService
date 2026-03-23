@@ -38,9 +38,9 @@ public class KiraAI {
 
     public interface Callback {
         void onThinking();
-        void onPartial(String partialReply);        // streamed text so far
-        void onThinkingStep(String step);           // tool call / reasoning line
-        void onTool(String name, String result);    // tool executed
+        default void onPartial(String partialReply) {} // streamed text so far
+        default void onThinkingStep(String step) {} // tool call / reasoning line
+        default void onTool(String name, String result) {} // tool executed
         void onReply(String finalReply);
         void onError(String error);
     }

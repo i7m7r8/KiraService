@@ -836,7 +836,8 @@ public class MainActivity extends Activity
                         tv.setText(icon + label);
                         tv.setTextSize(11f);
                         tv.setTextColor(android.graphics.Color.parseColor("#888888"));
-                        tv.setPadding(dpToPx(48), dpToPx(1), dpToPx(16), dpToPx(1));
+                        float _d = getResources().getDisplayMetrics().density;
+                        tv.setPadding((int)(48*_d), (int)(1*_d), (int)(16*_d), (int)(1*_d));
                         if (chatContainer != null) chatContainer.addView(tv);
                         scrollToBottom();
                     } catch (Throwable ignored) {}

@@ -434,6 +434,12 @@ public class KiraAI {
                             if (cb != null) cb.onError("No API key - go to Settings");
                             return null;
                         }
+                        // CRITICAL: re-parse j from the updated requestJson so the
+                        // base_url fixup below operates on the NEW valid JSON, not the
+                        // stale {"error":"no_api_key"} object. Without this, j.toString()
+                        // overwrites requestJson with the error JSON (no "messages" key)
+                        // and callLlmStreaming fires "No messages in request".
+                        try { j = new JSONObject(requestJson); } catch (Exception ignored3) { return requestJson; }
                     } else {
                         if (cb != null) cb.onError("No API key - go to Settings");
                         return null;

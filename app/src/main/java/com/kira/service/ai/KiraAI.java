@@ -6,42 +6,35 @@ import com.kira.service.RustBridge;
 import com.kira.service.ShizukuShell;
 import org.json.JSONArray;
 import org.json.JSONObject;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 /**
- * KiraAI — streaming intelligence loop.
+ * KiraAI — Java OkHttp intelligence loop.
  *
- * Flow:
- *  1. POST /ai/run  → Rust spawns run_agent() in background thread (returns immediately)
- *  2. Poll GET /ai/run/status every 300ms:
- *     - status="running"  → fire onPartial(partial_text) + onThinkingStep(tool info)
- *     - status="done"     → fire onReply(result.content)
- *     - status="error"    → fire onError(message)
- *  3. After done: drain shell queue for any queued Java-side tools (open_app etc.)
+ * Flow (Java-OkHttp, NO Rust TLS):
+ *  1. getChatContext(msg)      → Rust builds LLM request JSON (api_key, messages, tools)
+ *  2. callLlmStreaming(json)   → Java OkHttp SSE → fires onPartial() live
+ *  3. processLlmReply(raw, n) → Rust parses tool_calls, dispatches pure-Rust tools
+ *     a. {done:true, reply}   → onReply(), done
+ *     b. {done:false, messages_json} → loop: call LLM again with tool results
+ *  4. drainShellQueue()        → Java executes shell/app jobs queued by Rust
  *
- * This gives real streaming: text appears word-by-word as LLM generates it,
- * and tool calls appear in the UI as they execute.
+ * This NEVER uses Rust TLS (https_post) - Java OkHttp handles all network.
+ * The /ai/run endpoint is NOT used to avoid the rustls panic on Android.
  */
 public class KiraAI {
     private static final String TAG       = "KiraAI";
     private static final int    MAX_STEPS = 15;
-    private static final String SESSION   = "default";
-    private static final int    POLL_MS   = 250;   // status poll interval
-    private static final int    TIMEOUT_MS = 120_000; // 2 min max
-
-    // Rust HTTP server port (must match startServer call)
-    private static final int RUST_PORT = 7070;
 
     private final Context ctx;
 
     public interface Callback {
         void onThinking();
-        default void onPartial(String partialReply) {} // streamed text so far
-        default void onThinkingStep(String step) {} // tool call / reasoning line
-        default void onTool(String name, String result) {} // tool executed
-        void onReply(String finalReply);
+        default void onPartial(String partial) {}
+        default void onThinkingStep(String step) {}
+        default void onTool(String name, String result) {}
+        void onReply(String reply);
         void onError(String error);
     }
 
@@ -52,18 +45,16 @@ public class KiraAI {
     }
 
     private static final okhttp3.OkHttpClient HTTP = new okhttp3.OkHttpClient.Builder()
-        .connectTimeout(10,  java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(30,     java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(10,    java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(120,   java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30,   java.util.concurrent.TimeUnit.SECONDS)
         .build();
 
     public KiraAI(Context ctx) {
         this.ctx = ctx.getApplicationContext();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Main entry point
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Main entry point ─────────────────────────────────────────────────────
 
     public void chat(String userMessage, Callback cb) {
         new Thread(() -> {
@@ -74,212 +65,321 @@ public class KiraAI {
                     return;
                 }
 
-                // Abort any previous run
-                rustPost("/ai/run/abort", "{}");
+                // Step 1: Rust builds the request JSON (pushes user turn, builds system prompt)
+                String requestJson = getInitialContext(userMessage, cb);
+                if (requestJson == null) return;
 
-                // POST /ai/run — non-blocking, run_agent starts in background
-                String startResp = rustPost("/ai/run", String.format(
-                    "{\"message\":\"%s\",\"session\":\"%s\",\"max_steps\":%d}",
-                    jsonEsc(userMessage), SESSION, MAX_STEPS
-                ));
+                int step = 0;
+                while (step < MAX_STEPS) {
+                    // Step 2: Java calls LLM via OkHttp (SSE streaming)
+                    if (cb != null) cb.onThinkingStep("Step " + (step + 1) + ": calling LLM...");
+                    String rawResponse = callLlmStreaming(requestJson, cb);
+                    if (rawResponse == null) return;
 
-                if (startResp == null) {
-                    // Rust server not ready or port different — fall back to chatViaRunner
-                    chatViaRunnerFallback(userMessage, cb);
-                    return;
-                }
+                    // Drain Java shell jobs queued during this step
+                    drainShellQueue(cb);
 
-                JSONObject startJson = new JSONObject(startResp);
-                if (startJson.has("error")) {
-                    String err = startJson.getString("error");
-                    if (err.contains("already running")) {
-                        // Wait briefly and retry
-                        Thread.sleep(1000);
-                        rustPost("/ai/run/abort", "{}");
-                        Thread.sleep(300);
-                        rustPost("/ai/run", String.format(
-                            "{\"message\":\"%s\",\"session\":\"%s\",\"max_steps\":%d}",
-                            jsonEsc(userMessage), SESSION, MAX_STEPS
-                        ));
-                    } else if (err.contains("API key")) {
-                        if (cb != null) cb.onError("No API key — go to Settings");
+                    // Step 3: Rust parses tool_calls, dispatches pure-Rust tools, builds follow-up
+                    String processResult;
+                    try {
+                        processResult = RustBridge.processLlmReply(rawResponse, step);
+                    } catch (UnsatisfiedLinkError e) {
+                        processResult = legacyProcessReply(rawResponse);
+                    }
+
+                    if (processResult == null || processResult.isEmpty()) {
+                        if (cb != null) cb.onError("Empty process result");
                         return;
+                    }
+
+                    JSONObject result = new JSONObject(processResult);
+                    if (result.has("error")) {
+                        if (cb != null) cb.onError(result.getString("error"));
+                        return;
+                    }
+
+                    boolean done = result.optBoolean("done", true);
+
+                    // Show tools used
+                    JSONArray toolsArr = result.optJSONArray("tools_used");
+                    if (toolsArr != null && toolsArr.length() > 0 && cb != null) {
+                        for (int i = 0; i < toolsArr.length(); i++) {
+                            cb.onThinkingStep("  - " + toolsArr.getString(i));
+                        }
                     } else {
-                        if (cb != null) cb.onError(err);
-                        return;
-                    }
-                }
-
-                // ── Poll loop ──────────────────────────────────────────────
-                String lastPartial    = "";
-                int    thinkingIdx    = 0;
-                long   startTime      = System.currentTimeMillis();
-
-                while (System.currentTimeMillis() - startTime < TIMEOUT_MS) {
-                    Thread.sleep(POLL_MS);
-
-                    String statusResp = rustGet("/ai/run/status");
-                    if (statusResp == null) continue;
-
-                    JSONObject status = new JSONObject(statusResp);
-                    String runStatus  = status.optString("status", "running");
-
-                    // ── Stream partial text ──────────────────────────────
-                    String partial = status.optString("partial_text", "");
-                    if (!partial.isEmpty() && !partial.equals(lastPartial)) {
-                        lastPartial = partial;
-                        if (cb != null) cb.onPartial(partial);
-                    }
-
-                    // ── Stream thinking steps ────────────────────────────
-                    JSONArray thinking = status.optJSONArray("thinking");
-                    if (thinking != null) {
-                        while (thinkingIdx < thinking.length()) {
-                            String step = thinking.getString(thinkingIdx++);
-                            if (cb != null) cb.onThinkingStep(step);
-                            // Parse tool calls for onTool callback
-                            if (step.startsWith("  → ")) {
-                                // e.g. "  → open_app(package=com.youtube)"
-                                String toolPart = step.substring(4);
-                                int paren = toolPart.indexOf('(');
-                                String toolName = paren > 0 ? toolPart.substring(0, paren) : toolPart;
-                                if (cb != null) cb.onTool(toolName, "running...");
-                            } else if (step.startsWith("    ← ")) {
-                                // e.g. "    ← open_app: Opening com.youtube..."
-                                String resultPart = step.substring(6);
-                                int colon = resultPart.indexOf(':');
-                                if (colon > 0) {
-                                    String toolName = resultPart.substring(0, colon).trim();
-                                    String toolResult = resultPart.substring(colon + 1).trim();
-                                    if (cb != null) cb.onTool(toolName, toolResult);
-                                }
-                            }
+                        String toolsStr = result.optString("tools_used", "");
+                        if (!toolsStr.isEmpty() && !toolsStr.equals("[]") && cb != null) {
+                            cb.onThinkingStep("Tools: " + toolsStr);
                         }
                     }
 
-                    // ── Check completion ─────────────────────────────────
-                    if ("done".equals(runStatus) || "error".equals(runStatus)) {
-                        // Drain shell queue before reporting done
-                        drainShellQueue(cb);
+                    // Drain again after Rust dispatches
+                    drainShellQueue(cb);
 
-                        JSONObject result = status.optJSONObject("result");
-                        if (result != null) {
-                            if ("error".equals(runStatus) || result.has("error")) {
-                                String errMsg = result.optString("error",
-                                    result.optString("content", "Unknown error"));
-                                if (cb != null) cb.onError(errMsg);
-                            } else {
-                                String reply = result.optString("content", "");
-                                if (reply.isEmpty()) reply = lastPartial;
-                                if (reply.isEmpty()) reply = "Done.";
-                                // Save memory if used
-                                saveMemoryIfNeeded(result);
-                                if (cb != null) cb.onReply(reply);
-                            }
-                        } else {
-                            // No result object yet — use partial
-                            if (!lastPartial.isEmpty()) {
-                                if (cb != null) cb.onReply(lastPartial);
-                            } else {
-                                if (cb != null) cb.onError("No reply received");
-                            }
-                        }
+                    if (done) {
+                        String reply = result.optString("reply", "Done.");
+                        if (reply == null || reply.trim().isEmpty()) reply = "Done.";
+                        saveMemoryIfNeeded(result);
+                        if (cb != null) cb.onReply(reply);
                         return;
                     }
 
-                    // ── Check current tool for live display ──────────────
-                    String currentTool = status.optString("current_tool", "");
-                    if (!currentTool.isEmpty() && cb != null) {
-                        cb.onThinkingStep("⟳ " + currentTool + "...");
+                    // Not done — Rust has built the next request with tool results
+                    String nextReqJson = result.optString("messages_json", "");
+                    if (nextReqJson.isEmpty()) {
+                        if (cb != null) cb.onError("Tool loop: no follow-up messages");
+                        return;
                     }
+                    requestJson = nextReqJson;
+                    step++;
                 }
 
-                // Timeout
-                if (cb != null) cb.onError("Timeout waiting for response");
+                if (cb != null) cb.onError("Max tool steps reached");
 
             } catch (Throwable e) {
                 Log.e(TAG, "chat error", e);
-                String msg = e.getMessage();
-                if (msg == null) msg = e.getClass().getSimpleName();
-                if (cb != null) cb.onError(msg);
+                if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             }
         }, "KiraAI-Chat").start();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Fallback: synchronous chatViaRunner (for when HTTP server isn't ready)
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── SSE Streaming LLM call (Java OkHttp — no Rust TLS) ───────────────────
 
-    private void chatViaRunnerFallback(String userMessage, Callback cb) {
+    private String callLlmStreaming(String requestJson, Callback cb) {
         try {
-            String result = RustBridge.chatViaRunner(userMessage, SESSION, MAX_STEPS);
-            if (result == null) {
-                if (cb != null) cb.onError("No response from Rust engine");
-                return;
-            }
-            drainShellQueue(cb);
-            JSONObject j = new JSONObject(result);
-            if (j.has("error")) {
-                if (cb != null) cb.onError(j.getString("error"));
-            } else {
-                String reply = j.optString("reply", "");
-                if (reply.isEmpty()) reply = "Done.";
-                saveMemoryIfNeeded(j);
-                if (cb != null) cb.onReply(reply);
-            }
-        } catch (Throwable e) {
-            Log.e(TAG, "chatViaRunnerFallback", e);
-            if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "Error");
-        }
-    }
+            JSONObject req  = new JSONObject(requestJson);
+            String apiKey   = req.optString("api_key", "");
+            String baseUrl  = req.optString("base_url", "https://api.groq.com/openai/v1")
+                                 .replaceAll("/$", "");
+            String model    = req.optString("model", "llama-3.1-8b-instant");
+            Object msgsRaw  = req.opt("messages");
+            JSONArray msgs  = (msgsRaw instanceof JSONArray)
+                ? (JSONArray) msgsRaw : new JSONArray(msgsRaw.toString());
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Rust HTTP helpers
-    // ─────────────────────────────────────────────────────────────────────────
+            // Build streaming body
+            JSONObject body = new JSONObject();
+            body.put("model", model);
+            body.put("max_tokens", 8192);
+            body.put("stream", true);
+            body.put("messages", msgs);
+            if (req.has("tools"))        body.put("tools", req.get("tools"));
+            if (req.has("tool_choice"))  body.put("tool_choice", req.get("tool_choice"));
 
-    private String rustPost(String path, String body) {
-        try {
-            okhttp3.Response r = HTTP.newCall(new okhttp3.Request.Builder()
-                .url("http://127.0.0.1:" + RUST_PORT + path)
-                .post(okhttp3.RequestBody.create(body,
+            if (apiKey.isEmpty()) {
+                if (cb != null) cb.onError("No API key - go to Settings");
+                return null;
+            }
+
+            okhttp3.Request request = new okhttp3.Request.Builder()
+                .url(baseUrl + "/chat/completions")
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type",  "application/json")
+                .addHeader("Accept",        "text/event-stream")
+                .post(okhttp3.RequestBody.create(
+                    body.toString(),
                     okhttp3.MediaType.parse("application/json")))
-                .build()).execute();
-            return r.body() != null ? r.body().string() : null;
+                .build();
+
+            okhttp3.Response resp = HTTP.newCall(request).execute();
+            if (resp.body() == null) {
+                if (cb != null) cb.onError("Empty HTTP response");
+                return null;
+            }
+            if (!resp.isSuccessful()) {
+                String errBody = resp.body().string();
+                String errMsg  = "HTTP " + resp.code();
+                try {
+                    JSONObject ej = new JSONObject(errBody);
+                    if (ej.has("error")) {
+                        Object e = ej.get("error");
+                        errMsg = (e instanceof JSONObject)
+                            ? ((JSONObject)e).optString("message", errMsg) : e.toString();
+                    }
+                } catch (Exception ignored) {}
+                if (cb != null) cb.onError(errMsg);
+                return null;
+            }
+
+            // Parse SSE stream
+            StringBuilder fullContent  = new StringBuilder();
+            StringBuilder toolCallsRaw = new StringBuilder();
+            boolean hasToolCalls = false;
+            String  lastPartial  = "";
+            long    lastPartialMs = 0;
+
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(resp.body().byteStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!line.startsWith("data: ")) continue;
+                String data = line.substring(6).trim();
+                if ("[DONE]".equals(data)) break;
+                try {
+                    JSONObject chunk   = new JSONObject(data);
+                    JSONArray  choices = chunk.optJSONArray("choices");
+                    if (choices == null || choices.length() == 0) continue;
+                    JSONObject delta = choices.getJSONObject(0).optJSONObject("delta");
+                    if (delta == null) continue;
+
+                    String contentDelta = delta.optString("content", "");
+                    if (!contentDelta.isEmpty()) {
+                        fullContent.append(contentDelta);
+                        long now = System.currentTimeMillis();
+                        if (cb != null && now - lastPartialMs > 250) {
+                            String partial = fullContent.toString();
+                            if (!partial.equals(lastPartial)) {
+                                cb.onPartial(partial);
+                                lastPartial  = partial;
+                                lastPartialMs = now;
+                            }
+                        }
+                    }
+
+                    JSONArray tcDeltas = delta.optJSONArray("tool_calls");
+                    if (tcDeltas != null && tcDeltas.length() > 0) {
+                        hasToolCalls = true;
+                        toolCallsRaw.append(data).append("\n");
+                    }
+
+                } catch (Exception ignored) {}
+            }
+            reader.close();
+
+            // Reconstruct non-streaming response for Rust to parse
+            String finalContent = fullContent.toString();
+            JSONObject fakeResp    = new JSONObject();
+            JSONArray  fakeChoices = new JSONArray();
+            JSONObject fakeChoice  = new JSONObject();
+            JSONObject fakeMessage = new JSONObject();
+            fakeMessage.put("role", "assistant");
+            fakeMessage.put("content", finalContent);
+            if (hasToolCalls && toolCallsRaw.length() > 0) {
+                // Build tool_calls array from accumulated SSE deltas
+                JSONArray toolCallsArray = buildToolCallsFromSse(toolCallsRaw.toString());
+                if (toolCallsArray.length() > 0) {
+                    fakeMessage.put("tool_calls", toolCallsArray);
+                }
+            }
+            fakeChoice.put("message", fakeMessage);
+            fakeChoice.put("finish_reason", hasToolCalls ? "tool_calls" : "stop");
+            fakeChoices.put(fakeChoice);
+            fakeResp.put("choices", fakeChoices);
+
+            return fakeResp.toString();
+
         } catch (Exception e) {
-            Log.w(TAG, "rustPost " + path + ": " + e.getMessage());
+            Log.e(TAG, "callLlmStreaming", e);
+            if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "HTTP error");
             return null;
         }
     }
 
-    private String rustGet(String path) {
+    /**
+     * Assemble tool_calls array from SSE delta chunks.
+     * Each chunk has: {"index":0,"id":"call_xxx","type":"function","function":{"name":"...","arguments":"..."}}
+     * Arguments arrive in fragments and must be concatenated per index.
+     */
+    private JSONArray buildToolCallsFromSse(String rawSseLines) {
         try {
-            okhttp3.Response r = HTTP.newCall(new okhttp3.Request.Builder()
-                .url("http://127.0.0.1:" + RUST_PORT + path)
-                .get().build()).execute();
-            return r.body() != null ? r.body().string() : null;
+            // Map from index -> assembled call
+            java.util.TreeMap<Integer, JSONObject> calls = new java.util.TreeMap<>();
+            java.util.TreeMap<Integer, StringBuilder> argBuilders = new java.util.TreeMap<>();
+
+            for (String line : rawSseLines.split("\n")) {
+                if (line.trim().isEmpty()) continue;
+                try {
+                    JSONObject chunk = new JSONObject(line.trim());
+                    JSONArray choices = chunk.optJSONArray("choices");
+                    if (choices == null) continue;
+                    JSONObject delta = choices.getJSONObject(0).optJSONObject("delta");
+                    if (delta == null) continue;
+                    JSONArray tcArr = delta.optJSONArray("tool_calls");
+                    if (tcArr == null) continue;
+
+                    for (int i = 0; i < tcArr.length(); i++) {
+                        JSONObject tc = tcArr.getJSONObject(i);
+                        int idx = tc.optInt("index", 0);
+
+                        if (!calls.containsKey(idx)) {
+                            JSONObject call = new JSONObject();
+                            call.put("id",   tc.optString("id", "call_" + idx));
+                            call.put("type", "function");
+                            call.put("function", new JSONObject()
+                                .put("name", "")
+                                .put("arguments", ""));
+                            calls.put(idx, call);
+                            argBuilders.put(idx, new StringBuilder());
+                        }
+
+                        JSONObject fn = tc.optJSONObject("function");
+                        if (fn != null) {
+                            String nameDelta = fn.optString("name", "");
+                            String argsDelta = fn.optString("arguments", "");
+                            if (!nameDelta.isEmpty()) {
+                                calls.get(idx).getJSONObject("function").put("name", nameDelta);
+                            }
+                            if (!argsDelta.isEmpty()) {
+                                argBuilders.get(idx).append(argsDelta);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // Finalize: set assembled arguments
+            JSONArray result = new JSONArray();
+            for (int idx : calls.keySet()) {
+                JSONObject call = calls.get(idx);
+                call.getJSONObject("function").put("arguments",
+                    argBuilders.get(idx).toString());
+                result.put(call);
+            }
+            return result;
+
         } catch (Exception e) {
-            Log.w(TAG, "rustGet " + path + ": " + e.getMessage());
-            return null;
+            Log.w(TAG, "buildToolCallsFromSse: " + e.getMessage());
+            return new JSONArray();
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Shell queue (Java-side tools dispatched by Rust)
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private String getInitialContext(String userMessage, Callback cb) {
+        String requestJson;
+        try {
+            requestJson = RustBridge.getChatContext(userMessage);
+        } catch (UnsatisfiedLinkError e) {
+            requestJson = buildFallbackContext(userMessage);
+        }
+        if (requestJson == null || requestJson.isEmpty()) {
+            if (cb != null) cb.onError("Failed to build request");
+            return null;
+        }
+        try {
+            JSONObject j = new JSONObject(requestJson);
+            if (j.has("error")) {
+                String err = j.getString("error");
+                if (cb != null) cb.onError("no_api_key".equals(err)
+                    ? "No API key - go to Settings" : err);
+                return null;
+            }
+        } catch (Exception ignored) {}
+        return requestJson;
+    }
 
     private void drainShellQueue(Callback cb) {
         for (int i = 0; i < 30; i++) {
             try {
-                String jobJson = RustBridge.getNextShellJob();
-                if (jobJson == null || jobJson.contains("\"empty\":true")) break;
-                String id     = parseStr(jobJson, "id");
-                String cmd    = parseStr(jobJson, "cmd");
+                String job = RustBridge.getNextShellJob();
+                if (job == null || job.contains("\"empty\":true")) break;
+                String id  = parseStr(job, "id");
+                String cmd = parseStr(job, "cmd");
                 if (cmd.isEmpty()) break;
-                String result = executeShellJob(cmd);
-                RustBridge.postShellResult(id, result != null ? result : "");
-                if (cb != null && result != null) {
+                String res = executeShellJob(cmd);
+                RustBridge.postShellResult(id, res != null ? res : "");
+                if (cb != null && res != null) {
                     String toolName = cmd.contains(":") ? cmd.substring(0, cmd.indexOf(':')) : cmd;
-                    cb.onTool(toolName, result.length() > 120 ? result.substring(0, 120) + "…" : result);
+                    cb.onTool(toolName, res.length() > 120 ? res.substring(0, 120) + "..." : res);
                 }
             } catch (Throwable e) {
                 Log.w(TAG, "drainShellQueue: " + e.getMessage());
@@ -323,15 +423,15 @@ public class KiraAI {
                 return body.length() > 4000 ? body.substring(0, 4000) + "..." : body;
             }
             if (cmd.startsWith("send_message:")) {
-                String rest = cmd.substring(13);
-                int nl = rest.indexOf('\n');
+                String rest   = cmd.substring(13);
+                int nl        = rest.indexOf('\n');
                 String target = nl >= 0 ? rest.substring(0, nl).trim() : rest.trim();
-                android.content.Intent intent = new android.content.Intent(
+                android.content.Intent i = new android.content.Intent(
                     android.content.Intent.ACTION_VIEW,
                     android.net.Uri.parse("sms:" + target));
-                if (nl >= 0) intent.putExtra("sms_body", rest.substring(nl + 1).trim());
-                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                ctx.startActivity(intent);
+                if (nl >= 0) i.putExtra("sms_body", rest.substring(nl + 1).trim());
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(i);
                 return "Opened messaging for " + target;
             }
             if (ShizukuShell.isAvailable()) {
@@ -344,23 +444,50 @@ public class KiraAI {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────────────────────────────────────────
+    private String legacyProcessReply(String raw) {
+        try {
+            JSONObject j = new JSONObject(raw);
+            JSONArray choices = j.optJSONArray("choices");
+            if (choices != null && choices.length() > 0) {
+                JSONObject msg = choices.getJSONObject(0).optJSONObject("message");
+                if (msg != null) {
+                    String content = msg.optString("content", "Done.").trim();
+                    return new JSONObject().put("done", true).put("reply",
+                        content.isEmpty() ? "Done." : content).put("tools_used", "[]").toString();
+                }
+            }
+        } catch (Exception ignored) {}
+        return "{\"done\":true,\"reply\":\"Done.\",\"tools_used\":\"[]\"}";
+    }
+
+    private String buildFallbackContext(String msg) {
+        try {
+            KiraConfig cfg = KiraConfig.load(ctx);
+            if (cfg.apiKey == null || cfg.apiKey.isEmpty()) return null;
+            String base = (cfg.baseUrl == null || cfg.baseUrl.isEmpty())
+                ? "https://api.groq.com/openai/v1" : cfg.baseUrl;
+            String model = (cfg.model == null || cfg.model.isEmpty())
+                ? "llama-3.1-8b-instant" : cfg.model;
+            JSONArray messages = new JSONArray();
+            messages.put(new JSONObject().put("role","system")
+                .put("content","You are Kira, a helpful AI on Android."));
+            messages.put(new JSONObject().put("role","user").put("content", msg));
+            return new JSONObject()
+                .put("api_key", cfg.apiKey).put("base_url", base)
+                .put("model", model).put("messages", messages).toString();
+        } catch (Exception e) { return null; }
+    }
 
     private void saveMemoryIfNeeded(JSONObject result) {
         try {
-            JSONArray tools = result.optJSONArray("tools_used");
-            boolean usedMemory = false;
-            if (tools != null) {
-                for (int i = 0; i < tools.length(); i++) {
-                    if ("add_memory".equals(tools.getString(i))) { usedMemory = true; break; }
+            String toolsStr = result.optString("tools_used", "");
+            JSONArray toolsArr = result.optJSONArray("tools_used");
+            boolean usedMemory = toolsStr.contains("add_memory");
+            if (!usedMemory && toolsArr != null) {
+                for (int i = 0; i < toolsArr.length(); i++) {
+                    if ("add_memory".equals(toolsArr.getString(i))) { usedMemory = true; break; }
                 }
             }
-            // Also check tools_used string
-            String toolsStr = result.optString("tools_used", "");
-            if (toolsStr.contains("add_memory")) usedMemory = true;
-
             if (usedMemory) {
                 String json = RustBridge.saveMemory();
                 if (json != null && !json.equals("[]")) {
@@ -371,12 +498,6 @@ public class KiraAI {
         } catch (Throwable ignored) {}
     }
 
-    private static String jsonEsc(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "").replace("\t", "\\t");
-    }
-
     private static String parseStr(String json, String key) {
         String search = "\"" + key + "\":\"";
         int start = json.indexOf(search);
@@ -385,10 +506,10 @@ public class KiraAI {
         int end = start;
         while (end < json.length()) {
             char c = json.charAt(end);
-            if (c == '"' && (end == 0 || json.charAt(end - 1) != '\\')) break;
+            if (c == '"' && (end == 0 || json.charAt(end-1) != '\\')) break;
             end++;
         }
         return json.substring(start, end)
-            .replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
+            .replace("\\n","\n").replace("\\\"","\"").replace("\\\\","\\");
     }
 }

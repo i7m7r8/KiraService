@@ -414,10 +414,22 @@ public class KiraAI {
                 if ("no_api_key".equals(err)) {
                     KiraConfig cfg = KiraConfig.load(ctx);
                     if (cfg.apiKey != null && !cfg.apiKey.isEmpty()) {
-                        // Sync config to Rust and retry
+                        // Sync config to Rust and retry getChatContext directly.
+                        // Do NOT call buildFallbackContext here — it would push the user
+                        // turn a second time if getChatContext is still called inside it.
                         try { cfg.save(ctx); } catch (Throwable ignored2) {}
-                        // Rebuild request with loaded config
-                        requestJson = buildFallbackContext(userMessage);
+                        // Retry: Rust now has the key, so getChatContext will push the
+                        // turn exactly once and return the full context with tools + history.
+                        try {
+                            requestJson = RustBridge.getChatContext(userMessage);
+                            JSONObject retryCheck = new JSONObject(requestJson);
+                            if (retryCheck.has("error")) {
+                                // getChatContext still failing — use plain fallback (no Rust push)
+                                requestJson = buildFallbackContext(userMessage);
+                            }
+                        } catch (Throwable e2) {
+                            requestJson = buildFallbackContext(userMessage);
+                        }
                         if (requestJson == null) {
                             if (cb != null) cb.onError("No API key - go to Settings");
                             return null;
@@ -589,6 +601,9 @@ public class KiraAI {
     }
 
     private String buildFallbackContext(String msg) {
+        // NOTE: This method must NOT call RustBridge.getChatContext() — doing so would
+        // push the user turn into Rust history a second time (double-push bug).
+        // It is only called when Rust is unavailable or has no API key yet.
         try {
             KiraConfig cfg = KiraConfig.load(ctx);
             if (cfg.apiKey == null || cfg.apiKey.isEmpty()) return null;
@@ -601,19 +616,12 @@ public class KiraAI {
             JSONArray messages = new JSONArray();
             messages.put(new JSONObject().put("role","system").put("content", persona));
             messages.put(new JSONObject().put("role","user").put("content", msg));
-            // Try to get tools schema from Rust if available
-            JSONObject result = new JSONObject()
-                .put("api_key", cfg.apiKey).put("base_url", base)
-                .put("model", model).put("messages", messages);
-            try {
-                // Get full context from Rust if possible (has tools + history)
-                String rustCtx = RustBridge.getChatContext(msg);
-                if (rustCtx != null && !rustCtx.isEmpty()) {
-                    JSONObject rustJ = new JSONObject(rustCtx);
-                    if (!rustJ.has("error")) return rustCtx;
-                }
-            } catch (Throwable ignored) {}
-            return result.toString();
+            return new JSONObject()
+                .put("api_key", cfg.apiKey)
+                .put("base_url", base)
+                .put("model", model)
+                .put("messages", messages)
+                .toString();
         } catch (Exception e) { return null; }
     }
 

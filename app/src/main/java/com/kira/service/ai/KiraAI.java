@@ -94,8 +94,12 @@ public class KiraAI {
                     }
 
                     JSONObject result = new JSONObject(processResult);
+                    if (result == null) {
+                        if (cb != null) cb.onError("Null result from Rust");
+                        return;
+                    }
                     if (result.has("error")) {
-                        if (cb != null) cb.onError(result.getString("error"));
+                        if (cb != null) cb.onError(result.optString("error", "Unknown error"));
                         return;
                     }
 
@@ -105,7 +109,8 @@ public class KiraAI {
                     JSONArray toolsArr = result.optJSONArray("tools_used");
                     if (toolsArr != null && toolsArr.length() > 0 && cb != null) {
                         for (int i = 0; i < toolsArr.length(); i++) {
-                            cb.onThinkingStep("  - " + toolsArr.getString(i));
+                            String toolName = toolsArr.optString(i, "");
+                            if (!toolName.isEmpty()) cb.onThinkingStep("  - " + toolName);
                         }
                     } else {
                         String toolsStr = result.optString("tools_used", "");
@@ -169,8 +174,15 @@ public class KiraAI {
             String model    = req.optString("model", "llama-3.1-8b-instant");
             if (model.isEmpty()) model = "llama-3.1-8b-instant";
             Object msgsRaw  = req.opt("messages");
-            JSONArray msgs  = (msgsRaw instanceof JSONArray)
-                ? (JSONArray) msgsRaw : new JSONArray(msgsRaw.toString());
+            JSONArray msgs;
+            if (msgsRaw instanceof JSONArray) {
+                msgs = (JSONArray) msgsRaw;
+            } else if (msgsRaw != null) {
+                msgs = new JSONArray(msgsRaw.toString());
+            } else {
+                if (cb != null) cb.onError("No messages in request - check API key and retry");
+                return null;
+            }
 
             // Build streaming body
             JSONObject body = new JSONObject();
@@ -178,8 +190,12 @@ public class KiraAI {
             body.put("max_tokens", 8192);
             body.put("stream", true);
             body.put("messages", msgs);
-            if (req.has("tools"))        body.put("tools", req.get("tools"));
-            if (req.has("tool_choice"))  body.put("tool_choice", req.get("tool_choice"));
+            try {
+                if (req.has("tools") && req.opt("tools") != null)
+                    body.put("tools", req.get("tools"));
+                if (req.has("tool_choice") && req.opt("tool_choice") != null)
+                    body.put("tool_choice", req.get("tool_choice"));
+            } catch (Exception ignored) {}
 
             // Strip control characters only (keep all printable ASCII)
             apiKey = apiKey.replaceAll("[\u0000-\u001F\u007F]", "").trim();
@@ -204,14 +220,20 @@ public class KiraAI {
                 return null;
             }
             if (!resp.isSuccessful()) {
-                String errBody = resp.body().string();
-                String errMsg  = "HTTP " + resp.code();
+                String errMsg = "HTTP " + resp.code();
                 try {
-                    JSONObject ej = new JSONObject(errBody);
-                    if (ej.has("error")) {
-                        Object e = ej.get("error");
-                        errMsg = (e instanceof JSONObject)
-                            ? ((JSONObject)e).optString("message", errMsg) : e.toString();
+                    okhttp3.ResponseBody errBodyObj = resp.body();
+                    if (errBodyObj != null) {
+                        String errBody = errBodyObj.string();
+                        JSONObject ej = new JSONObject(errBody);
+                        if (ej.has("error")) {
+                            Object e = ej.get("error");
+                            if (e instanceof JSONObject) {
+                                errMsg = ((JSONObject)e).optString("message", errMsg);
+                            } else if (e != null && e != JSONObject.NULL) {
+                                errMsg = e.toString();
+                            }
+                        }
                     }
                 } catch (Exception ignored) {}
                 if (cb != null) cb.onError(errMsg);
@@ -225,8 +247,13 @@ public class KiraAI {
             String  lastPartial  = "";
             long    lastPartialMs = 0;
 
+            okhttp3.ResponseBody respBody = resp.body();
+            if (respBody == null) {
+                if (cb != null) cb.onError("Empty response body");
+                return null;
+            }
             BufferedReader reader = new BufferedReader(
-                new InputStreamReader(resp.body().byteStream()));
+                new InputStreamReader(respBody.byteStream()));
             String line;
             while ((line = reader.readLine()) != null) {
                 if (!line.startsWith("data: ")) continue;
@@ -236,7 +263,10 @@ public class KiraAI {
                     JSONObject chunk   = new JSONObject(data);
                     JSONArray  choices = chunk.optJSONArray("choices");
                     if (choices == null || choices.length() == 0) continue;
-                    JSONObject delta = choices.getJSONObject(0).optJSONObject("delta");
+                    if (choices.length() == 0) continue;
+                    JSONObject choice0 = choices.optJSONObject(0);
+                    if (choice0 == null) continue;
+                    JSONObject delta = choice0.optJSONObject("delta");
                     if (delta == null) continue;
 
                     String contentDelta = delta.optString("content", "");
@@ -309,7 +339,10 @@ public class KiraAI {
                     JSONObject chunk = new JSONObject(line.trim());
                     JSONArray choices = chunk.optJSONArray("choices");
                     if (choices == null) continue;
-                    JSONObject delta = choices.getJSONObject(0).optJSONObject("delta");
+                    if (choices.length() == 0) continue;
+                    JSONObject choice0 = choices.optJSONObject(0);
+                    if (choice0 == null) continue;
+                    JSONObject delta = choice0.optJSONObject("delta");
                     if (delta == null) continue;
                     JSONArray tcArr = delta.optJSONArray("tool_calls");
                     if (tcArr == null) continue;
@@ -543,7 +576,8 @@ public class KiraAI {
             JSONObject j = new JSONObject(raw);
             JSONArray choices = j.optJSONArray("choices");
             if (choices != null && choices.length() > 0) {
-                JSONObject msg = choices.getJSONObject(0).optJSONObject("message");
+                JSONObject c0 = choices.optJSONObject(0);
+                JSONObject msg = c0 != null ? c0.optJSONObject("message") : null;
                 if (msg != null) {
                     String content = msg.optString("content", "Done.").trim();
                     return new JSONObject().put("done", true).put("reply",

@@ -4689,12 +4689,10 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             let patch = crate::acp::SessionPatch::from_json(body);
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let now   = now_ms() as u128;
-            let sess  = s.session_store.get_or_create(sid, "api", now);
-            // Apply patch fields that map to existing session fields
-            let mut response = format!(r#"{{"ok":true,"session_id":"{}","applied":{{"#, esc(sid));
+            // Ensure session exists (get_or_create needs mut borrow — do it first, drop result)
+            { s.session_store.get_or_create(sid, "api", now); }
             let mut applied_fields: Vec<String> = Vec::new();
             if let Some(model) = &patch.model {
-                // Store model preference in session (we update global config as well)
                 s.config.model = model.clone();
                 applied_fields.push(format!(r#""model":"{}""#, esc(model)));
             }
@@ -4704,10 +4702,8 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 }
                 applied_fields.push(format!(r#""agent_id":"{}""#, esc(agent_id)));
             }
-            drop(sess); // release borrow
-            response.push_str(&applied_fields.join(","));
-            response.push_str("}}}");
-            response
+            format!(r#"{{"ok":true,"session_id":"{}","applied":{{{}}}}}"#,
+                esc(sid), applied_fields.join(","))
         }
         // GET /acp/sessions/:id/transcript  -  get session transcript as JSON
         ("GET", p) if p.starts_with("/acp/sessions/") && p.ends_with("/transcript") => {

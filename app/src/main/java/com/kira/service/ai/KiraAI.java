@@ -181,7 +181,7 @@ public class KiraAI {
             if (req.has("tool_choice"))  body.put("tool_choice", req.get("tool_choice"));
 
             // Sanitize: strip any non-printable or non-ASCII characters from key
-            apiKey = apiKey.replaceAll("[^\x20-\x7E]", "").trim();
+            apiKey = apiKey.replaceAll("[^\u0020-\u007E]", "").trim();
             if (apiKey.isEmpty()) {
                 if (cb != null) cb.onError("No API key - go to Settings");
                 return null;

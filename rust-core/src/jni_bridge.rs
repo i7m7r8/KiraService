@@ -569,61 +569,75 @@ mod jni_bridge {
                 s.config.agent_max_steps.max(3) as usize
             };
 
-            // Extract plain text from the JSON envelope Java reconstructed from SSE
-            let content    = extract_llm_content(&raw).unwrap_or_default();
-            // Check for <tool> XML tool calls inside the content
-            let tool_calls = parse_tool_calls(&content);
-            // Strip tool XML from the displayed reply
-            let reply      = clean_reply(&content);
 
-            if tool_calls.is_empty() || step_n >= max_steps {
-                // No tools (or limit hit) — return final reply
-                let final_reply = if reply.trim().is_empty() { "Done.".to_string() } else { reply };
+            // Extract plain text from the JSON envelope Java reconstructed from SSE
+            let content = extract_llm_content(&raw).unwrap_or_default();
+
+            // Try JSON function-calling format first (modern LLMs), fall back to XML tags
+            let json_tcs = crate::ai::runner::parse_tool_calls_json(&raw);
+            let xml_tcs  = if json_tcs.is_empty() { parse_tool_calls(&content) } else { vec![] };
+            let has_tools = !json_tcs.is_empty() || !xml_tcs.is_empty();
+
+            // Clean reply text (strips XML <tool> tags if present)
+            let reply = clean_reply(&content);
+
+            if !has_tools || step_n >= max_steps {
+                // No tools or step limit hit — final reply
+                let final_reply = if reply.trim().is_empty() {
+                    if content.trim().is_empty() { "Done.".to_string() }
+                    else { content.trim().to_string() }
+                } else { reply };
                 {
                     let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                     push_turn_compressed(&mut s, "assistant", &final_reply);
                     s.theme.is_thinking = false;
                 }
-                format!(r#"{{"done":true,"reply":"{}","tools_used":"[]"}}"#, esc(&final_reply))
+                format!(r#"{{"done":true,"reply":"{}","tools_used":[]}}"#, esc(&final_reply))
             } else {
-                // Tool calls present — execute them and build follow-up request
-                let mut tool_results: Vec<String> = Vec::new();
-                let mut tools_used:   Vec<String> = Vec::new();
+                // Execute tools and build the follow-up LLM request
+                let mut tool_results: Vec<(String, String, String)> = Vec::new(); // (id, name, result)
+                let mut tools_used: Vec<String> = Vec::new();
 
-                for (tname, targs) in &tool_calls {
-                    let res = dispatch_tool(tname, targs);
+                // Execute JSON tool calls (OpenAI function-calling)
+                for tc in &json_tcs {
+                    let res = dispatch_tool(&tc.name, &tc.params);
                     if res.starts_with("__shell__") {
-                        let arg = targs.get("package")
-                            .or_else(|| targs.get("cmd"))
-                            .or_else(|| targs.get("url"))
-                            .or_else(|| targs.get("app"))
-                            .cloned()
-                            .unwrap_or_default();
+                        let arg = tc.params.get("cmd").or_else(|| tc.params.get("package"))
+                            .cloned().unwrap_or_default();
                         let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                         s.pending_shell.push_back(ShellJob {
-                            id:      format!("tool_{}_{}", step_n, tname),
-                            cmd:     format!("{}:{}", tname, arg),
-                            timeout: 15_000,
-                            created: now_ms(),
+                            id: tc.id.clone(), cmd: format!("{}:{}", tc.name, arg),
+                            timeout: 15_000, created: now_ms(),
                         });
                     }
-                    tool_results.push(format!("[{}]: {}", tname, res));
+                    tool_results.push((tc.id.clone(), tc.name.clone(), res));
+                    tools_used.push(tc.name.clone());
+                }
+
+                // Execute XML tool calls (fallback)
+                for (tname, targs) in &xml_tcs {
+                    let res = dispatch_tool(tname, targs);
+                    if res.starts_with("__shell__") {
+                        let arg = targs.get("cmd").or_else(|| targs.get("package"))
+                            .cloned().unwrap_or_default();
+                        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                        s.pending_shell.push_back(ShellJob {
+                            id:      format!("xml_{}_{}", step_n, tname),
+                            cmd:     format!("{}:{}", tname, arg),
+                            timeout: 15_000, created: now_ms(),
+                        });
+                    }
+                    tool_results.push((format!("xml_{}_{}", step_n, tname), tname.clone(), res));
                     tools_used.push(tname.clone());
                 }
 
-                let follow_up = format!(
-                    "Tool results:
-{}
+                { STATE.lock().unwrap_or_else(|e| e.into_inner()).tool_call_count += tools_used.len() as u64; }
 
-Now respond to the user based on these results.",
-                    tool_results.join("
-")
-                );
-
+                // Build next messages array
                 let next_messages: Vec<String> = {
-                    let s   = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                     let persona = if s.config.persona.is_empty() {
-                        "You are Kira, an AI agent on Android. Be concise.".to_string()
+                        "You are Kira, an AI agent on Android.".to_string()
                     } else { s.config.persona.clone() };
                     let sys  = build_system_prompt(&s, &persona);
                     let hist = decompress_context(&s);
@@ -634,31 +648,62 @@ Now respond to the user based on these results.",
                     for (r, c) in &hist {
                         msgs.push(format!(r#"{{"role":"{}","content":"{}"}}"#, esc(r), esc(c)));
                     }
-                    // assistant turn = content (plain text, not raw JSON)
-                    msgs.push(format!(r#"{{"role":"assistant","content":"{}"}}"#, esc(&content)));
-                    msgs.push(format!(r#"{{"role":"user","content":"{}"}}"#, esc(&follow_up)));
+                    if !json_tcs.is_empty() {
+                        // OpenAI format: assistant turn WITH tool_calls array
+                        let tc_arr: Vec<String> = json_tcs.iter().map(|tc| {
+                            format!(r#"{{"id":"{}","type":"function","function":{{"name":"{}","arguments":"{}"}}}}"#,
+                                esc(&tc.id), esc(&tc.name), esc(&tc.args_json))
+                        }).collect();
+                        msgs.push(format!(
+                            r#"{{"role":"assistant","content":"{}","tool_calls":[{}]}}"#,
+                            esc(&content), tc_arr.join(",")
+                        ));
+                        for (id, name, res) in &tool_results {
+                            msgs.push(format!(
+                                r#"{{"role":"tool","tool_call_id":"{}","name":"{}","content":"{}"}}"#,
+                                esc(id), esc(name), esc(res)
+                            ));
+                        }
+                    } else {
+                        // XML fallback: assistant + user follow-up
+                        msgs.push(format!(r#"{{"role":"assistant","content":"{}"}}"#, esc(&content)));
+                        let results_text = tool_results.iter()
+                            .map(|(_, name, res)| format!("[{}]: {}", name, res))
+                            .collect::<Vec<_>>().join("\n");
+                        msgs.push(format!(r#"{{"role":"user","content":"{}"}}"#,
+                            esc(&format!("Tool results:\n{}\n\nNow respond to the user.", results_text))));
+                    }
                     msgs
                 };
 
+                // Build next request with tools schema included
                 let (api_key, base_url, model) = {
                     let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                     (s.config.api_key.clone(), s.config.base_url.clone(), s.config.model.clone())
                 };
+                let tools_schema = {
+                    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist)
+                };
+                let tools_field = if tools_schema.is_empty() || tools_schema == "[]" {
+                    String::new()
+                } else {
+                    format!(r#","tools":{},"tool_choice":"auto""#, tools_schema)
+                };
 
                 let next_req = format!(
-                    r#"{{"api_key":"{}","base_url":"{}","model":"{}","messages":[{}]}}"#,
+                    r#"{{"api_key":"{}","base_url":"{}","model":"{}","messages":[{}]{}}}"#,
                     esc(&api_key), esc(&base_url), esc(&model),
-                    next_messages.join(",")
+                    next_messages.join(","), tools_field
                 );
-                let tools_json = tools_used.iter()
-                    .map(|t| format!(r#""{}""#, esc(t)))
-                    .collect::<Vec<_>>().join(",");
+
+                let tools_arr: Vec<String> = tools_used.iter()
+                    .map(|t| format!("\"{}\"", esc(t))).collect();
 
                 format!(
-                    r#"{{"done":false,"messages_json":"{}","tools_used":"[{}]"}}"#,
-                    esc(&next_req), tools_json
+                    r#"{{"done":false,"messages_json":"{}","tools_used":[{}]}}"#,
+                    esc(&next_req), tools_arr.join(",")
                 )
-            }
         })).unwrap_or_else(|_| {
             if let Ok(mut s) = STATE.lock() { s.theme.is_thinking = false; }
             r#"{"done":true,"reply":"Internal error — please try again","tools_used":"[]"}"#.to_string()

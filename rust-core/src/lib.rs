@@ -2460,13 +2460,20 @@ pub fn build_llm_request_json(state: &KiraState) -> String {
         msgs.push(format!(r#"{{"role":"{}","content":"{}"}}"#, esc(role), esc(content)));
     }
 
-    format!(
-        r#"{{"api_key":"{}","base_url":"{}","model":"{}","messages":[{}]}}"#,
-        esc(&cfg.api_key),
-        esc(&cfg.base_url),
-        esc(&cfg.model),
-        msgs.join(",")
-    )
+    // Include OpenAI function-calling tools schema
+    let tools_json = build_kira_tools_schema_filtered(&state.tool_allowlist, &state.tool_denylist);
+
+    if tools_json.is_empty() || tools_json == "[]" {
+        format!(
+            r#"{{"api_key":"{}","base_url":"{}","model":"{}","messages":[{}]}}"#,
+            esc(&cfg.api_key), esc(&cfg.base_url), esc(&cfg.model), msgs.join(",")
+        )
+    } else {
+        format!(
+            r#"{{"api_key":"{}","base_url":"{}","model":"{}","messages":[{}],"tools":{},"tool_choice":"auto"}}"#,
+            esc(&cfg.api_key), esc(&cfg.base_url), esc(&cfg.model), msgs.join(","), tools_json
+        )
+    }
 }
 
 /// Escape a string to be safely embedded as a JSON string value.
@@ -4102,9 +4109,16 @@ fn handle_http(mut stream: TcpStream) {
     let first = req.lines().next().unwrap_or("");
     let parts: Vec<&str> = first.split_whitespace().collect();
     if parts.len() < 2 { return; }
-    let body = req.find("
-
-").map(|i| req[i+4..].trim().to_string()).unwrap_or_default();
+    let body = {
+        // HTTP uses \r\n\r\n; some clients use \n\n
+        if let Some(i) = req.find("\r\n\r\n") {
+            req[i+4..].trim_start().to_string()
+        } else if let Some(i) = req.find("\n\n") {
+            req[i+2..].trim_start().to_string()
+        } else {
+            String::new()
+        }
+    };
     let resp = route_http_with_raw(parts[0], parts[1], &body, &req.to_string());
     let http = format!("HTTP/1.1 200 OK
 Content-Type: application/json

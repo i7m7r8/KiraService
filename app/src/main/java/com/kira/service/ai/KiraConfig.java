@@ -56,7 +56,7 @@ public class KiraConfig {
                 me.putString("baseUrl", "https://api.groq.com/openai/v1");
             }
             me.putInt("config_version", VERSION);
-            me.apply();
+            me.commit();
         }
 
         KiraConfig c = new KiraConfig();
@@ -64,7 +64,7 @@ public class KiraConfig {
         String rawKey = p.getString("apiKey", "");
         // Strict validation: reject encrypted garbage
         // Accept any printable ASCII key of reasonable length
-        c.apiKey = (isAscii(rawKey) && rawKey.length() >= 8 && rawKey.length() <= 512)
+        c.apiKey = (isAscii(rawKey) && !rawKey.isEmpty() && rawKey.length() <= 512)
             ? rawKey : "";
         String rawUrl = p.getString("baseUrl", "https://api.groq.com/openai/v1");
         c.baseUrl = (isAscii(rawUrl) && (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")))

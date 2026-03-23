@@ -2329,6 +2329,137 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
             });
             format!("Message queued for {}", to)
         }
+        // ── Session 21: Accessibility tools (dispatched to Java) ──────────
+        "screen_read" => {
+            // Queue to Java - KiraAccessibilityService reads screen nodes
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            // Return cached screen nodes if available (updated by updateScreenNodes JNI)
+            if !s.screen_nodes.is_empty() {
+                // Parse node JSON and extract text
+                let nodes_text: String = s.screen_nodes.split(""text":"")
+                    .skip(1)
+                    .filter_map(|part| part.split('"').next())
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<_>>().join(" | ");
+                if !nodes_text.is_empty() {
+                    return format!("Screen text: {}", &nodes_text[..nodes_text.len().min(2000)]);
+                }
+            }
+            s.pending_shell.push_back(ShellJob {
+                id:      format!("screen_read_{}", now_ms()),
+                cmd:     "screen_read:".to_string(),
+                timeout: 5_000,
+                created: now_ms(),
+            });
+            "__shell__:screen_read".to_string()
+        }
+        "screen_tap" => {
+            let text = params.get("text").cloned().unwrap_or_default();
+            let x    = params.get("x").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let y    = params.get("y").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let cmd  = if !text.is_empty() {
+                format!("find_and_tap:{}", text)
+            } else {
+                format!("tap:{},{}", x, y)
+            };
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id: format!("tap_{}", now_ms()), cmd, timeout: 5_000, created: now_ms(),
+            });
+            if !text.is_empty() { format!("Tapping element: {}", text) }
+            else { format!("Tapping ({}, {})", x, y) }
+        }
+        "screen_swipe" => {
+            let x1 = params.get("x1").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let y1 = params.get("y1").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let x2 = params.get("x2").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let y2 = params.get("y2").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let dur = params.get("duration_ms").and_then(|v| v.parse::<i32>().ok()).unwrap_or(300);
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id:      format!("swipe_{}", now_ms()),
+                cmd:     format!("swipe:{},{},{},{},{}", x1, y1, x2, y2, dur),
+                timeout: 5_000,
+                created: now_ms(),
+            });
+            format!("Swiping ({},{}) -> ({},{}) over {}ms", x1, y1, x2, y2, dur)
+        }
+        "screen_type" => {
+            let text = params.get("text").cloned().unwrap_or_default();
+            if text.is_empty() { return "error: text required".into(); }
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id:      format!("type_{}", now_ms()),
+                cmd:     format!("type:{}", text),
+                timeout: 5_000,
+                created: now_ms(),
+            });
+            format!("Typing: {}", &text[..text.len().min(50)])
+        }
+        "screen_back" => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id: format!("back_{}", now_ms()), cmd: "back:".to_string(),
+                timeout: 3_000, created: now_ms(),
+            });
+            "Pressed Back".to_string()
+        }
+        "screen_home" => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id: format!("home_{}", now_ms()), cmd: "home:".to_string(),
+                timeout: 3_000, created: now_ms(),
+            });
+            "Pressed Home".to_string()
+        }
+        "clipboard_get" => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if s.sig_clipboard.is_empty() { "Clipboard is empty".to_string() }
+            else { format!("Clipboard: {}", &s.sig_clipboard[..s.sig_clipboard.len().min(500)]) }
+        }
+        "clipboard_set" => {
+            let text = params.get("text").cloned().unwrap_or_default();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id:      format!("clip_{}", now_ms()),
+                cmd:     format!("clipboard_set:{}", text),
+                timeout: 3_000,
+                created: now_ms(),
+            });
+            format!("Clipboard set to: {}", &text[..text.len().min(50)])
+        }
+        // ── Session 22: Plugin system ──────────────────────────────────────
+        "plugin_list" => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if s.skills.is_empty() {
+                "No plugins installed. Add .md files to /data/data/com.kira.service/files/skills/".to_string()
+            } else {
+                let list: Vec<String> = s.skills.values()
+                    .map(|sk| format!("{}: {}", sk.name, &sk.description[..sk.description.len().min(60)]))
+                    .collect();
+                format!("{} plugins:\n{}", list.len(), list.join("\n"))
+            }
+        }
+        "plugin_call" => {
+            let plugin_name = params.get("plugin").cloned().unwrap_or_default();
+            let input       = params.get("input").cloned().unwrap_or_default();
+            if plugin_name.is_empty() { return "error: plugin name required".into(); }
+            let skill_content = {
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                s.skills.values()
+                    .find(|sk| sk.name.to_lowercase() == plugin_name.to_lowercase())
+                    .map(|sk| sk.content.clone())
+            };
+            match skill_content {
+                None => format!("Plugin not found: {}. Use plugin_list to see available plugins.", plugin_name),
+                Some(content) => {
+                    // Skills can define simple lookup tables or instructions
+                    // For now: return the skill content + input context for LLM to use
+                    format!("Plugin '{}':\n{}\n\nInput: {}", plugin_name,
+                        &content[..content.len().min(2000)], input)
+                }
+            }
+        }
         _ => format!("Unknown tool: {}. Available: get_battery, get_wifi, get_notifications, get_device_state, get_foreground_app, http_get, web_search, open_app, read_file, write_file, list_files, run_shell, add_memory, search_memory, think, set_variable, get_variable, send_sms", name),
     }
 }
@@ -7024,6 +7155,18 @@ fn build_kira_tools_schema(allowlist: &[String]) -> String {
         ("list_contacts",  "Search contacts by name or number",         &[("query","Name or number to search",true)]),
         ("list_calendar",  "List calendar events",                      &[("from_ms","Start time unix ms",false), ("to_ms","End time unix ms",false)]),
         ("take_photo",     "Capture a photo from device camera",        &[("camera","front or back",false)]),
+        // ── Session 21: Accessibility / screen control ────────────────────
+        ("screen_read",    "Read all visible text on the current screen",  &[]),
+        ("screen_tap",     "Tap a UI element by visible text or coordinates", &[("text","Visible text of element to tap",false),("x","X coordinate",false),("y","Y coordinate",false)]),
+        ("screen_swipe",   "Swipe gesture on screen",                      &[("x1","Start X",true),("y1","Start Y",true),("x2","End X",true),("y2","End Y",true),("duration_ms","Duration ms",false)]),
+        ("screen_type",    "Type text into the focused input field",        &[("text","Text to type",true)]),
+        ("screen_back",    "Press the Back button",                         &[]),
+        ("screen_home",    "Press the Home button",                         &[]),
+        ("clipboard_get",  "Get the current clipboard text",                &[]),
+        ("clipboard_set",  "Set clipboard text",                            &[("text","Text to copy",true)]),
+        // ── Session 22: Plugin / extension tools ──────────────────────────
+        ("plugin_call",   "Call a custom plugin or skill by name",         &[("plugin","Plugin/skill name",true),("input","Input to pass to the plugin",true)]),
+        ("plugin_list",   "List available plugins and skills",              &[]),
     ];
 
     let defs: Vec<String> = all_tools.iter()
@@ -7050,8 +7193,13 @@ fn build_kira_tools_schema_filtered(allowlist: &[String], denylist: &[String]) -
     let all_names: Vec<&str> = vec![
         "add_memory","search_memory","get_battery","get_wifi","get_notifications",
         "get_device_state","get_foreground_app","run_shell","read_file","write_file",
-        "list_files","set_variable","get_variable","web_search","think",
+        "list_files","set_variable","get_variable","web_search","http_get","think",
         "open_app","send_sms","get_location","list_contacts","list_calendar","take_photo",
+        // Session 21: accessibility
+        "screen_read","screen_tap","screen_swipe","screen_type",
+        "screen_back","screen_home","clipboard_get","clipboard_set",
+        // Session 22: plugins
+        "plugin_call","plugin_list",
     ];
     // If allowlist non-empty, restrict to it; otherwise all tools
     let effective: Vec<&str> = all_names.iter().copied()

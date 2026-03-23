@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 import com.kira.service.RustBridge;
 import com.kira.service.ShizukuShell;
+import com.kira.service.KiraAccessibilityService;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
@@ -473,6 +474,59 @@ public class KiraAI {
                 i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
                 ctx.startActivity(i);
                 return "Opened messaging for " + target;
+            }
+            // ── Session 21: Accessibility commands ───────────────────────────
+            KiraAccessibilityService acc = KiraAccessibilityService.instance;
+            if (acc != null) {
+                if (cmd.startsWith("tap:")) {
+                    String[] parts = cmd.substring(4).split(",");
+                    if (parts.length >= 2) {
+                        try {
+                            int x = Integer.parseInt(parts[0].trim());
+                            int y = Integer.parseInt(parts[1].trim());
+                            return acc.tap(x, y) ? "Tapped (" + x + "," + y + ")" : "Tap failed";
+                        } catch (Exception ignored) {}
+                    }
+                }
+                if (cmd.startsWith("find_and_tap:")) {
+                    String text = cmd.substring(13);
+                    return acc.tapText(text);
+                }
+                if (cmd.startsWith("swipe:")) {
+                    String[] p = cmd.substring(6).split(",");
+                    if (p.length >= 4) {
+                        try {
+                            int x1 = Integer.parseInt(p[0].trim()), y1 = Integer.parseInt(p[1].trim());
+                            int x2 = Integer.parseInt(p[2].trim()), y2 = Integer.parseInt(p[3].trim());
+                            int dur = p.length >= 5 ? Integer.parseInt(p[4].trim()) : 300;
+                            return acc.swipe(x1, y1, x2, y2, dur) ? "Swiped" : "Swipe failed";
+                        } catch (Exception ignored) {}
+                    }
+                }
+                if (cmd.startsWith("type:")) {
+                    String text = cmd.substring(5);
+                    return acc.typeText(text) ? "Typed: " + text : "Type failed (no focused field)";
+                }
+                if (cmd.equals("back:")) {
+                    acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
+                    return "Back pressed";
+                }
+                if (cmd.equals("home:")) {
+                    acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+                    return "Home pressed";
+                }
+                if (cmd.equals("screen_read:")) {
+                    return acc.getScreenText();
+                }
+                if (cmd.startsWith("clipboard_set:")) {
+                    String text = cmd.substring(14);
+                    android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("kira", text));
+                        return "Clipboard set";
+                    }
+                }
             }
             if (ShizukuShell.isAvailable()) {
                 String out = ShizukuShell.exec(cmd, 15_000);

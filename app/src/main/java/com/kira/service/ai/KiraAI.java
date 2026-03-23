@@ -11,40 +11,50 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 /**
- * KiraAI — routes all chat through the proper OpenAI function-calling runner in Rust.
+ * KiraAI — streaming intelligence loop.
  *
- * Flow (new):
- *   1. chatViaRunner(msg, session, maxSteps) → Rust run_agent() → reply JSON
- *   2. Drain shell queue for any Java-side tools (open_app, http_get, etc.)
- *   3. Fire callbacks: onPartial not available in synchronous mode;
- *      onTool for each tool used; onReply with final text.
+ * Flow:
+ *  1. POST /ai/run  → Rust spawns run_agent() in background thread (returns immediately)
+ *  2. Poll GET /ai/run/status every 300ms:
+ *     - status="running"  → fire onPartial(partial_text) + onThinkingStep(tool info)
+ *     - status="done"     → fire onReply(result.content)
+ *     - status="error"    → fire onError(message)
+ *  3. After done: drain shell queue for any queued Java-side tools (open_app etc.)
  *
- * The old getChatContext/processLlmReply path is kept as a fallback for old .so files.
- * Streaming is done via a background thread that polls RUN_STATE while chatViaRunner runs.
+ * This gives real streaming: text appears word-by-word as LLM generates it,
+ * and tool calls appear in the UI as they execute.
  */
 public class KiraAI {
-    private static final String TAG      = "KiraAI";
+    private static final String TAG       = "KiraAI";
     private static final int    MAX_STEPS = 15;
     private static final String SESSION   = "default";
+    private static final int    POLL_MS   = 250;   // status poll interval
+    private static final int    TIMEOUT_MS = 120_000; // 2 min max
+
+    // Rust HTTP server port (must match startServer call)
+    private static final int RUST_PORT = 7070;
 
     private final Context ctx;
 
     public interface Callback {
         void onThinking();
-        void onPartial(String partialReply);
-        void onTool(String name, String result);
-        void onReply(String reply);
+        void onPartial(String partialReply);        // streamed text so far
+        void onThinkingStep(String step);           // tool call / reasoning line
+        void onTool(String name, String result);    // tool executed
+        void onReply(String finalReply);
         void onError(String error);
     }
 
     public static abstract class SimpleCallback implements Callback {
         @Override public void onPartial(String p) {}
+        @Override public void onThinkingStep(String s) {}
+        @Override public void onTool(String n, String r) {}
     }
 
-    private static final okhttp3.OkHttpClient HTTP_CLIENT = new okhttp3.OkHttpClient.Builder()
-        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+    private static final okhttp3.OkHttpClient HTTP = new okhttp3.OkHttpClient.Builder()
+        .connectTimeout(10,  java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30,     java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(10,    java.util.concurrent.TimeUnit.SECONDS)
         .build();
 
     public KiraAI(Context ctx) {
@@ -64,77 +74,197 @@ public class KiraAI {
                     return;
                 }
 
-                // ── Try the new runner first ──────────────────────────────
-                String runnerResult = null;
-                try {
-                    runnerResult = RustBridge.chatViaRunner(userMessage, SESSION, MAX_STEPS);
-                } catch (UnsatisfiedLinkError e) {
-                    Log.w(TAG, "chatViaRunner not in .so, falling back to legacy path");
-                }
+                // Abort any previous run
+                rustPost("/ai/run/abort", "{}");
 
-                if (runnerResult != null) {
-                    handleRunnerResult(runnerResult, cb);
+                // POST /ai/run — non-blocking, run_agent starts in background
+                String startResp = rustPost("/ai/run", String.format(
+                    "{\"message\":\"%s\",\"session\":\"%s\",\"max_steps\":%d}",
+                    jsonEsc(userMessage), SESSION, MAX_STEPS
+                ));
+
+                if (startResp == null) {
+                    // Rust server not ready or port different — fall back to chatViaRunner
+                    chatViaRunnerFallback(userMessage, cb);
                     return;
                 }
 
-                // ── Legacy fallback (old .so without chatViaRunner) ───────
-                legacyChat(userMessage, cb);
+                JSONObject startJson = new JSONObject(startResp);
+                if (startJson.has("error")) {
+                    String err = startJson.getString("error");
+                    if (err.contains("already running")) {
+                        // Wait briefly and retry
+                        Thread.sleep(1000);
+                        rustPost("/ai/run/abort", "{}");
+                        Thread.sleep(300);
+                        rustPost("/ai/run", String.format(
+                            "{\"message\":\"%s\",\"session\":\"%s\",\"max_steps\":%d}",
+                            jsonEsc(userMessage), SESSION, MAX_STEPS
+                        ));
+                    } else if (err.contains("API key")) {
+                        if (cb != null) cb.onError("No API key — go to Settings");
+                        return;
+                    } else {
+                        if (cb != null) cb.onError(err);
+                        return;
+                    }
+                }
+
+                // ── Poll loop ──────────────────────────────────────────────
+                String lastPartial    = "";
+                int    thinkingIdx    = 0;
+                long   startTime      = System.currentTimeMillis();
+
+                while (System.currentTimeMillis() - startTime < TIMEOUT_MS) {
+                    Thread.sleep(POLL_MS);
+
+                    String statusResp = rustGet("/ai/run/status");
+                    if (statusResp == null) continue;
+
+                    JSONObject status = new JSONObject(statusResp);
+                    String runStatus  = status.optString("status", "running");
+
+                    // ── Stream partial text ──────────────────────────────
+                    String partial = status.optString("partial_text", "");
+                    if (!partial.isEmpty() && !partial.equals(lastPartial)) {
+                        lastPartial = partial;
+                        if (cb != null) cb.onPartial(partial);
+                    }
+
+                    // ── Stream thinking steps ────────────────────────────
+                    JSONArray thinking = status.optJSONArray("thinking");
+                    if (thinking != null) {
+                        while (thinkingIdx < thinking.length()) {
+                            String step = thinking.getString(thinkingIdx++);
+                            if (cb != null) cb.onThinkingStep(step);
+                            // Parse tool calls for onTool callback
+                            if (step.startsWith("  → ")) {
+                                // e.g. "  → open_app(package=com.youtube)"
+                                String toolPart = step.substring(4);
+                                int paren = toolPart.indexOf('(');
+                                String toolName = paren > 0 ? toolPart.substring(0, paren) : toolPart;
+                                if (cb != null) cb.onTool(toolName, "running...");
+                            } else if (step.startsWith("    ← ")) {
+                                // e.g. "    ← open_app: Opening com.youtube..."
+                                String resultPart = step.substring(6);
+                                int colon = resultPart.indexOf(':');
+                                if (colon > 0) {
+                                    String toolName = resultPart.substring(0, colon).trim();
+                                    String toolResult = resultPart.substring(colon + 1).trim();
+                                    if (cb != null) cb.onTool(toolName, toolResult);
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Check completion ─────────────────────────────────
+                    if ("done".equals(runStatus) || "error".equals(runStatus)) {
+                        // Drain shell queue before reporting done
+                        drainShellQueue(cb);
+
+                        JSONObject result = status.optJSONObject("result");
+                        if (result != null) {
+                            if ("error".equals(runStatus) || result.has("error")) {
+                                String errMsg = result.optString("error",
+                                    result.optString("content", "Unknown error"));
+                                if (cb != null) cb.onError(errMsg);
+                            } else {
+                                String reply = result.optString("content", "");
+                                if (reply.isEmpty()) reply = lastPartial;
+                                if (reply.isEmpty()) reply = "Done.";
+                                // Save memory if used
+                                saveMemoryIfNeeded(result);
+                                if (cb != null) cb.onReply(reply);
+                            }
+                        } else {
+                            // No result object yet — use partial
+                            if (!lastPartial.isEmpty()) {
+                                if (cb != null) cb.onReply(lastPartial);
+                            } else {
+                                if (cb != null) cb.onError("No reply received");
+                            }
+                        }
+                        return;
+                    }
+
+                    // ── Check current tool for live display ──────────────
+                    String currentTool = status.optString("current_tool", "");
+                    if (!currentTool.isEmpty() && cb != null) {
+                        cb.onThinkingStep("⟳ " + currentTool + "...");
+                    }
+                }
+
+                // Timeout
+                if (cb != null) cb.onError("Timeout waiting for response");
 
             } catch (Throwable e) {
                 Log.e(TAG, "chat error", e);
-                if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+                String msg = e.getMessage();
+                if (msg == null) msg = e.getClass().getSimpleName();
+                if (cb != null) cb.onError(msg);
             }
         }, "KiraAI-Chat").start();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // New runner path
+    // Fallback: synchronous chatViaRunner (for when HTTP server isn't ready)
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void handleRunnerResult(String runnerJson, Callback cb) {
+    private void chatViaRunnerFallback(String userMessage, Callback cb) {
         try {
-            // Drain shell queue FIRST — runner may have queued open_app / http_get etc.
-            drainShellQueue(cb);
-
-            JSONObject result = new JSONObject(runnerJson);
-
-            if (result.has("error")) {
-                String err = result.getString("error");
-                if (cb != null) cb.onError(err);
+            String result = RustBridge.chatViaRunner(userMessage, SESSION, MAX_STEPS);
+            if (result == null) {
+                if (cb != null) cb.onError("No response from Rust engine");
                 return;
             }
-
-            // Report tools used
-            JSONArray toolsArr = result.optJSONArray("tools_used");
-            if (toolsArr != null && toolsArr.length() > 0) {
-                StringBuilder toolsList = new StringBuilder();
-                for (int i = 0; i < toolsArr.length(); i++) {
-                    if (i > 0) toolsList.append(", ");
-                    toolsList.append(toolsArr.getString(i));
-                }
-                if (cb != null) cb.onTool("tools", toolsList.toString());
-
-                // Persist memory if modified
-                if (runnerJson.contains("\"add_memory\"") || runnerJson.contains("\"search_memory\"")) {
-                    saveMemory();
-                }
-            }
-
-            // Drain shell queue again after tool results are posted
             drainShellQueue(cb);
-
-            String reply = result.optString("reply", "");
-            if (reply.isEmpty()) reply = "Done.";
-            if (cb != null) cb.onReply(reply);
-
+            JSONObject j = new JSONObject(result);
+            if (j.has("error")) {
+                if (cb != null) cb.onError(j.getString("error"));
+            } else {
+                String reply = j.optString("reply", "");
+                if (reply.isEmpty()) reply = "Done.";
+                saveMemoryIfNeeded(j);
+                if (cb != null) cb.onReply(reply);
+            }
         } catch (Throwable e) {
-            Log.e(TAG, "handleRunnerResult", e);
-            if (cb != null) cb.onError("Parse error: " + e.getMessage());
+            Log.e(TAG, "chatViaRunnerFallback", e);
+            if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "Error");
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Shell job execution (Java-side tools dispatched by Rust)
+    // Rust HTTP helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private String rustPost(String path, String body) {
+        try {
+            okhttp3.Response r = HTTP.newCall(new okhttp3.Request.Builder()
+                .url("http://127.0.0.1:" + RUST_PORT + path)
+                .post(okhttp3.RequestBody.create(body,
+                    okhttp3.MediaType.parse("application/json")))
+                .build()).execute();
+            return r.body() != null ? r.body().string() : null;
+        } catch (Exception e) {
+            Log.w(TAG, "rustPost " + path + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    private String rustGet(String path) {
+        try {
+            okhttp3.Response r = HTTP.newCall(new okhttp3.Request.Builder()
+                .url("http://127.0.0.1:" + RUST_PORT + path)
+                .get().build()).execute();
+            return r.body() != null ? r.body().string() : null;
+        } catch (Exception e) {
+            Log.w(TAG, "rustGet " + path + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Shell queue (Java-side tools dispatched by Rust)
     // ─────────────────────────────────────────────────────────────────────────
 
     private void drainShellQueue(Callback cb) {
@@ -142,15 +272,14 @@ public class KiraAI {
             try {
                 String jobJson = RustBridge.getNextShellJob();
                 if (jobJson == null || jobJson.contains("\"empty\":true")) break;
-                String id  = parseJsonStr(jobJson, "id");
-                String cmd = parseJsonStr(jobJson, "cmd");
+                String id     = parseStr(jobJson, "id");
+                String cmd    = parseStr(jobJson, "cmd");
                 if (cmd.isEmpty()) break;
                 String result = executeShellJob(cmd);
                 RustBridge.postShellResult(id, result != null ? result : "");
                 if (cb != null && result != null) {
-                    // Show what tool ran
                     String toolName = cmd.contains(":") ? cmd.substring(0, cmd.indexOf(':')) : cmd;
-                    cb.onTool(toolName, result.length() > 100 ? result.substring(0, 100) + "…" : result);
+                    cb.onTool(toolName, result.length() > 120 ? result.substring(0, 120) + "…" : result);
                 }
             } catch (Throwable e) {
                 Log.w(TAG, "drainShellQueue: " + e.getMessage());
@@ -159,22 +288,19 @@ public class KiraAI {
         }
     }
 
-    /** Execute a Java-side tool job queued by Rust's dispatch_tool. */
     private String executeShellJob(String cmd) {
         try {
-            // open_app:com.package.name
             if (cmd.startsWith("open_app:")) {
-                String pkg = cmd.substring("open_app:".length()).trim();
+                String pkg = cmd.substring(9).trim();
                 android.content.Intent intent = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
                 if (intent != null) {
                     intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
                     ctx.startActivity(intent);
                     return "Opened " + pkg;
                 }
-                // Try app name lookup via Rust
                 try {
                     String resolved = RustBridge.appNameToPkg(pkg);
-                    if (!resolved.equals(pkg) && !resolved.isEmpty()) {
+                    if (!resolved.equals(pkg)) {
                         intent = ctx.getPackageManager().getLaunchIntentForPackage(resolved);
                         if (intent != null) {
                             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -185,72 +311,21 @@ public class KiraAI {
                 } catch (Throwable ignored) {}
                 return "App not found: " + pkg;
             }
-
-            // http_get:https://url
             if (cmd.startsWith("http_get:")) {
-                String url = cmd.substring("http_get:".length()).trim();
-                okhttp3.Response r = HTTP_CLIENT.newCall(
-                    new okhttp3.Request.Builder()
-                        .url(url)
-                        .addHeader("User-Agent", "Mozilla/5.0 (Android) KiraAI/1.0")
-                        .get().build()).execute();
+                String url = cmd.substring(9).trim();
+                okhttp3.Response r = HTTP.newCall(new okhttp3.Request.Builder()
+                    .url(url).addHeader("User-Agent", "KiraAI/1.0").get().build()).execute();
                 String body = r.body() != null ? r.body().string() : "";
-                // Strip HTML
                 body = body.replaceAll("<style[^>]*>.*?</style>", " ")
                            .replaceAll("<script[^>]*>.*?</script>", " ")
                            .replaceAll("<[^>]+>", " ")
                            .replaceAll("\\s{2,}", " ").trim();
-                if (url.contains("duckduckgo.com") || url.contains("html.duck")) {
-                    body = extractSearchSnippets(body);
-                }
                 return body.length() > 4000 ? body.substring(0, 4000) + "..." : body;
             }
-
-            // web_search:query (routed as http_get to DDG)
-            if (cmd.startsWith("web_search:")) {
-                String query   = cmd.substring("web_search:".length()).trim();
-                String encoded = query.replace(' ', '+').replace("&", "%26");
-                String url     = "https://html.duckduckgo.com/html/?q=" + encoded;
-                return executeShellJob("http_get:" + url);
-            }
-
-            // read_file:/path
-            if (cmd.startsWith("read_file:")) {
-                String path = cmd.substring("read_file:".length()).trim();
-                java.io.File f = new java.io.File(path);
-                if (!f.exists()) return "File not found: " + path;
-                byte[] bytes = java.nio.file.Files.readAllBytes(f.toPath());
-                String text  = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
-                return text.length() > 4000 ? text.substring(0, 4000) + "..." : text;
-            }
-
-            // list_files:/path
-            if (cmd.startsWith("list_files:")) {
-                String path = cmd.substring("list_files:".length()).trim();
-                java.io.File dir = new java.io.File(path.isEmpty() ? "/sdcard" : path);
-                String[] files   = dir.list();
-                return files != null ? String.join(", ", files) : "Empty or not accessible";
-            }
-
-            // write_file:/path\ncontent
-            if (cmd.startsWith("write_file:")) {
-                String rest = cmd.substring("write_file:".length());
-                int nl = rest.indexOf('\n');
-                if (nl < 0) return "write_file: missing content (use newline separator)";
-                String path    = rest.substring(0, nl).trim();
-                String content = rest.substring(nl + 1);
-                java.io.File f = new java.io.File(path);
-                if (f.getParentFile() != null) f.getParentFile().mkdirs();
-                java.nio.file.Files.write(f.toPath(),
-                    content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                return "Wrote " + content.length() + " bytes to " + path;
-            }
-
-            // send_message:number\nmessage_text
             if (cmd.startsWith("send_message:")) {
-                String rest = cmd.substring("send_message:".length());
+                String rest = cmd.substring(13);
                 int nl = rest.indexOf('\n');
-                String target  = nl >= 0 ? rest.substring(0, nl).trim() : rest.trim();
+                String target = nl >= 0 ? rest.substring(0, nl).trim() : rest.trim();
                 android.content.Intent intent = new android.content.Intent(
                     android.content.Intent.ACTION_VIEW,
                     android.net.Uri.parse("sms:" + target));
@@ -259,156 +334,50 @@ public class KiraAI {
                 ctx.startActivity(intent);
                 return "Opened messaging for " + target;
             }
-
-            // Fallback: run as shell command via Shizuku
             if (ShizukuShell.isAvailable()) {
-                String out = ShizukuShell.exec(cmd, 10_000);
+                String out = ShizukuShell.exec(cmd, 15_000);
                 return out != null ? out : "";
             }
-            return "No shell available for: " + cmd;
-
+            return "Shell not available: " + cmd;
         } catch (Exception e) {
-            Log.w(TAG, "executeShellJob: " + cmd, e);
             return "Error: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
-    }
-
-    private String extractSearchSnippets(String text) {
-        String[] lines = text.split("\n");
-        StringBuilder sb = new StringBuilder();
-        for (String line : lines) {
-            line = line.trim();
-            if (line.length() > 30) {
-                sb.append(line).append("\n");
-                if (sb.length() > 4000) break;
-            }
-        }
-        return sb.length() > 0 ? sb.toString() : text.substring(0, Math.min(4000, text.length()));
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Legacy fallback (old .so without chatViaRunner)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private void legacyChat(String userMessage, Callback cb) {
-        try {
-            // getChatContext → OkHttp → processLlmReply loop
-            String requestJson;
-            try {
-                requestJson = RustBridge.getChatContext(userMessage);
-            } catch (UnsatisfiedLinkError e) {
-                requestJson = buildFallbackContext(userMessage);
-            }
-            if (requestJson == null || requestJson.isEmpty()) {
-                if (cb != null) cb.onError("Failed to build request");
-                return;
-            }
-            JSONObject req = new JSONObject(requestJson);
-            if (req.has("error")) {
-                if (cb != null) cb.onError(req.getString("error"));
-                return;
-            }
-
-            // Single non-streaming LLM call
-            String rawResponse = callLlmOnce(requestJson, cb);
-            if (rawResponse == null) return;
-
-            drainShellQueue(cb);
-
-            // Parse content
-            String content = extractContent(rawResponse);
-            if (content == null || content.isEmpty()) content = "Done.";
-            if (cb != null) cb.onReply(content);
-
-        } catch (Throwable e) {
-            Log.e(TAG, "legacyChat error", e);
-            if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "Error");
-        }
-    }
-
-    private String callLlmOnce(String requestJson, Callback cb) {
-        try {
-            JSONObject req  = new JSONObject(requestJson);
-            String apiKey   = req.getString("api_key");
-            String baseUrl  = req.getString("base_url").replaceAll("/$", "");
-            String model    = req.getString("model");
-            Object msgsRaw  = req.get("messages");
-            JSONArray msgs  = (msgsRaw instanceof JSONArray)
-                ? (JSONArray) msgsRaw : new JSONArray(msgsRaw.toString());
-
-            JSONObject body = new JSONObject();
-            body.put("model", model);
-            body.put("max_tokens", 8192);
-            body.put("messages", msgs);
-
-            okhttp3.Response response = HTTP_CLIENT.newCall(
-                new okhttp3.Request.Builder()
-                    .url(baseUrl + "/chat/completions")
-                    .addHeader("Authorization", "Bearer " + apiKey)
-                    .addHeader("Content-Type", "application/json")
-                    .post(okhttp3.RequestBody.create(body.toString(),
-                        okhttp3.MediaType.parse("application/json")))
-                    .build()).execute();
-
-            if (response.body() == null) { if (cb != null) cb.onError("Empty response"); return null; }
-            String resp = response.body().string();
-            if (!response.isSuccessful()) {
-                if (cb != null) cb.onError("HTTP " + response.code());
-                return null;
-            }
-            return resp;
-        } catch (Exception e) {
-            if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "HTTP error");
-            return null;
-        }
-    }
-
-    private String extractContent(String json) {
-        try {
-            JSONObject j = new JSONObject(json);
-            JSONArray choices = j.optJSONArray("choices");
-            if (choices != null && choices.length() > 0) {
-                JSONObject msg = choices.getJSONObject(0).optJSONObject("message");
-                if (msg != null) return msg.optString("content", "");
-            }
-        } catch (Exception ignored) {}
-        return parseJsonStr(json, "content");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void saveMemory() {
+    private void saveMemoryIfNeeded(JSONObject result) {
         try {
-            String json = RustBridge.saveMemory();
-            if (json != null && !json.equals("[]")) {
-                ctx.getSharedPreferences("kira_memory", android.content.Context.MODE_PRIVATE)
-                   .edit().putString("memory_json", json).apply();
+            JSONArray tools = result.optJSONArray("tools_used");
+            boolean usedMemory = false;
+            if (tools != null) {
+                for (int i = 0; i < tools.length(); i++) {
+                    if ("add_memory".equals(tools.getString(i))) { usedMemory = true; break; }
+                }
+            }
+            // Also check tools_used string
+            String toolsStr = result.optString("tools_used", "");
+            if (toolsStr.contains("add_memory")) usedMemory = true;
+
+            if (usedMemory) {
+                String json = RustBridge.saveMemory();
+                if (json != null && !json.equals("[]")) {
+                    ctx.getSharedPreferences("kira_memory", android.content.Context.MODE_PRIVATE)
+                       .edit().putString("memory_json", json).apply();
+                }
             }
         } catch (Throwable ignored) {}
     }
 
-    private String buildFallbackContext(String userMessage) {
-        try {
-            KiraConfig cfg = KiraConfig.load(ctx);
-            if (cfg.apiKey == null || cfg.apiKey.isEmpty()) return null;
-            String baseUrl = (cfg.baseUrl == null || cfg.baseUrl.isEmpty())
-                ? "https://api.groq.com/openai/v1" : cfg.baseUrl;
-            String model   = (cfg.model == null || cfg.model.isEmpty())
-                ? "llama-3.1-8b-instant" : cfg.model;
-            String system  = (cfg.persona == null || cfg.persona.isEmpty())
-                ? "You are Kira, a helpful AI agent on Android." : cfg.persona;
-            JSONArray messages = new JSONArray();
-            JSONObject sysMsg  = new JSONObject(); sysMsg.put("role","system"); sysMsg.put("content",system); messages.put(sysMsg);
-            JSONObject userMsg = new JSONObject(); userMsg.put("role","user");   userMsg.put("content",userMessage); messages.put(userMsg);
-            return new JSONObject()
-                .put("api_key", cfg.apiKey).put("base_url", baseUrl)
-                .put("model", model).put("messages", messages).toString();
-        } catch (Exception e) { Log.e(TAG, "buildFallbackContext", e); return null; }
+    private static String jsonEsc(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "").replace("\t", "\\t");
     }
 
-    private static String parseJsonStr(String json, String key) {
+    private static String parseStr(String json, String key) {
         String search = "\"" + key + "\":\"";
         int start = json.indexOf(search);
         if (start < 0) return "";

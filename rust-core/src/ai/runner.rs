@@ -23,12 +23,17 @@ lazy_static::lazy_static! {
 
 #[derive(Clone, Debug, Default)]
 pub struct RunState {
-    pub status:     RunStatus,
-    pub session_id: String,
-    pub step:       u32,
-    pub steps_done: u32,
-    pub abort:      bool,
-    pub last_result: Option<AiRunResult>,
+    pub status:       RunStatus,
+    pub session_id:   String,
+    pub step:         u32,
+    pub steps_done:   u32,
+    pub abort:        bool,
+    pub last_result:  Option<AiRunResult>,
+    // Streaming fields — updated live during run_agent loop
+    pub partial_text: String,          // latest LLM text chunk (cleared on new step)
+    pub current_tool: String,          // tool being executed right now
+    pub tool_results: Vec<String>,     // list of "tool: result" lines this run
+    pub thinking_log: Vec<String>,     // full reasoning log for display
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -53,16 +58,23 @@ impl RunState {
             RunStatus::Done     => "done",
             RunStatus::Error    => "error",
         };
+        let thinking: Vec<String> = self.thinking_log.iter()
+            .map(|l| format!(""{}"", l.replace('\\', "\\\\").replace('"', "\\"")))
+            .collect();
         match &self.last_result {
             Some(r) if self.status == RunStatus::Done || self.status == RunStatus::Error =>
                 format!(
-                    r#"{{"status":"{}","session":"{}","steps":{},"result":{}}}"#,
-                    status_str, self.session_id, self.steps_done, r.to_json()
+                    r#"{{"status":"{}","session":"{}","steps":{},"result":{},"thinking":[{}]}}"#,
+                    status_str, self.session_id, self.steps_done,
+                    r.to_json(), thinking.join(",")
                 ),
             _ =>
                 format!(
-                    r#"{{"status":"{}","session":"{}","step":{}}}"#,
-                    status_str, self.session_id, self.step
+                    r#"{{"status":"{}","session":"{}","step":{},"partial_text":"{}","current_tool":"{}","thinking":[{}]}}"#,
+                    status_str, self.session_id, self.step,
+                    self.partial_text.replace('\\', "\\\\").replace('"', "\\"").replace('\n', "\\n"),
+                    self.current_tool.replace('"', "\\""),
+                    thinking.join(",")
                 ),
         }
     }
@@ -398,8 +410,6 @@ fn parse_flat_json_args(json: &str) -> HashMap<String, String> {
     map
 }
 
-    map
-}
 
 /// Build the OpenAI messages JSON array from a slice of Turns.
 pub fn build_messages_json(turns: &[Turn]) -> String {
@@ -464,11 +474,15 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
     // Set running state
     {
         let mut rs = RUN_STATE.lock().unwrap_or_else(|e| e.into_inner());
-        rs.status     = RunStatus::Running;
-        rs.session_id = cfg.session_id.clone();
-        rs.step       = 0;
-        rs.abort      = false;
-        rs.last_result = None;
+        rs.status       = RunStatus::Running;
+        rs.session_id   = cfg.session_id.clone();
+        rs.step         = 0;
+        rs.abort        = false;
+        rs.last_result  = None;
+        rs.partial_text = String::new();
+        rs.current_tool = String::new();
+        rs.tool_results = Vec::new();
+        rs.thinking_log = vec![format!("Starting: {}", &cfg.user_message[..cfg.user_message.len().min(80)])];
     }
 
     let mut loop_detector = LoopDetector::new(6);
@@ -547,6 +561,15 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
         total_tokens_in  += estimate_tokens(&messages_json);
         total_tokens_out += estimate_tokens(&response_body);
 
+        // Update streaming state: partial text visible to Java while still running
+        {
+            let mut rs = RUN_STATE.lock().unwrap_or_else(|e| e.into_inner());
+            rs.partial_text = text_content.clone();
+            rs.current_tool = String::new();
+            rs.thinking_log.push(format!("Step {}: LLM responded ({} chars)",
+                step + 1, response_body.len()));
+        }
+
         // Try OpenAI function-calling format first, then XML fallback
         let json_tool_calls = parse_tool_calls_json(&response_body);
         let text_content = extract_content_from_response(&response_body)
@@ -581,9 +604,29 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
                 continue;
             }
 
+            // Update thinking log: show which tool is running
+            {
+                let mut rs = RUN_STATE.lock().unwrap_or_else(|e| e.into_inner());
+                rs.current_tool = tc.name.clone();
+                let param_preview: Vec<String> = tc.params.iter()
+                    .map(|(k, v)| format!("{}={}", k, &v[..v.len().min(50)]))
+                    .collect();
+                rs.thinking_log.push(format!("  → {}({})", tc.name, param_preview.join(", ")));
+            }
+
             // Dispatch
             let result = dispatch_one_tool(&tc.name, &tc.params);
             tools_used.push(tc.name.clone());
+
+            // Log tool result into thinking
+            {
+                let mut rs = RUN_STATE.lock().unwrap_or_else(|e| e.into_inner());
+                rs.current_tool = String::new();
+                let preview = &result[..result.len().min(120)];
+                rs.thinking_log.push(format!("    ← {}: {}", tc.name, preview));
+                rs.tool_results.push(format!("{}: {}", tc.name, preview));
+            }
+
             turns.push(Turn::tool_result(&tc.id, &tc.name, &result));
         }
 
@@ -707,11 +750,12 @@ fn extract_content_from_response(json: &str) -> Option<String> {
 
     // OpenAI/Groq: choices[0].message.content
     if let Some(mi) = json.find("\"message\":{") {
-        if let Some(c) = find_str(&json[mi..], "content") { return Some(c); }
+        if let Some(c) = find_str(&json[mi..], "content") {
+            if !c.is_empty() { return Some(c); }
+        }
     }
-    // Anthropic: content[0].text (content block format)
+    // Anthropic: content blocks [{type:text, text:...}]
     if json.contains("\"type\":\"text\"") || json.contains("\"content\":[") {
-        // Try to find text in content array: {"type":"text","text":"..."}
         if let Some(ti) = json.find("\"text\":\"") {
             if let Some(c) = find_str(&json[ti..], "text") {
                 if !c.is_empty() { return Some(c); }
@@ -727,6 +771,7 @@ fn extract_content_from_response(json: &str) -> Option<String> {
         .or_else(|| find_str(json, "text"))
         .or_else(|| find_str(json, "response"))
 }
+
 
 fn estimate_tokens(s: &str) -> u32 { (s.len() as u32 / 4).max(1) }
 

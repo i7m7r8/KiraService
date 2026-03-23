@@ -807,13 +807,44 @@ public class MainActivity extends Activity
             @Override public void onThinking() {
                 uiHandler.post(() -> {
                     try {
-                        if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", "???"); addThinkingBubble(kiraTurn[0]); }
+                        if (kiraTurn[0] == null) { kiraTurn[0] = new ConvTurn("kira", ""); addThinkingBubble(kiraTurn[0]); }
                     } catch (Throwable t) { android.util.Log.e("Kira","onThinking crash",t); }
                 });
             }
-            @Override public void onPartial(String p) {}
+            @Override public void onPartial(String p) {
+                // Stream text into the Kira bubble as it arrives
+                uiHandler.post(() -> {
+                    try {
+                        if (kiraTurn[0] != null) {
+                            kiraTurn[0].text = p;
+                            updateThinkingBubble(kiraTurn[0], p);
+                            scrollToBottom();
+                        }
+                    } catch (Throwable ignored) {}
+                });
+            }
+            @Override public void onThinkingStep(String step) {
+                // Show reasoning steps as small tool-style bubbles
+                uiHandler.post(() -> {
+                    try {
+                        String icon = step.startsWith("  → ") ? "⚙ " :
+                                      step.startsWith("    ← ") ? "✓ " :
+                                      step.startsWith("⟳ ") ? "… " : "· ";
+                        String label = step.replaceAll("^\s+[→←⟳·]\s*", "").trim();
+                        if (label.isEmpty()) return;
+                        android.widget.TextView tv = new android.widget.TextView(MainActivity.this);
+                        tv.setText(icon + label);
+                        tv.setTextSize(11f);
+                        tv.setTextColor(android.graphics.Color.parseColor("#888888"));
+                        tv.setPadding(dpToPx(48), dpToPx(1), dpToPx(16), dpToPx(1));
+                        if (chatContainer != null) chatContainer.addView(tv);
+                        scrollToBottom();
+                    } catch (Throwable ignored) {}
+                });
+            }
             @Override public void onTool(String name, String result) {
-                ConvTurn toolTurn = new ConvTurn("tool", "? " + name + ": " + result.substring(0, Math.min(100, result.length())));
+                if (name.startsWith("running") || result.startsWith("running")) return;
+                ConvTurn toolTurn = new ConvTurn("tool", "⚙ " + name + ": " + result.substring(0, Math.min(120, result.length())));
                 conversation.add(toolTurn);
                 uiHandler.post(() -> addToolBubble(toolTurn));
             }

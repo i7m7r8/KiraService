@@ -161,9 +161,12 @@ public class KiraAI {
         try {
             JSONObject req  = new JSONObject(requestJson);
             String apiKey   = req.optString("api_key", "");
-            String baseUrl  = req.optString("base_url", "https://api.groq.com/openai/v1")
-                                 .replaceAll("/$", "");
+            String baseUrl  = req.optString("base_url", "").replaceAll("/$", "").trim();
+            if (baseUrl.isEmpty() || (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))) {
+                baseUrl = "https://api.groq.com/openai/v1";
+            }
             String model    = req.optString("model", "llama-3.1-8b-instant");
+            if (model.isEmpty()) model = "llama-3.1-8b-instant";
             Object msgsRaw  = req.opt("messages");
             JSONArray msgs  = (msgsRaw instanceof JSONArray)
                 ? (JSONArray) msgsRaw : new JSONArray(msgsRaw.toString());
@@ -371,9 +374,32 @@ public class KiraAI {
             JSONObject j = new JSONObject(requestJson);
             if (j.has("error")) {
                 String err = j.getString("error");
-                if (cb != null) cb.onError("no_api_key".equals(err)
-                    ? "No API key - go to Settings" : err);
-                return null;
+                // If Rust has no api_key yet (timing race), fall back to loading from prefs
+                if ("no_api_key".equals(err)) {
+                    KiraConfig cfg = KiraConfig.load(ctx);
+                    if (cfg.apiKey != null && !cfg.apiKey.isEmpty()) {
+                        // Sync config to Rust and retry
+                        try { cfg.save(ctx); } catch (Throwable ignored2) {}
+                        // Rebuild request with loaded config
+                        requestJson = buildFallbackContext(userMessage);
+                        if (requestJson == null) {
+                            if (cb != null) cb.onError("No API key - go to Settings");
+                            return null;
+                        }
+                    } else {
+                        if (cb != null) cb.onError("No API key - go to Settings");
+                        return null;
+                    }
+                } else {
+                    if (cb != null) cb.onError(err);
+                    return null;
+                }
+            }
+            // Validate base_url before returning
+            String baseUrl = j.optString("base_url", "");
+            if (baseUrl.isEmpty() || (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))) {
+                j.put("base_url", "https://api.groq.com/openai/v1");
+                requestJson = j.toString();
             }
         } catch (Exception ignored) {}
         return requestJson;

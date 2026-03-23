@@ -312,51 +312,92 @@ pub fn parse_tool_calls_json(response_json: &str) -> Vec<JsonToolCall> {
 /// Handles string and number values. Ignores nested objects.
 fn parse_flat_json_args(json: &str) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    let json = json.trim().trim_start_matches('{').trim_end_matches('}');
-    // Simple key:"value" scanner
+    let json = json.trim();
+    // Strip outer braces if present
+    let json = if json.starts_with('{') && json.ends_with('}') {
+        &json[1..json.len()-1]
+    } else { json };
+
     let mut rest = json;
     loop {
-        // Find next "key":
-        let Some(ks) = rest.find('"') else { break; };
-        rest = &rest[ks+1..];
-        let Some(ke) = rest.find('"') else { break; };
+        // Skip whitespace and commas
+        rest = rest.trim_start_matches(|c: char| c == ',' || c.is_whitespace());
+        if rest.is_empty() { break; }
+
+        // Find key: must start with "
+        if !rest.starts_with('"') { break; }
+        rest = &rest[1..];
+        let ke = match rest.find('"') { Some(i) => i, None => break };
         let key = rest[..ke].to_string();
         rest = &rest[ke+1..];
-        // Skip :
-        let Some(colon) = rest.find(':') else { break; };
-        rest = &rest[colon+1..].trim_start();
-        // Read value — string or number/bool
+
+        // Skip : (with optional spaces)
+        rest = rest.trim_start();
+        if !rest.starts_with(':') { break; }
+        rest = &rest[1..].trim_start();
+
+        // Read value
         if rest.starts_with('"') {
+            // String value — handle escaped chars
             rest = &rest[1..];
             let mut val = String::new();
             let mut chars = rest.char_indices().peekable();
             let mut end_pos = 0;
             while let Some((i, c)) = chars.next() {
-                if c == '\\' {
-                    if let Some((_, nc)) = chars.next() {
-                        match nc { 'n' => val.push('\n'), 't' => val.push('\t'), _ => val.push(nc) }
+                match c {
+                    '\\' => {
+                        if let Some((_, nc)) = chars.next() {
+                            match nc {
+                                'n' => val.push('\n'),
+                                't' => val.push('\t'),
+                                'r' => {},
+                                '"' => val.push('"'),
+                                '\\' => val.push('\\'),
+                                _ => { val.push('\\'); val.push(nc); }
+                            }
+                        }
                     }
-                } else if c == '"' {
-                    end_pos = i + 1;
-                    break;
-                } else {
-                    val.push(c);
-                    end_pos = i + 1;
+                    '"' => { end_pos = i + 1; break; }
+                    _ => { val.push(c); end_pos = i + 1; }
                 }
             }
             map.insert(key, val);
             rest = &rest[end_pos..];
+        } else if rest.starts_with('[') || rest.starts_with('{') {
+            // Array or nested object — find matching bracket
+            let open = rest.as_bytes()[0];
+            let close = if open == b'[' { b']' } else { b'}' };
+            let mut depth = 0i32;
+            let mut in_str = false;
+            let mut end_pos = 0;
+            for (i, b) in rest.as_bytes().iter().enumerate() {
+                match b {
+                    b'"' if !in_str => in_str = true,
+                    b'"' => in_str = false,
+                    _ if in_str => {}
+                    b if *b == open => depth += 1,
+                    b if *b == close => {
+                        depth -= 1;
+                        if depth == 0 { end_pos = i + 1; break; }
+                    }
+                    _ => {}
+                }
+            }
+            let val = rest[..end_pos].to_string();
+            map.insert(key, val);
+            rest = &rest[end_pos..];
         } else {
-            // Number or bool
+            // Unquoted value (number, bool, null)
             let end = rest.find(|c: char| c == ',' || c == '}' || c == '\n')
                 .unwrap_or(rest.len());
             let val = rest[..end].trim().to_string();
-            map.insert(key, val);
+            if !val.is_empty() { map.insert(key, val); }
             rest = &rest[end..];
         }
-        // Skip comma
-        if let Some(ci) = rest.find(',') { rest = &rest[ci+1..]; } else { break; }
     }
+    map
+}
+
     map
 }
 
@@ -690,8 +731,11 @@ fn extract_content_from_response(json: &str) -> Option<String> {
 fn estimate_tokens(s: &str) -> u32 { (s.len() as u32 / 4).max(1) }
 
 fn str_field(json: &str, key: &str) -> Option<String> {
-    let search = format!("\"{}\":\"", key);
-    let start = json.find(&search)? + search.len();
+    // Handle both "key":"value" and "key": "value" (space after colon)
+    let s1 = format!("\"{}\":\"", key);
+    let s2 = format!("\"{}\": \"", key);
+    let start = json.find(&s1).map(|i| i + s1.len())
+        .or_else(|| json.find(&s2).map(|i| i + s2.len()))?;
     let bytes = json.as_bytes();
     let mut end = start;
     while end < bytes.len() {
@@ -701,7 +745,8 @@ fn str_field(json: &str, key: &str) -> Option<String> {
     let s = &json[start..end];
     if s.is_empty() { None } else {
         Some(s.replace("\\\"", "\"").replace("\\\\", "\\")
-              .replace("\\n", "\n").replace("\\t", "\t"))
+              .replace("\\n", "\n").replace("\\t", "\t")
+              .replace("\\r", ""))
     }
 }
 

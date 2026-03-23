@@ -11388,6 +11388,77 @@ use rustls::pki_types::ServerName;
 
 /// Send HTTPS POST and return response body.
 /// Uses rustls with webpki-roots (Mozilla CA bundle compiled in).
+/// Decode an HTTP/1.1 response: strip headers, decode chunked transfer encoding.
+/// Handles: plain body, chunked encoding, gzip (skipped — return raw).
+fn decode_http_response(raw: &str) -> String {
+    // Find end of headers (blank line)
+    let header_end = raw.find("\r\n\r\n")
+        .map(|i| (i, 4))
+        .or_else(|| raw.find("\n\n").map(|i| (i, 2)));
+
+    let (header_end, sep_len) = match header_end {
+        Some(v) => v,
+        None    => return raw.to_string(), // no headers found, return as-is
+    };
+
+    let headers = &raw[..header_end];
+    let body    = &raw[header_end + sep_len..];
+
+    // Check for chunked transfer encoding
+    let is_chunked = headers.to_lowercase().contains("transfer-encoding: chunked");
+
+    if !is_chunked {
+        return body.to_string();
+    }
+
+    // Decode chunked encoding
+    // Format: HEX_SIZE\r\n DATA\r\n  repeated, ending with 0\r\n\r\n
+    let mut decoded = String::new();
+    let mut rest = body;
+
+    loop {
+        // Skip leading CRLF
+        rest = rest.trim_start_matches("\r\n");
+        if rest.is_empty() { break; }
+
+        // Read chunk size line
+        let size_end = match rest.find("\r\n") {
+            Some(i) => i,
+            None    => {
+                // Fallback: try just newline
+                match rest.find('\n') {
+                    Some(i) => i,
+                    None    => break,
+                }
+            }
+        };
+        let size_str = rest[..size_end].trim();
+        // Size may have chunk extensions after semicolon
+        let size_str = size_str.split(';').next().unwrap_or("").trim();
+        let chunk_size = match usize::from_str_radix(size_str, 16) {
+            Ok(s)  => s,
+            Err(_) => break,
+        };
+
+        rest = &rest[size_end..].trim_start_matches("\r\n");
+
+        if chunk_size == 0 {
+            break; // final chunk
+        }
+
+        if chunk_size > rest.len() {
+            // Truncated — take what we have
+            decoded.push_str(rest);
+            break;
+        }
+
+        decoded.push_str(&rest[..chunk_size]);
+        rest = &rest[chunk_size..];
+    }
+
+    if decoded.is_empty() { body.to_string() } else { decoded }
+}
+
 pub fn https_post(
     host:       &str,
     port:       u16,
@@ -11476,16 +11547,7 @@ Connection: close
     let response = Vec::from(raw_response);
 
     let resp_str = String::from_utf8_lossy(&response).into_owned();
-    // Strip HTTP headers — find blank line
-    if let Some(body_start) = resp_str.find("
-
-").or_else(|| resp_str.find("
-
-")) {
-        Ok(resp_str[body_start + if resp_str.contains("\r\n\r\n") { 4 } else { 2 }..].to_string())
-    } else {
-        Ok(resp_str)
-    }
+    Ok(decode_http_response(&resp_str))
 }
 
 /// GET request over HTTPS (for Telegram API, GitHub releases, etc.)
@@ -11532,7 +11594,5 @@ Connection: close
         }
     }
     let resp = String::from_utf8_lossy(&response).into_owned();
-    Ok(if let Some(i) = resp.find("
-
-") { resp[i+4..].to_string() } else { resp })
+    Ok(decode_http_response(&resp))
 }

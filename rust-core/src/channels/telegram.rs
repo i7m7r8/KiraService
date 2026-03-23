@@ -1,7 +1,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // kira-core :: channels :: telegram  (Session 7)
 //
-// Full Telegram Bot API client — pure Rust, no Java involvement.
+// Full Telegram Bot API client  -  pure Rust, no Java involvement.
 // Mirrors OpenClaw: src/telegram/bot.ts, src/telegram/draft-stream.ts,
 //                   src/telegram/format.ts, src/telegram/send.ts
 //
@@ -371,11 +371,11 @@ pub fn start_polling_loop() {
 
 pub fn parse_updates(json: &str) -> Vec<TgUpdate> {
     let mut updates = Vec::new();
-    // Find each update_id occurrence — simple but robust
+    // Find each update_id occurrence  -  simple but robust
     let mut pos = 0;
     while let Some(rel) = json[pos..].find("\"update_id\":") {
         let abs = pos + rel;
-        // Find enclosing object — scan back for '{' at same depth
+        // Find enclosing object  -  scan back for '{' at same depth
         let obj_end = find_object_end(json, abs).unwrap_or(json.len());
         let fragment = &json[abs..obj_end];
 

@@ -10,7 +10,7 @@ fn run_http(port: u16) {
     for stream in listener.incoming().flatten() { thread::spawn(|| handle_http(stream)); }
 }
 
-/// Lock STATE recovering from poison — if a thread panicked while holding the
+/// Lock STATE recovering from poison  -  if a thread panicked while holding the
 /// lock, we recover the state rather than panicking the HTTP thread too.
 #[allow(unused_macros)]
 macro_rules! state_lock {
@@ -75,13 +75,13 @@ fn check_auth(token: Option<&str>) -> bool {
             let tb = t.as_bytes();
             let sb = secret.as_bytes();
             if tb.len() != sb.len() { return false; }
-            // fold XOR — result is 0 only if every byte matches
+            // fold XOR  -  result is 0 only if every byte matches
             tb.iter().zip(sb.iter()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
         }
     }
 }
 
-/// Entry point called by handle_http — wraps route_http with auth check.
+/// Entry point called by handle_http  -  wraps route_http with auth check.
 fn route_http_with_raw(method: &str, path: &str, body: &str, raw_req: &str) -> String {
     let path_clean = path.split('?').next().unwrap_or(path);
     if requires_auth(path_clean) {
@@ -97,7 +97,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
     let path_clean = path.split('?').next().unwrap_or(path);
     match (method, path_clean) {
         // Health & stats
-        // Auth management (localhost only — sets the shared secret)
+        // Auth management (localhost only  -  sets the shared secret)
         ("POST", "/auth/set_secret") => {
             let secret = extract_json_str(body, "secret").unwrap_or_default();
             if secret.len() >= 16 {
@@ -109,7 +109,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         }
         ("DELETE", "/auth/secret") => {
             STATE.lock().unwrap().http_secret = String::new();
-            r#"{"ok":true,"warning":"auth disabled — all endpoints open"}"#.to_string()
+            r#"{"ok":true,"warning":"auth disabled  -  all endpoints open"}"#.to_string()
         }
 
         ("GET", "/health") | ("GET", "/status") => {
@@ -193,7 +193,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             s.theme.activity_level = (tools_recent as f32 / 10.0).min(1.0);
             s.theme.to_json()
         }
-        // GET /layer0 — full Layer 0 star field animation state
+        // GET /layer0  -  full Layer 0 star field animation state
         // Polled by GalaxyView every 500ms to drive the living canvas.
         // Returns: phase(0-1, 3s period), bpm, activity(0-1), thinking,
         //          hue_shift(-12 to +12 degrees, sine-driven),
@@ -242,7 +242,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 (tools_recent as f32 / 10.0).min(1.0),
                 s.theme.is_thinking)
         }
-        // POST /theme/thinking {"active":true}  — set thinking state
+        // POST /theme/thinking {"active":true}   -  set thinking state
         ("POST", "/theme/thinking")     => {
             let active = body.contains(r#""active":true"#);
             STATE.lock().unwrap().theme.is_thinking = active;
@@ -251,7 +251,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
 
         // ── Layer 5: Settings page Rust endpoints ─────────────────────────────
 
-        // GET /settings/health — compact health summary for settings page header
+        // GET /settings/health  -  compact health summary for settings page header
         // Returns: {shizuku, setup, api_key_set, model, automation_count, memory_count,
         //           uptime_ms, tool_calls, pulse_bpm, activity}
         ("GET",  "/settings/health") => {
@@ -274,16 +274,16 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             )
         }
 
-        // GET /settings/shizuku — Shizuku status with Layer 5 border color token
+        // GET /settings/shizuku  -  Shizuku status with Layer 5 border color token
         // Returns: {installed, running, permission, border_color, border_name, pulse}
         ("GET",  "/settings/shizuku") => {
             let s = STATE.lock().unwrap();
             let (border_color, border_name) = if s.shizuku.permission_granted {
-                (0xFFB4BEFEu32, "lavender")   // god mode — Lavender
+                (0xFFB4BEFEu32, "lavender")   // god mode  -  Lavender
             } else if s.shizuku.installed {
-                (0xFFFAB387u32, "peach")      // partial — Peach
+                (0xFFFAB387u32, "peach")      // partial  -  Peach
             } else {
-                (0xFFF38BA8u32, "pink")       // absent  — Pink
+                (0xFFF38BA8u32, "pink")       // absent   -  Pink
             };
             format!(
                 r#"{{"installed":{},"running":{},"permission":{},"border_color":{},"border_name":"{}","pulse_ms":1500}}"#,
@@ -293,7 +293,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             )
         }
 
-        // POST /settings/row_tap {"row":"api_key"} — log a settings row tap
+        // POST /settings/row_tap {"row":"api_key"}  -  log a settings row tap
         // Used by UI to record which settings the user accesses most often
         ("POST", "/settings/row_tap") => {
             let row = extract_json_str(body, "row").unwrap_or_default();
@@ -307,7 +307,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /settings/sections — section visibility state for header underline
+        // GET /settings/sections  -  section visibility state for header underline
         // Returns ordered list of section names with their Lavender animate flag
         ("GET",  "/settings/sections") => {
             let sections = vec![
@@ -321,12 +321,12 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             format!(r#"{{"sections":[{}]}}"#, items.join(","))
         }
 
-        // POST /theme/flash {"dark":true}  — record theme switch for analytics
+        // POST /theme/flash {"dark":true}   -  record theme switch for analytics
         // ── Crash reporting endpoints ─────────────────────────────────────────
 
         // POST /crash {"thread":"..","trace":"..","ts":1234}
         // Called by KiraApp crash handler to persist crashes in Rust memory
-        // GET /memory/compression — LZ4 compression stats (Session B)
+        // GET /memory/compression  -  LZ4 compression stats (Session B)
         ("GET",  "/memory/compression") => {
             let s = STATE.lock().unwrap();
             let raw_bytes: usize = s.context_turns.iter()
@@ -347,11 +347,11 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session D — AI Chat engine (replaces KiraAI.java)
+        // Session D  -  AI Chat engine (replaces KiraAI.java)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session E — Agent + Chain endpoints (replaces KiraAgent.java + KiraChain.java)
+        // Session E  -  Agent + Chain endpoints (replaces KiraAgent.java + KiraChain.java)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         // POST /ai/agent
@@ -397,7 +397,7 @@ You are executing a multi-step task autonomously.
             let mut final_summary = String::new();
             let mut success = false;
 
-            // Agent context — separate from chat history
+            // Agent context  -  separate from chat history
             let mut agent_ctx: Vec<(String, String)> = Vec::new();
             agent_ctx.push(("user".into(), format!("Task: {}", goal)));
 
@@ -438,7 +438,7 @@ You are executing a multi-step task autonomously.
                 // Extract + execute tool calls
                 let calls = parse_tool_calls(&resp);
                 if calls.is_empty() {
-                    // No tool call — treat as final answer if we have content
+                    // No tool call  -  treat as final answer if we have content
                     if !clean.is_empty() {
                         final_summary = clean;
                         success = true;
@@ -539,7 +539,7 @@ You are executing a multi-step task autonomously.
                 steps_json, esc(&conclusion), reasoning.len())
         }
 
-        // GET /ai/agent/status — current running agent task
+        // GET /ai/agent/status  -  current running agent task
         ("GET",  "/ai/agent/status") => {
             let s = STATE.lock().unwrap();
             match s.agent_tasks.back() {
@@ -551,7 +551,7 @@ You are executing a multi-step task autonomously.
             }
         }
 
-        // POST /ai/agent/stop — cancel running agent
+        // POST /ai/agent/stop  -  cancel running agent
         ("POST", "/ai/agent/stop") => {
             let mut s = STATE.lock().unwrap();
             s.theme.is_thinking = false;
@@ -587,7 +587,7 @@ You are executing a multi-step task autonomously.
             };
 
             if api_key.is_empty() {
-                return r#"{"error":"no API key — go to settings and add one","done":true}"#.to_string();
+                return r#"{"error":"no API key  -  go to settings and add one","done":true}"#.to_string();
             }
 
             let now = now_ms();
@@ -603,7 +603,7 @@ You are executing a multi-step task autonomously.
                 s.session_store.add_turn(&session_id, "user", &user_msg, now);
             }
 
-            // Build context — prefer session_store (includes compact summary)
+            // Build context  -  prefer session_store (includes compact summary)
             let context = {
                 let s = STATE.lock().unwrap();
                 if s.session_store.get(&session_id).is_some() {
@@ -714,7 +714,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"count":{},"turns":[{}]}}"#, items.len(), items.join(","))
         }
 
-        // DELETE /ai/history — clear conversation context
+        // DELETE /ai/history  -  clear conversation context
         ("DELETE", "/ai/history") | ("POST", "/ai/history/clear") => {
             let mut s = STATE.lock().unwrap();
             s.context_turns.clear();
@@ -723,7 +723,7 @@ You are executing a multi-step task autonomously.
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session H — Macro loop (replaces KiraWatcher.java logic)
+        // Session H  -  Macro loop (replaces KiraWatcher.java logic)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         // POST /macro/tick
@@ -846,7 +846,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"ok":true,"fired":{},"ts":{}}}"#, fired, now)
         }
 
-        // GET /macro/pending_results — results queued for Java to dispatch
+        // GET /macro/pending_results  -  results queued for Java to dispatch
         // Java polls this for completed macro actions requiring Android intents
         ("GET",  "/macro/pending_results") => {
             let mut s = STATE.lock().unwrap();
@@ -863,10 +863,10 @@ You are executing a multi-step task autonomously.
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session F — Telegram (replaces KiraTelegram.java)
+        // Session F  -  Telegram (replaces KiraTelegram.java)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        // POST /telegram/incoming — called by Java after polling getUpdates
+        // POST /telegram/incoming  -  called by Java after polling getUpdates
         // body: {"update_id":123,"chat_id":456,"user":"name","text":"hello"}
         // Rust processes message through AI and queues reply for Java to send
         ("POST", "/telegram/incoming") => {
@@ -916,7 +916,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"ok":true,"reply":"{}"}}"#, esc(&reply))
         }
 
-        // GET /telegram/next_send — Java polls for messages to send
+        // GET /telegram/next_send  -  Java polls for messages to send
         ("GET",  "/telegram/next_send") => {
             let mut s = STATE.lock().unwrap();
             match s.tg_pending_sends.pop_front() {
@@ -927,13 +927,13 @@ You are executing a multi-step task autonomously.
             }
         }
 
-        // GET /telegram/last_update_id — Java uses this for getUpdates offset
+        // GET /telegram/last_update_id  -  Java uses this for getUpdates offset
         ("GET",  "/telegram/last_update_id") => {
             let s = STATE.lock().unwrap();
             format!(r#"{{"update_id":{}}}"#, s.tg_last_update_id)
         }
 
-        // GET /telegram/log — last received messages
+        // GET /telegram/log  -  last received messages
         ("GET",  "/telegram/log") => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.tg_message_log.iter().rev().take(20).map(|m|
@@ -944,10 +944,10 @@ You are executing a multi-step task autonomously.
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session J — Setup wizard data from Rust (reduces SetupActivity hardcoding)
+        // Session J  -  Setup wizard data from Rust (reduces SetupActivity hardcoding)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        // GET /setup/providers — list of AI providers with base URLs + models
+        // GET /setup/providers  -  list of AI providers with base URLs + models
         // SetupActivity calls this instead of hardcoding the list
         ("GET",  "/setup/providers") => {
             r#"[
@@ -960,7 +960,7 @@ You are executing a multi-step task autonomously.
             ]"#.to_string()
         }
 
-        // POST /setup/validate — validate API key format + test connection
+        // POST /setup/validate  -  validate API key format + test connection
         // body: {"provider":"groq","api_key":"gsk_...","model":"llama-3.1-8b-instant"}
         ("POST", "/setup/validate") => {
             let provider = extract_json_str(body, "provider").unwrap_or_default();
@@ -989,13 +989,13 @@ You are executing a multi-step task autonomously.
                 return format!(r#"{{"valid":false,"error":"{}"}}"#, hint);
             }
 
-            // Quick syntax validation passed — mark as valid
+            // Quick syntax validation passed  -  mark as valid
             // (actual connection test done by Java to avoid blocking)
             format!(r#"{{"valid":true,"provider":"{}","model":"{}","hint":"Format valid. Tap Next to continue."}}"#,
                 esc(&provider), esc(&model))
         }
 
-        // GET /setup/status — current setup completion state
+        // GET /setup/status  -  current setup completion state
         ("GET",  "/setup/status") => {
             let s = STATE.lock().unwrap();
             format!(r#"{{"setup_done":{},"has_api_key":{},"provider":"{}","model":"{}","user_name":"{}"}}"#,
@@ -1033,14 +1033,14 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"ok":{},"plaintext":"{}"}}"#, ok, esc(&plain))
         }
 
-        // GET /crypto/status — reports encryption availability
+        // GET /crypto/status  -  reports encryption availability
         ("GET",  "/crypto/status") => {
             r#"{"available":true,"algorithm":"AES-256-GCM","key_derivation":"derive_aes_key(ANDROID_ID:pkg)","nonce":"domain-derived-12-byte","tag_bits":128}"#.to_string()
         }
 
                 // ── Session L: Security audit endpoint ───────────────────────────────────
 
-        // GET /security/audit — reports current security posture
+        // GET /security/audit  -  reports current security posture
         ("GET",  "/security/audit") => {
             let s = STATE.lock().unwrap();
             let has_secret  = !s.http_secret.is_empty();
@@ -1054,7 +1054,7 @@ You are executing a multi-step task autonomously.
                 has_secret, has_api_key, key_encrypted, shizuku_ok)
         }
 
-        // POST /security/rotate_secret — generate and set a new random HTTP secret
+        // POST /security/rotate_secret  -  generate and set a new random HTTP secret
         ("POST", "/security/rotate_secret") => {
             // Derive new secret from current time + existing key material
             let new_secret = {
@@ -1064,7 +1064,7 @@ You are executing a multi-step task autonomously.
                 k.iter().map(|b| format!("{:02x}", b)).collect::<String>()[..32].to_string()
             };
             STATE.lock().unwrap().http_secret = new_secret.clone();
-            format!(r#"{{"ok":true,"new_secret":"{}","note":"store this — required for all future API calls"}}"#,
+            format!(r#"{{"ok":true,"new_secret":"{}","note":"store this  -  required for all future API calls"}}"#,
                 &new_secret)
         }
 
@@ -1086,7 +1086,7 @@ You are executing a multi-step task autonomously.
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /crash/log — returns all stored crash entries as JSON array
+        // GET /crash/log  -  returns all stored crash entries as JSON array
         ("GET",  "/crash/log") => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.crash_log.iter().map(|c| {
@@ -1102,13 +1102,13 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"count":{},"crashes":[{}]}}"#, items.len(), items.join(","))
         }
 
-        // POST /crash/clear — wipe the crash log
+        // POST /crash/clear  -  wipe the crash log
         ("POST", "/crash/clear") => {
             STATE.lock().unwrap().crash_log.clear();
             r#"{"ok":true,"cleared":true}"#.to_string()
         }
 
-        // GET /crash/latest — just the most recent crash (fast poll)
+        // GET /crash/latest  -  just the most recent crash (fast poll)
         ("GET",  "/crash/latest") => {
             let s = STATE.lock().unwrap();
             match s.crash_log.back() {
@@ -1125,7 +1125,7 @@ You are executing a multi-step task autonomously.
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /settings/automation/summary — automation engine summary for settings card
+        // GET /settings/automation/summary  -  automation engine summary for settings card
         ("GET",  "/settings/automation/summary") => {
             let s = STATE.lock().unwrap();
             let enabled = s.macros.iter().filter(|m| m.enabled).count();
@@ -1142,9 +1142,9 @@ You are executing a multi-step task autonomously.
         }
 
 
-        // ── Layer 5: Settings Page — Rust-backed endpoints ──────────────────────
+        // ── Layer 5: Settings Page  -  Rust-backed endpoints ──────────────────────
 
-        // GET /settings/counters — live counter values for CounterAnimator
+        // GET /settings/counters  -  live counter values for CounterAnimator
         // Returns numbers that the UI animates from old→new over 600ms EaseOut.
         ("GET", "/settings/counters") => {
             let s = STATE.lock().unwrap();
@@ -1166,7 +1166,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // GET /settings/activity — activity stream for last 20 events
+        // GET /settings/activity  -  activity stream for last 20 events
         // Used by the settings page activity feed (Row-level visual feedback)
         ("GET", "/settings/activity") => {
             let s = STATE.lock().unwrap();
@@ -1199,7 +1199,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"count":{},"items":[{}]}}"#, items.len(), items.join(","))
         }
 
-        // GET /settings/shizuku/halo — Layer 9: God mode halo state
+        // GET /settings/shizuku/halo  -  Layer 9: God mode halo state
         // Returns border color + animation params for the screen-edge halo
         ("GET", "/settings/shizuku/halo") => {
             let s = STATE.lock().unwrap();
@@ -1221,7 +1221,7 @@ You are executing a multi-step task autonomously.
         }
 
         // POST /settings/row_interaction {"row":"api_key","action":"tap|long_press|edit"}
-        // Enhanced row analytics — tracks not just tap but interaction type
+        // Enhanced row analytics  -  tracks not just tap but interaction type
         ("POST", "/settings/row_interaction") => {
             let row    = extract_json_str(body, "row").unwrap_or_default();
             let action = extract_json_str(body, "action").unwrap_or_else(|| "tap".to_string());
@@ -1245,7 +1245,7 @@ You are executing a multi-step task autonomously.
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /settings/top_rows — most-accessed settings rows (for smart ordering)
+        // GET /settings/top_rows  -  most-accessed settings rows (for smart ordering)
         ("GET", "/settings/top_rows") => {
             let s = STATE.lock().unwrap();
             let mut rows: Vec<(String, u32)> = s.variables.iter()
@@ -1264,7 +1264,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"top_rows":[{}]}}"#, items.join(","))
         }
 
-        // GET /settings/memory/stats — detailed memory stats for memory card
+        // GET /settings/memory/stats  -  detailed memory stats for memory card
         ("GET", "/settings/memory/stats") => {
             let s = STATE.lock().unwrap();
             let total    = s.memory_index.len();
@@ -1287,7 +1287,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // GET /settings/theme/palette — full Catppuccin Mocha palette for settings
+        // GET /settings/theme/palette  -  full Catppuccin Mocha palette for settings
         // Used by theme card to show all swatches
         ("GET", "/settings/theme/palette") => {
             // Catppuccin Mocha full palette
@@ -1311,7 +1311,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"theme":"catppuccin_mocha","swatches":[{}]}}"#, items.join(","))
         }
 
-                // GET /layer1 — Neural Nav Bar state for Java
+                // GET /layer1  -  Neural Nav Bar state for Java
         // Returns Catppuccin colour tokens + keyboard state hint
         // Java NeuralNavBar polls this to stay in sync with Rust theme
         ("GET",  "/layer1") => {
@@ -1329,11 +1329,11 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // POST /layer0/burst — called by Java when Kira finishes replying
+        // POST /layer0/burst  -  called by Java when Kira finishes replying
         // Sets a one-shot burst flag that /layer0 will return as burst:true
         // ── Layer 2: Chat Interface state endpoints ───────────────────────────
 
-        // GET /layer2/header — header bar state (pulse, subtitle cycle index)
+        // GET /layer2/header  -  header bar state (pulse, subtitle cycle index)
         // Java polls at 500ms to drive header border and subtitle crossfade
         ("GET",  "/layer2/header") => {
             let s = STATE.lock().unwrap();
@@ -1344,7 +1344,7 @@ You are executing a multi-step task autonomously.
                 0.27 + (phase * 2.0 * std::f32::consts::PI).sin().abs() * 0.08
             } else { 0.12f32 };
             // Subtitle index: cycles through 4 states (ready/thinking/reasoning/composing)
-            // 0=ready, 1=thinking, 2=reasoning, 3=composing — driven by request state
+            // 0=ready, 1=thinking, 2=reasoning, 3=composing  -  driven by request state
             let subtitle_idx: u32 = if !s.theme.is_thinking { 0 }
                 else { ((uptime_ms / 1_800) % 3 + 1) as u32 }; // cycle 1-3 while thinking
             format!(
@@ -1353,7 +1353,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // GET /layer2/bubbles — bubble styling tokens for chat UI
+        // GET /layer2/bubbles  -  bubble styling tokens for chat UI
         // Returns Catppuccin colour tokens for user/kira bubbles + shadow specs
         ("GET",  "/layer2/bubbles") => {
             r#"{"user_bg":3292050, "user_bg_alpha":255, "kira_bg":2040622, "lavender":11862782, "peach":16430983, "green_dark":2023454, "shadow_color":1144397, "shadow_alpha":102, "shadow_blur_dp":8, "shadow_y_dp":2, "spring_stiffness":300, "spring_damping":28, "spring_duration_ms":320, "translate_dp":40}"#.to_string()
@@ -1361,7 +1361,7 @@ You are executing a multi-step task autonomously.
             // lavender = 0xFFB4BEFE, peach = 0xFFFAB387, green_dark = 0xFF1E2E1E
         }
 
-        // GET /layer2/typing — typing indicator animation params
+        // GET /layer2/typing  -  typing indicator animation params
         // Three Lavender dots, sinusoidal, each offset 120ms
         ("GET",  "/layer2/typing") => {
             let s = STATE.lock().unwrap();
@@ -1377,7 +1377,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // POST /layer2/message — record that a message was sent/received
+        // POST /layer2/message  -  record that a message was sent/received
         // Updates request_count, last_message_ts, triggers K badge rotation signal
         ("POST", "/layer2/message") => {
             let role = extract_json_str(body, "role").unwrap_or_else(||"user".to_string());
@@ -1394,7 +1394,7 @@ You are executing a multi-step task autonomously.
         }
 
                 ("POST", "/layer0/burst") => {
-            // We use is_thinking flip as the burst signal — Java detects thinking→false
+            // We use is_thinking flip as the burst signal  -  Java detects thinking→false
             STATE.lock().unwrap().theme.is_thinking = false;
             r#"{"ok":true}"#.to_string()
         }
@@ -1435,13 +1435,13 @@ You are executing a multi-step task autonomously.
 
         // ── Session 4: Persistent session store ─────────────────────────────
 
-        // GET /sessions/v2 — list all sessions from session_store (sorted by recency)
+        // GET /sessions/v2  -  list all sessions from session_store (sorted by recency)
         ("GET",  "/sessions/v2") => {
             let s = STATE.lock().unwrap();
             s.session_store.list_sessions_json()
         }
 
-        // GET /sessions/v2/:key — full transcript for one session
+        // GET /sessions/v2/:key  -  full transcript for one session
         _ if method == "GET" && path_clean.starts_with("/sessions/v2/") && !path_clean.contains("compact") => {
             let key = &path_clean["/sessions/v2/".len()..];
             let s   = STATE.lock().unwrap();
@@ -1457,7 +1457,7 @@ You are executing a multi-step task autonomously.
             }
         }
 
-        // DELETE /sessions/v2/:key — delete session + transcript from disk
+        // DELETE /sessions/v2/:key  -  delete session + transcript from disk
         _ if method == "DELETE" && path_clean.starts_with("/sessions/v2/") => {
             let key = path_clean["/sessions/v2/".len()..].to_string();
             let mut s = STATE.lock().unwrap();
@@ -1468,7 +1468,7 @@ You are executing a multi-step task autonomously.
             }
         }
 
-        // POST /sessions/v2/:key/compact — force compact a session now
+        // POST /sessions/v2/:key/compact  -  force compact a session now
         _ if method == "POST" && path_clean.starts_with("/sessions/v2/") && path_clean.ends_with("/compact") => {
             let without_suffix = &path_clean[..path_clean.len() - "/compact".len()];
             let key2 = without_suffix["/sessions/v2/".len()..].to_string();
@@ -1498,7 +1498,7 @@ You are executing a multi-step task autonomously.
             }
         }
 
-        // POST /sessions/v2/prune — prune sessions inactive > ttl_hours
+        // POST /sessions/v2/prune  -  prune sessions inactive > ttl_hours
         ("POST", "/sessions/v2/prune") => {
             let ttl_hours = extract_json_num(body, "ttl_hours").unwrap_or(72.0) as u128;
             let ttl_ms    = ttl_hours * 3600 * 1000;
@@ -1553,17 +1553,17 @@ You are executing a multi-step task autonomously.
 
         // OpenClaw v3 / NanoBot / ZeroClaw routes
         // ── OTA Engine v43 ────────────────────────────────────────────────────
-        // GET  /ota/status        — full OTA state JSON
-        // POST /ota/begin_check   — Java signals it's about to call GitHub API
-        // POST /ota/release       — Java posts parsed GitHub release data to Rust
-        // POST /ota/progress      — Java reports download progress
-        // POST /ota/downloaded    — Java signals APK is on disk (path + sha256)
-        // POST /ota/installing    — Java signals install session opened
-        // POST /ota/installed     — Java signals successful install
-        // POST /ota/failed        — Java signals any error
-        // POST /ota/skip          — skip this version
-        // POST /ota/set_version   — update current installed version
-        // GET  /ota/install_cmd   — get the install command for Shizuku
+        // GET  /ota/status         -  full OTA state JSON
+        // POST /ota/begin_check    -  Java signals it's about to call GitHub API
+        // POST /ota/release        -  Java posts parsed GitHub release data to Rust
+        // POST /ota/progress       -  Java reports download progress
+        // POST /ota/downloaded     -  Java signals APK is on disk (path + sha256)
+        // POST /ota/installing     -  Java signals install session opened
+        // POST /ota/installed      -  Java signals successful install
+        // POST /ota/failed         -  Java signals any error
+        // POST /ota/skip           -  skip this version
+        // POST /ota/set_version    -  update current installed version
+        // GET  /ota/install_cmd    -  get the install command for Shizuku
         ("GET",  "/ota/status")     => { STATE.lock().unwrap().ota.to_json() }
         ("POST", "/ota/begin_check") => {
             let mut s = STATE.lock().unwrap();

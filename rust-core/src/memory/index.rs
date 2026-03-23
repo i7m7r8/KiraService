@@ -16,7 +16,7 @@ pub struct MemoryEntry {
     pub ts:           u128,
     pub access_count: u32,
     pub relevance:    f32,
-    /// Embedding vector — None until embeddings are computed (Session 5)
+    /// Embedding vector  -  None until embeddings are computed (Session 5)
     pub embedding:    Option<Vec<f32>>,
 }
 
@@ -53,7 +53,7 @@ impl MemoryEntry {
         )
     }
 
-    /// Temporal decay score — entries accessed recently + created recently score higher.
+    /// Temporal decay score  -  entries accessed recently + created recently score higher.
     /// Mirrors OpenClaw: src/memory/temporal-decay.ts
     pub fn decayed_score(&self, now_ms: u128, base_score: f32) -> f32 {
         let age_days = (now_ms.saturating_sub(self.ts)) as f64 / (1000.0 * 86400.0);
@@ -100,7 +100,7 @@ impl MemoryStore {
 
     pub fn all(&self) -> &[MemoryEntry] { &self.entries }
 
-    /// Keyword search — find entries whose content/tags contain query terms.
+    /// Keyword search  -  find entries whose content/tags contain query terms.
     /// Returns indices sorted by match score.
     pub fn keyword_search(&self, query: &str, limit: usize) -> Vec<usize> {
         let terms: Vec<&str> = query.split_whitespace().collect();

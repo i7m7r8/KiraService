@@ -1,7 +1,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // kira-core :: ai :: compaction
 //
-// Context window compaction — trim old turns, summarise with LLM.
+// Context window compaction  -  trim old turns, summarise with LLM.
 // Mirrors OpenClaw: src/agents/compaction.ts
 //
 // Session 1: types + basic trim.
@@ -59,7 +59,7 @@ and user preferences established so far. Include: \
 (3) any important facts or values discovered, \
 (4) ongoing tasks or open questions. \
 Be specific. Use plain prose, 3-6 sentences maximum. \
-Do NOT start with 'The conversation' — start with the content directly.";
+Do NOT start with 'The conversation'  -  start with the content directly.";
 
 // ── Main compaction entry point ───────────────────────────────────────────────
 
@@ -107,7 +107,7 @@ pub fn compact_session(
         "Please summarise this conversation segment:\n\n{}", transcript_text
     );
 
-    // Call LLM — use the same infrastructure already in lib.rs
+    // Call LLM  -  use the same infrastructure already in lib.rs
     let summary = call_llm_for_summary(api_key, base_url, model, &user_msg)?;
 
     // Store the summary back into the session
@@ -116,7 +116,7 @@ pub fn compact_session(
     Ok(summary)
 }
 
-/// Minimal LLM call for summarisation — plain POST, no tool loop, no history.
+/// Minimal LLM call for summarisation  -  plain POST, no tool loop, no history.
 fn call_llm_for_summary(
     api_key:  &str,
     base_url: &str,

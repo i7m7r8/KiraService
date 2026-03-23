@@ -20,7 +20,7 @@ mod jni_bridge {
         if p.is_null() { return String::new(); }
         let s = unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() };
         if s.len() > max_len {
-            // Truncate rather than reject — avoids Java crash on oversized input
+            // Truncate rather than reject  -  avoids Java crash on oversized input
             return s[..max_len].to_string();
         }
         s
@@ -42,7 +42,7 @@ mod jni_bridge {
         } else {
             &safe_s
         };
-        // from_raw can fail — use match instead of expect/unwrap
+        // from_raw can fail  -  use match instead of expect/unwrap
         let mut safe_env = match SafeEnv::from_raw(env as *mut jni::sys::JNIEnv) {
             Ok(e)  => e,
             Err(_) => return std::ptr::null_mut(),
@@ -84,7 +84,7 @@ mod jni_bridge {
             if let Ok(mut s) = STATE.try_lock() {
                 s.last_panic = format!("{} @ {}", msg, loc);
             }
-            // Do NOT call the default hook — it can cause double-panic → abort()
+            // Do NOT call the default hook  -  it can cause double-panic → abort()
         }));
         let p = port as u16;
         {
@@ -412,7 +412,7 @@ mod jni_bridge {
     /// Step 1: Prepare a chat turn. Pushes user message to history,
     /// returns JSON with everything Java needs to call the LLM:
     /// {api_key, base_url, model, messages:[{role,content},...]}
-    /// THE MAIN CHAT JNI — routes through the proper OpenAI function-calling runner.
+    /// THE MAIN CHAT JNI  -  routes through the proper OpenAI function-calling runner.
     /// Replaces getChatContext + processLlmReply with a single synchronous call.
     ///
     /// Returns JSON: {"reply":"...","tools_used":["x","y"],"steps":3,"done":true}
@@ -449,7 +449,7 @@ mod jni_bridge {
                     s.config.base_url.clone()
                 };
                 let persona = if s.config.persona.is_empty() {
-                    "You are Kira, a powerful Android AI agent. Use tools to get real data — never guess or hallucinate.".to_string()
+                    "You are Kira, a powerful Android AI agent. Use tools to get real data  -  never guess or hallucinate.".to_string()
                 } else {
                     s.config.persona.clone()
                 };
@@ -553,8 +553,8 @@ mod jni_bridge {
     /// Step 2: Process raw LLM response (reconstructed non-streaming JSON from Java).
     /// Java passes: {"choices":[{"message":{"content":"REPLY"},"finish_reason":"stop"}]}
     /// Returns:
-    ///   {"done":true,  "reply":"...", "tools_used":"[]"}        — send reply to user
-    ///   {"done":false, "messages_json":"...", "tools_used":"..."} — call LLM again
+    ///   {"done":true,  "reply":"...", "tools_used":"[]"}         -  send reply to user
+    ///   {"done":false, "messages_json":"...", "tools_used":"..."}  -  call LLM again
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_processLlmReply(
         env: JNIEnv, _c: JObject,
@@ -582,7 +582,7 @@ mod jni_bridge {
             let reply = clean_reply(&content);
 
             if !has_tools || step_n >= max_steps {
-                // No tools or step limit hit — final reply
+                // No tools or step limit hit  -  final reply
                 let final_reply = if reply.trim().is_empty() {
                     if content.trim().is_empty() { "Done.".to_string() }
                     else { content.trim().to_string() }
@@ -600,7 +600,12 @@ mod jni_bridge {
 
                 // Execute JSON tool calls (OpenAI function-calling)
                 for tc in &json_tcs {
-                    let res = dispatch_tool(&tc.name, &tc.params);
+                    let mut res = dispatch_tool(&tc.name, &tc.params);
+                    // http_get/web_search return __shell_http__:job_id - mark for Java resolution
+                    if res.starts_with("__shell_http__:") {
+                        let job_id = res.trim_start_matches("__shell_http__:");
+                        res = format!("pending_shell_result:{}", job_id);
+                    }
                     if res.starts_with("__shell__") {
                         let arg = tc.params.get("cmd").or_else(|| tc.params.get("package"))
                             .cloned().unwrap_or_default();
@@ -616,7 +621,11 @@ mod jni_bridge {
 
                 // Execute XML tool calls (fallback)
                 for (tname, targs) in &xml_tcs {
-                    let res = dispatch_tool(tname, targs);
+                    let mut res = dispatch_tool(tname, targs);
+                    if res.starts_with("__shell_http__:") {
+                        let job_id = res.trim_start_matches("__shell_http__:");
+                        res = format!("pending_shell_result:{}", job_id);
+                    }
                     if res.starts_with("__shell__") {
                         let arg = targs.get("cmd").or_else(|| targs.get("package"))
                             .cloned().unwrap_or_default();
@@ -706,7 +715,7 @@ mod jni_bridge {
                 )
         })).unwrap_or_else(|_| {
             if let Ok(mut s) = STATE.lock() { s.theme.is_thinking = false; }
-            r#"{"done":true,"reply":"Internal error — please try again","tools_used":"[]"}"#.to_string()
+            r#"{"done":true,"reply":"Internal error  -  please try again","tools_used":"[]"}"#.to_string()
         });
         unsafe { jni_str(env, &result) }
     }
@@ -946,7 +955,7 @@ mod jni_bridge {
         let sess_id = s.active_session.clone();
         s.total_tokens += tokens as u64;
         s.daily_log.push_back(format!("[{}] {}: {}", ts, role, &content[..content.len().min(80)]));
-        // Also push compressed copy (Session B) — for memory-efficient context loading
+        // Also push compressed copy (Session B)  -  for memory-efficient context loading
         push_turn_compressed(&mut s, &role, &content);
         s.context_turns.push_back(ContextTurn { role, content, ts, tokens, session:sess_id });
         if s.context_turns.len() > 60 { compact_context(&mut s); }
@@ -1557,12 +1566,12 @@ Context: {}",
         sha256: *const c_char,
     ) -> JString {
         let (path, sha) = (cs(path), cs(sha256));
-        // SECURITY: Validate APK path — must end with .apk, no path traversal
+        // SECURITY: Validate APK path  -  must end with .apk, no path traversal
         // Android getCacheDir() returns /data/user/0/<pkg>/cache/ or /data/data/<pkg>/cache/
         let path_ok = path.ends_with(".apk")
             && !path.contains("..")
             && !path.contains("//")
-            && path.starts_with("/");  // must be absolute — allows all valid Android paths
+            && path.starts_with("/");  // must be absolute  -  allows all valid Android paths
         if !path_ok {
             return unsafe { jni_str(env, r#"{"ok":false,"error":"invalid_apk_path"}"#) };
         }
@@ -1690,7 +1699,7 @@ Context: {}",
         let body = format!(r#"{{"goal":"{}","max_steps":{},"session":"{}"}}"#, esc(&g), max_steps, esc(&s));
         let result = match std::panic::catch_unwind(|| route_http("POST", "/ai/agent", &body)) {
             Ok(r) => r,
-            Err(_) => r#"{"error":"agent crashed — try again","success":false}"#.to_string(),
+            Err(_) => r#"{"error":"agent crashed  -  try again","success":false}"#.to_string(),
         };
         unsafe { jni_str(env, &result) }
     }
@@ -1705,7 +1714,7 @@ Context: {}",
         let body = format!(r#"{{"goal":"{}","depth":{}}}"#, esc(&g), depth);
         let result = match std::panic::catch_unwind(|| route_http("POST", "/ai/chain", &body)) {
             Ok(r) => r,
-            Err(_) => r#"{"error":"chain crashed — try again"}"#.to_string(),
+            Err(_) => r#"{"error":"chain crashed  -  try again"}"#.to_string(),
         };
         unsafe { jni_str(env, &result) }
     }
@@ -1729,7 +1738,7 @@ Context: {}",
 
         // ── Session D: AI chat JNI + shell queue exports ─────────────────────────
 
-    /// Single-call AI chat — replaces KiraAI.java entirely.
+    /// Single-call AI chat  -  replaces KiraAI.java entirely.
     /// Java calls this from a background thread; blocks until reply is ready.
     /// Returns JSON: {"role":"assistant","content":"..","tools_used":["x"],"done":true}
     #[no_mangle]
@@ -1740,10 +1749,10 @@ Context: {}",
         _max_steps:    i32,
     ) -> JString {
         // cs_safe is the ONLY thing that runs outside catch_unwind.
-        // It just reads a C string — cannot panic.
+        // It just reads a C string  -  cannot panic.
         let user_msg = cs_safe(message, 16384);
 
-        // Wrap EVERYTHING in catch_unwind — including STATE.lock(), lz4 compression,
+        // Wrap EVERYTHING in catch_unwind  -  including STATE.lock(), lz4 compression,
         // build_system_prompt, and the network call.
         // This prevents ANY panic from crossing the JNI boundary and causing SIGABRT.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> String {
@@ -1751,7 +1760,7 @@ Context: {}",
             {
                 let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 if s.config.api_key.is_empty() {
-                    return r#"{"error":"no API key — go to Settings and add one","done":true}"#
+                    return r#"{"error":"no API key  -  go to Settings and add one","done":true}"#
                         .to_string();
                 }
             }
@@ -1771,7 +1780,7 @@ Context: {}",
                  s.config.model.clone(), sys)
             };
 
-            // 3. Decompress history (outside lock — no mutex held during alloc)
+            // 3. Decompress history (outside lock  -  no mutex held during alloc)
             let history = {
                 let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 decompress_context(&s)
@@ -1796,9 +1805,9 @@ Context: {}",
         let out = match result {
             Ok(s) => s,
             Err(_) => {
-                // Panic was caught — do NOT re-panic, just return error JSON
+                // Panic was caught  -  do NOT re-panic, just return error JSON
                 if let Ok(mut s) = STATE.lock() { s.theme.is_thinking = false; }
-                r#"{"error":"Internal error — please try again","done":true}"#.to_string()
+                r#"{"error":"Internal error  -  please try again","done":true}"#.to_string()
             }
         };
 
@@ -1896,6 +1905,34 @@ Context: {}",
         s.shell_results.insert(id, out);
     }
 
+    /// Called by Java after drainShellQueue to substitute shell results
+    /// into the messages_json that processLlmReply returned.
+    /// Input:  the messages_json string (URL/JSON encoded next request)
+    /// Output: same string with "pending_shell_result:JOB_ID" replaced by actual results
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_resolveShellResults(
+        env: JNIEnv, _c: JObject,
+        messages_json: *const c_char,
+    ) -> JString {
+        let json = cs_safe(messages_json, 524288);
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut result = json.clone();
+        // Replace all "pending_shell_result:JOB_ID" with actual results
+        let keys: Vec<String> = s.shell_results.keys().cloned().collect();
+        for key in keys {
+            let placeholder = format!("pending_shell_result:{}", key);
+            if result.contains(&placeholder) {
+                let val = s.shell_results.remove(&key).unwrap_or_else(|| "no result".to_string());
+                // The placeholder appears as an escaped string inside JSON
+                let escaped_placeholder = esc(&placeholder);
+                let escaped_val = esc(&val[..val.len().min(3000)]);
+                result = result.replace(&escaped_placeholder, &escaped_val);
+            }
+        }
+        unsafe { jni_str(env, &result) }
+    }
+
+
         // ── Session C: AES-256-GCM secret encryption JNI exports ─────────────────
 
     /// Encrypt a secret string. seed = SHA256(ANDROID_ID+pkg) from Java.
@@ -1943,7 +1980,7 @@ Context: {}",
         unsafe { jni_str(env, &hex) }
     }
 
-    // ── Crash log JNI — called directly by KiraApp (faster than HTTP) ──────────
+    // ── Crash log JNI  -  called directly by KiraApp (faster than HTTP) ──────────
 
     /// Store a crash entry directly in Rust memory.
     /// Called synchronously from the UncaughtExceptionHandler before process dies.

@@ -1109,6 +1109,7 @@ struct KiraState {
     // ── Session D: shell command queue ─────────────────────────────────────
     pending_shell:     std::collections::VecDeque<ShellJob>,
     shell_results:     std::collections::HashMap<String, String>,
+    shell_results:     std::collections::HashMap<String, String>,
     // ── Session E: agent task log ─────────────────────────────────────────
     agent_tasks:       std::collections::VecDeque<AgentTask>,
     // ── Session F: Telegram state ─────────────────────────────────────────
@@ -2210,26 +2211,32 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         "http_get" => {
             let url = params.get("url").cloned().unwrap_or_default();
             if url.is_empty() { return "error: url required".into(); }
-            dispatch_http_get(&url)
+            // Route through Java OkHttp shell queue to avoid rustls panic on Android
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let job_id = format!("http_get_{}", now_ms());
+            s.pending_shell.push_back(ShellJob {
+                id:      job_id.clone(),
+                cmd:     format!("http_get:{}", url),
+                timeout: 20_000,
+                created: now_ms(),
+            });
+            format!("__shell_http__:{}", job_id)
         }
         "web_search" => {
             let query = params.get("query").cloned().unwrap_or_default();
             if query.is_empty() { return "error: query required".into(); }
-            let encoded = query.chars().map(|c| match c {
-                ' ' => '+', '&' => 'a', _ => c
-            }).collect::<String>();
+            let encoded: String = query.chars().map(|c| if c == ' ' { '+' } else { c }).collect();
             let url = format!("https://html.duckduckgo.com/html/?q={}", encoded);
-            let raw = dispatch_http_get(&url);
-            // Strip HTML tags for cleaner LLM consumption
-            let stripped = strip_html(&raw);
-            // Extract meaningful lines
-            let meaningful: Vec<&str> = stripped.lines()
-                .map(|l| l.trim())
-                .filter(|l| l.len() > 40)
-                .take(25)
-                .collect();
-            if meaningful.is_empty() { raw[..raw.len().min(2000)].to_string() }
-            else { meaningful.join("\n")[..meaningful.join("\n").len().min(3000)].to_string() }
+            // Route through Java OkHttp shell queue to avoid rustls panic on Android
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let job_id = format!("web_search_{}", now_ms());
+            s.pending_shell.push_back(ShellJob {
+                id:      job_id.clone(),
+                cmd:     format!("http_get:{}", url),
+                timeout: 20_000,
+                created: now_ms(),
+            });
+            format!("__shell_http__:{}", job_id)
         }
         // ── Pure-Rust file tools ──────────────────────────────────────────────
         "read_file" => {

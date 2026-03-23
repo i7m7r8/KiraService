@@ -1,7 +1,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // kira-core :: ai :: runner
 //
-// ReAct loop — THINK → ACT → OBSERVE → repeat.
+// ReAct loop  -  THINK → ACT → OBSERVE → repeat.
 // Mirrors OpenClaw: src/agents/pi-embedded-runner/run.ts
 //
 // Session 2: full implementation.
@@ -29,7 +29,7 @@ pub struct RunState {
     pub steps_done:   u32,
     pub abort:        bool,
     pub last_result:  Option<AiRunResult>,
-    // Streaming fields — updated live during run_agent loop
+    // Streaming fields  -  updated live during run_agent loop
     pub partial_text: String,          // latest LLM text chunk (cleared on new step)
     pub current_tool: String,          // tool being executed right now
     pub tool_results: Vec<String>,     // list of "tool: result" lines this run
@@ -268,7 +268,7 @@ pub fn parse_tool_calls_json(response_json: &str) -> Vec<JsonToolCall> {
     let after = &response_json[tc_start + tc_marker.len()..].trim_start();
     if !after.starts_with('[') { return calls; }
 
-    // Walk the array — find each object
+    // Walk the array  -  find each object
     let mut pos = 1usize; // skip '['
     let bytes = after.as_bytes();
     loop {
@@ -350,7 +350,7 @@ fn parse_flat_json_args(json: &str) -> HashMap<String, String> {
 
         // Read value
         if rest.starts_with('"') {
-            // String value — handle escaped chars
+            // String value  -  handle escaped chars
             rest = &rest[1..];
             let mut val = String::new();
             let mut chars = rest.char_indices().peekable();
@@ -376,7 +376,7 @@ fn parse_flat_json_args(json: &str) -> HashMap<String, String> {
             map.insert(key, val);
             rest = &rest[end_pos..];
         } else if rest.starts_with('[') || rest.starts_with('{') {
-            // Array or nested object — find matching bracket
+            // Array or nested object  -  find matching bracket
             let open = rest.as_bytes()[0];
             let close = if open == b'[' { b']' } else { b'}' };
             let mut depth = 0i32;
@@ -576,7 +576,7 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
         }
 
         if json_tool_calls.is_empty() {
-            // No tool calls — this is the final answer
+            // No tool calls  -  this is the final answer
             final_content = text_content.clone();
             turns.push(Turn::assistant(&text_content));
             break;
@@ -599,7 +599,7 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
                 // Push a tool result telling the AI to stop repeating
                 turns.push(Turn::tool_result(
                     &tc.id, &tc.name,
-                    "Error: loop detected — this exact tool call was already made. Stop repeating and give a final answer."
+                    "Error: loop detected  -  this exact tool call was already made. Stop repeating and give a final answer."
                 ));
                 continue;
             }
@@ -631,7 +631,7 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
         }
 
         if loop_detected && json_tool_calls.len() == 1 {
-            // All calls were loops — force stop
+            // All calls were loops  -  force stop
             final_content = "I noticed I was repeating the same tool call. Here is what I know so far.".to_string();
             break;
         }

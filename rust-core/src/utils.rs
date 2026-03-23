@@ -25,7 +25,7 @@ fn extract_json_f32(json: &str, key: &str) -> Option<f32> {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session C — AES-256-GCM authenticated encryption for secrets
+// Session C  -  AES-256-GCM authenticated encryption for secrets
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 use aes_gcm::{Aes256Gcm, Key, Nonce};
@@ -33,7 +33,7 @@ use aes_gcm::aead::{Aead, KeyInit};
 
 /// Derive a stable 32-byte key from a device-specific seed string.
 /// Seed is typically: SHA256(ANDROID_ID + package_name), supplied by Java.
-/// Uses 64 rounds of XOR + rotate mixing — lightweight but sufficient
+/// Uses 64 rounds of XOR + rotate mixing  -  lightweight but sufficient
 /// as a KDF since the seed itself comes from a 256-bit random source.
 pub fn derive_aes_key(seed: &str) -> [u8; 32] {
     let mut key = [0u8; 32];
@@ -69,7 +69,7 @@ fn derive_nonce(key: &[u8; 32], domain: &str) -> [u8; 12] {
 }
 
 /// Encrypt plaintext with AES-256-GCM. Returns hex-encoded ciphertext+tag.
-/// domain: field name ("api_key", "tg_token", etc) — prevents cross-field decryption.
+/// domain: field name ("api_key", "tg_token", etc)  -  prevents cross-field decryption.
 pub fn aes_encrypt(plaintext: &str, key_seed: &str, domain: &str) -> String {
     let key_bytes  = derive_aes_key(key_seed);
     let nonce_bytes = derive_nonce(&key_bytes, domain);
@@ -106,13 +106,13 @@ pub fn aes_decrypt(hex_ciphertext: &str, key_seed: &str, domain: &str) -> String
     }
 }
 
-/// Inline JSON string extractor — same as extract_json_str but returns Option
+/// Inline JSON string extractor  -  same as extract_json_str but returns Option
 pub fn extract_json_str_inline(json: &str, key: &str) -> Option<String> {
     extract_json_str(json, key)
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session K — Pure-Rust HTTPS client via rustls
+// Session K  -  Pure-Rust HTTPS client via rustls
 // Works on arm64-v8a. Falls back to plain HTTP on other ABIs (or through
 // Java bridge via /http_proxy endpoint).
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -189,7 +189,7 @@ pub fn https_post(
     }
 
     let resp_str = String::from_utf8_lossy(&response).into_owned();
-    // Strip HTTP headers — find blank line
+    // Strip HTTP headers  -  find blank line
     if let Some(body_start) = resp_str.find("
 
 ") {

@@ -130,6 +130,18 @@ public class KiraAI {
                         if (cb != null) cb.onError("Tool loop: no follow-up messages");
                         return;
                     }
+                    // If messages_json contains pending_shell_result: placeholders,
+                    // drain Java shell queue first (runs http_get via OkHttp),
+                    // then resolve placeholders with actual results
+                    if (nextReqJson.contains("pending_shell_result:")) {
+                        drainShellQueue(cb);
+                        try {
+                            String resolved = RustBridge.resolveShellResults(nextReqJson);
+                            if (resolved != null && !resolved.isEmpty()) {
+                                nextReqJson = resolved;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
                     requestJson = nextReqJson;
                     step++;
                 }

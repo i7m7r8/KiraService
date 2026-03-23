@@ -1,7 +1,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // kira-core :: tools :: device
 //
-// Android device tools — all execute via Java JNI poll pattern.
+// Android device tools  -  all execute via Java JNI poll pattern.
 // Session 1: stubs registered.  Session 15: full implementations.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -98,7 +98,7 @@ fn java_poll_tool(action: &'static str) -> impl Fn(&HashMap<String, String>) -> 
         let params_json: Vec<String> = params.iter()
             .map(|(k, v)| format!("\"{}\":\"{}\"", k, v.replace('"', "\\\"")))
             .collect();
-        // Returns a command object — the route handler intercepts this
+        // Returns a command object  -  the route handler intercepts this
         // and queues it via STATE.pending_java_actions for Java to poll
         format!(r#"{{"action":"{}","params":{{{}}}}}"#,
             action, params_json.join(","))

@@ -18,7 +18,7 @@ impl RouteKey {
     pub fn as_str(&self) -> &str { &self.0 }
 }
 
-/// Agent configuration — which model/persona/skills to use for a session
+/// Agent configuration  -  which model/persona/skills to use for a session
 #[derive(Clone, Debug)]
 pub struct AgentConfig {
     pub id:          String,

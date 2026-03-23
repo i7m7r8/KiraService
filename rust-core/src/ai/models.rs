@@ -140,7 +140,7 @@ impl FailoverChain {
         }
     }
 
-    /// Mark a model as succeeded — reset error counter
+    /// Mark a model as succeeded  -  reset error counter
     pub fn mark_success(&mut self, model_id: &str) {
         if let Some(m) = self.models.iter_mut().find(|m| m.id == model_id) {
             m.consecutive_errors = 0;

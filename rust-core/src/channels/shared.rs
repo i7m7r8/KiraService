@@ -94,7 +94,7 @@ impl SendResult {
     }
 }
 
-/// DM policy — mirrors OpenClaw security defaults
+/// DM policy  -  mirrors OpenClaw security defaults
 #[derive(Clone, Debug, PartialEq)]
 pub enum DmPolicy {
     /// Require pairing code from unknown senders

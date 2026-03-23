@@ -2,7 +2,7 @@
 // kira-core :: tools :: system
 //
 // System tools: read_file, write_file, list_files, run_shell, http_get/post.
-// Shell commands are queued for Java/Shizuku to execute — Rust never
+// Shell commands are queued for Java/Shizuku to execute  -  Rust never
 // executes shell directly.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -108,7 +108,7 @@ pub fn register_system_tools(registry: &mut ToolRegistry) {
     );
 
     // ── run_shell ────────────────────────────────────────────────────────────
-    // Does NOT execute — queues for Java/Shizuku to run and poll result.
+    // Does NOT execute  -  queues for Java/Shizuku to run and poll result.
     registry.register(
         ToolDef {
             name: "run_shell".to_string(),
@@ -124,7 +124,7 @@ pub fn register_system_tools(registry: &mut ToolRegistry) {
                 Some(c) if !c.is_empty() => c.clone(),
                 _ => return r#"{"error":"cmd required"}"#.to_string(),
             };
-            // Queue marker — the AI loop's dispatch layer handles the actual
+            // Queue marker  -  the AI loop's dispatch layer handles the actual
             // Shizuku execution via the Java poll endpoint.
             format!(r#"{{"queued":true,"cmd":"{}","note":"result available via /shell/result"}}"#,
                 cmd.replace('"', "\\\""))

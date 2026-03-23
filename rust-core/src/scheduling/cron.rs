@@ -68,10 +68,10 @@ pub struct CronSchedule {
 impl CronSchedule {
     /// Parse a cron expression or shorthand.
     /// Supports:
-    ///   "every 5m"  / "every 1h"  / "every 30s"  — interval
-    ///   "daily"     / "hourly"    / "weekly"       — shorthand
-    ///   "HH:MM"                                   — daily at time
-    ///   Standard 5-field cron: "* * * * *"        — (Session 9: full parser)
+    ///   "every 5m"  / "every 1h"  / "every 30s"   -  interval
+    ///   "daily"     / "hourly"    / "weekly"        -  shorthand
+    ///   "HH:MM"                                    -  daily at time
+    ///   Standard 5-field cron: "* * * * *"         -  (Session 9: full parser)
     pub fn parse(expr: &str) -> Self {
         let e = expr.trim().to_lowercase();
         let interval_ms = if let Some(rest) = e.strip_prefix("every ") {

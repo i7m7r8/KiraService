@@ -561,7 +561,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&mid), esc(&state), esc(&action)))
         }
 
-        // GET /auto/list  — friendly summary of all automations
+        // GET /auto/list   -  friendly summary of all automations
         ("GET", "/auto/list") => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.macros.iter().map(|m| {
@@ -697,7 +697,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&mid), esc(&name), acts.len()))
         }
 
-        // POST /auto/run_now {"id":"macro_id"} — trigger immediately
+        // POST /auto/run_now {"id":"macro_id"}  -  trigger immediately
         ("POST", "/auto/run_now") => {
             let id = extract_json_str(body, "id").unwrap_or_default();
             if id.is_empty() { return Some(r#"{"error":"need id"}"#.to_string()); }
@@ -737,7 +737,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             }
         }
 
-        // GET /auto/history — last 50 runs
+        // GET /auto/history  -  last 50 runs
         ("GET", "/auto/history") => {
             let s = STATE.lock().unwrap();
             let items: Vec<String> = s.macro_run_log.iter().rev().take(50)
@@ -1729,7 +1729,7 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
 }
 
 // Crypto
-// SECURITY: Credential key derivation — 1024 rounds of byte mixing.
+// SECURITY: Credential key derivation  -  1024 rounds of byte mixing.
 // This is obfuscation (in-memory protection), NOT cryptographic encryption.
 // For real encryption-at-rest, use Android Keystore via JNI.
 fn derive_key(name: &str) -> Vec<u8> {

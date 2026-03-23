@@ -155,6 +155,7 @@ public class RustBridge {
     public static native String chatSync(String message, String sessionId, int maxToolSteps);
     public static native String getNextShellJob();
     public static native void   postShellResult(String jobId, String stdout);
+    public static native String resolveShellResults(String messagesJson);
 
     // ── Session E: Agent + Chain ─────────────────────────────
     public static native String agentSync(String goal, int maxSteps, String session);

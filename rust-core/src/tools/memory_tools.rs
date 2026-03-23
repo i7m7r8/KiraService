@@ -29,7 +29,7 @@ pub fn register_memory_tools(registry: &mut ToolRegistry) {
             let tags: Vec<String> = params.get("tags")
                 .map(|t| t.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
                 .unwrap_or_default();
-            // Actual storage is in STATE — this returns a command for the route
+            // Actual storage is in STATE  -  this returns a command for the route
             // handler to execute after dispatch. The route layer calls
             // STATE.memory_index.push() with the result.
             format!(r#"{{"action":"add_memory","content":"{}","tags":[{}]}}"#,
@@ -59,7 +59,7 @@ pub fn register_memory_tools(registry: &mut ToolRegistry) {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(5)
                 .min(20);
-            // Returns a search command — route layer executes against STATE
+            // Returns a search command  -  route layer executes against STATE
             format!(r#"{{"action":"search_memory","query":"{}","limit":{}}}"#,
                 query.replace('"', "\\\""), limit)
         }),

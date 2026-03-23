@@ -1,8 +1,8 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // kira-core :: channels :: whatsapp  (Session 8)
 //
-// WhatsApp channel adapter — two modes:
-//   A) Cloud API (Meta WhatsApp Business Cloud API — official, no phone needed)
+// WhatsApp channel adapter  -  two modes:
+//   A) Cloud API (Meta WhatsApp Business Cloud API  -  official, no phone needed)
 //   B) Webhook bridge (Java runs a minimal Baileys forwarder, POSTs to Rust)
 //
 // Mode is selected by config:

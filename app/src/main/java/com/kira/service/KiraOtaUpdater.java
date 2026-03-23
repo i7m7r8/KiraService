@@ -143,8 +143,8 @@ public class KiraOtaUpdater {
                 // Notify Rust
                 RustBridge.otaOnRelease(tag, fUrl, "", "", "", fBytes);
 
-                long deltaBytes = estimateDeltaBytes(fBytes);
-                boolean isDelta = deltaBytes < fBytes * 0.7;
+                long deltaBytes = fBytes / 10; // estimate 10% for delta
+                boolean isDelta = true; // always try delta if baseline exists
 
                 if (callback != null) {
                     Runnable doInstall = () -> startDownload(fTag, fUrl, fBytes, isDelta);
@@ -232,10 +232,10 @@ public class KiraOtaUpdater {
     private boolean downloadDelta(String url, File existing, long remoteSize) {
         try {
             long localSize = existing.length();
-            if (Math.abs(localSize - remoteSize) > remoteSize * 0.30) return false;
+            if (Math.abs(localSize - remoteSize) > remoteSize * 0.50) return false;
             long numChunks = (remoteSize + CHUNK_SIZE - 1) / CHUNK_SIZE;
             long downloaded = 0;
-            File tmp = new File(ctx.getCacheDir(), "kira_delta_tmp.apk");
+            File tmp = new File(existing.getParentFile(), "kira_delta_tmp.apk");
             try (FileInputStream li = new FileInputStream(existing);
                  FileOutputStream to = new FileOutputStream(tmp)) {
                 byte[] lb = new byte[CHUNK_SIZE];
@@ -261,8 +261,15 @@ public class KiraOtaUpdater {
                     if (callback != null) handler.post(() -> callback.onProgress(fp, fd, fs));
                 }
             }
-            if (tmp.length() > remoteSize * 0.5) {
-                existing.delete(); tmp.renameTo(existing); return true;
+            long tmpLen = tmp.length();
+            if (tmpLen > remoteSize * 0.5 && tmpLen < remoteSize * 1.5) {
+                existing.delete();
+                if (!tmp.renameTo(existing)) {
+                    // Cross-partition rename failed — copy instead
+                    try { copyFile(tmp, existing); tmp.delete(); }
+                    catch (Exception ce) { Log.w(TAG, "copy after delta: " + ce.getMessage()); }
+                }
+                return existing.exists() && existing.length() > remoteSize * 0.5;
             }
             tmp.delete(); return false;
         } catch (Exception e) { Log.w(TAG, "Delta: " + e.getMessage()); return false; }

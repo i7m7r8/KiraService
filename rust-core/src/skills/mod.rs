@@ -1,7 +1,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // kira-core :: skills
 //
-// Skills platform — load, resolve, system-prompt injection.
+// Skills platform  -  load, resolve, system-prompt injection.
 // Mirrors OpenClaw: src/agents/skills.ts, src/agents/skills/frontmatter.ts
 //
 // Session 1: types + frontmatter parser.
@@ -132,7 +132,7 @@ fn fm_list(fm: &str, key: &str) -> Vec<String> {
     result
 }
 
-/// Skill registry — loaded skills for the current session
+/// Skill registry  -  loaded skills for the current session
 pub struct SkillRegistry {
     skills: Vec<Skill>,
 }

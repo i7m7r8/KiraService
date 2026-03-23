@@ -283,7 +283,7 @@ fn subagent_loop(
             let key = format!("{}:{}", tc.name, hash_params(&tc.params));
             if seen.iter().filter(|&k|k==&key).count() >= 2 {
                 turns.push(Turn::tool_result(&tc.id, &tc.name,
-                    "Loop detected — stop calling this tool"));
+                    "Loop detected  -  stop calling this tool"));
                 continue;
             }
             seen.push(key);

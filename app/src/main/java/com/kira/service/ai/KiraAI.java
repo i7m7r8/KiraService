@@ -388,8 +388,19 @@ public class KiraAI {
     }
 
     private String legacyProcessReply(String rawResponse) {
-        String cleaned = rawResponse.replaceAll("<tool[^>]*>.*?</tool>", "").trim();
-        if (cleaned.isEmpty()) cleaned = rawResponse;
+        // Extract actual text content from the OpenAI JSON envelope
+        String content = rawResponse;
+        try {
+            JSONObject j = new JSONObject(rawResponse);
+            JSONArray choices = j.optJSONArray("choices");
+            if (choices != null && choices.length() > 0) {
+                JSONObject msg = choices.getJSONObject(0).optJSONObject("message");
+                if (msg != null) content = msg.optString("content", rawResponse);
+            }
+        } catch (Exception ignored) {}
+        // Strip any <tool> XML tags
+        String cleaned = content.replaceAll("<tool[^>]*>.*?</tool>", "").trim();
+        if (cleaned.isEmpty()) cleaned = "Done.";
         try {
             return new JSONObject()
                 .put("done", true)

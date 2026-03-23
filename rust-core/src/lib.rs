@@ -2858,8 +2858,8 @@ mod jni_bridge {
         let v_persona= cs(persona);
         let v_tg     = cs(tg_token);
         if !v_user.is_empty()   { s.config.user_name    = v_user; }
-        // Validate api_key: must be printable ASCII, no control chars
-        if !v_key.is_empty() && v_key.bytes().all(|b| b >= 32 && b <= 126) {
+        // Accept any printable ASCII key (32-126), reject control chars
+        if !v_key.is_empty() && v_key.len() >= 8 && v_key.bytes().all(|b| b >= 32 && b <= 126) {
             s.config.api_key = v_key;
         }
         // Validate base_url: must start with http:// or https://

@@ -2331,27 +2331,39 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         }
         // ── Session 21: Accessibility tools (dispatched to Java) ──────────
         "screen_read" => {
-            // Queue to Java - KiraAccessibilityService reads screen nodes
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            // Return cached screen nodes if available (updated by updateScreenNodes JNI)
-            if !s.screen_nodes.is_empty() {
-                // Parse node JSON and extract text
-                let nodes_text: String = s.screen_nodes.split(""text":"")
-                    .skip(1)
-                    .filter_map(|part| part.split('"').next())
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<_>>().join(" | ");
-                if !nodes_text.is_empty() {
-                    return format!("Screen text: {}", &nodes_text[..nodes_text.len().min(2000)]);
+            // Return cached screen_nodes text, or queue Java to fetch it
+            let screen_text = {
+                let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                if s.screen_nodes.is_empty() {
+                    String::new()
+                } else {
+                    // Extract "text":"VALUE" fields from the nodes JSON
+                    let nodes = s.screen_nodes.clone();
+                    let key = r#""text":""#;
+                    let mut texts: Vec<String> = Vec::new();
+                    let mut pos = 0;
+                    while let Some(idx) = nodes[pos..].find(key) {
+                        pos += idx + key.len();
+                        if let Some(end) = nodes[pos..].find('"') {
+                            let t = &nodes[pos..pos + end];
+                            if !t.is_empty() { texts.push(t.to_string()); }
+                            pos += end + 1;
+                        } else { break; }
+                    }
+                    texts.join(" | ")
                 }
+            };
+            if !screen_text.is_empty() {
+                return format!("Screen text: {}", &screen_text[..screen_text.len().min(2000)]);
             }
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.pending_shell.push_back(ShellJob {
                 id:      format!("screen_read_{}", now_ms()),
                 cmd:     "screen_read:".to_string(),
                 timeout: 5_000,
                 created: now_ms(),
             });
-            "__shell__:screen_read".to_string()
+            "Queued screen read - result will arrive via shell queue".to_string()
         }
         "screen_tap" => {
             let text = params.get("text").cloned().unwrap_or_default();

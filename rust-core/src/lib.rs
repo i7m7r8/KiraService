@@ -1836,6 +1836,7 @@ fn action_to_json(a: &MacroAction) -> String {
 
 /// Build the system prompt for the AI, including memory context
 pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
+    // Memory context
     let mem_lines: Vec<String> = state.memory_index.iter().take(20)
         .map(|m| format!("• {}", m.value))
         .collect();
@@ -1845,78 +1846,52 @@ pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
         mem_lines.join("\n")
     };
 
+    // Variable context
     let var_context: String = if state.variables.is_empty() {
         String::new()
     } else {
-        let vars: Vec<String> = state.variables.iter().take(10)
+        let vars: Vec<String> = state.variables.iter()
+            .filter(|(k, _)| !k.starts_with('_'))  // skip internal vars
+            .take(10)
             .map(|(k, v)| format!("  {} = {}", k, v.value))
             .collect();
-        format!("\n\nSession variables:\n{}", vars.join("\n"))
+        if vars.is_empty() { String::new() }
+        else { format!("\n\nSession variables:\n{}", vars.join("\n")) }
     };
 
-    // Show live device snapshot in every prompt so LLM knows real state
+    // Live device snapshot — injected so Kira never needs to guess basics
     let device_snapshot = format!(
-        "Battery: {}%{} | WiFi: {} | Foreground: {} | Notifications in queue: {}",
+        "Battery: {}%{}  |  WiFi: {}  |  Foreground app: {}  |  Notifications: {}",
         state.battery_pct,
         if state.battery_charging { " (charging)" } else { "" },
-        if state.sig_wifi_ssid.is_empty() { "disconnected".to_string() } else { format!("connected to {}", state.sig_wifi_ssid) },
-        if state.screen_pkg.is_empty() { "unknown".to_string() } else { state.screen_pkg.clone() },
+        if state.sig_wifi_ssid.is_empty() { "disconnected".to_string() }
+        else { format!("connected ({})", state.sig_wifi_ssid) },
+        if state.screen_pkg.is_empty() { "unknown".to_string() }
+        else { state.screen_pkg.clone() },
         state.notifications.len()
     );
 
-    let tools_block = r#"AVAILABLE TOOLS — use XML syntax to call them:
-
-INFORMATION tools (answer from REAL device data, not guesswork):
-  <tool name="get_device_state"/>                     → battery, wifi, foreground app, notification count
-  <tool name="get_notifications"/>                    → list of recent real notifications
-  <tool name="get_battery"/>                          → exact battery % and charging state
-  <tool name="get_wifi"/>                             → wifi connection status and SSID
-  <tool name="get_foreground_app"/>                   → which app is currently open
-  <tool name="search_memory"><param k="query" v="..."/></tool>   → search long-term memory
-  <tool name="get_variable"><param k="key" v="..."/></tool>       → get a stored variable
-  <tool name="web_search"><param k="query" v="..."/></tool>       → search the web (DuckDuckGo)
-  <tool name="http_get"><param k="url" v="https://wttr.in/Dhaka?format=3"/></tool>  → fetch URL (weather works!)
-
-ACTION tools (actually do things on the device):
-  <tool name="open_app"><param k="package" v="com.google.android.youtube"/></tool>
-  <tool name="run_shell"><param k="cmd" v="command"/></tool>
-  <tool name="read_file"><param k="path" v="/sdcard/file.txt"/></tool>
-  <tool name="write_file"><param k="path" v="/sdcard/file.txt"/><param k="content" v="text"/></tool>
-  <tool name="list_files"><param k="path" v="/sdcard/"/></tool>
-  <tool name="send_message"><param k="to" v="name"/><param k="message" v="text"/></tool>
-
-MEMORY tools (persist information across conversations):
-  <tool name="add_memory"><param k="content" v="user's name is X"/></tool>
-  <tool name="set_variable"><param k="key" v="k"/><param k="value" v="v"/></tool>
-
-REASONING tool (think before answering complex questions):
-  <tool name="think"><param k="thoughts" v="step by step reasoning here..."/></tool>"#;
-
     format!(
-        "{}\n\n\
-        LIVE DEVICE STATE RIGHT NOW:\n{}\n\n\
-        {}\n\n\
-        ════════════════════════════════════════\n\
-        CRITICAL RULES — NEVER BREAK THESE:\n\
-        ════════════════════════════════════════\n\
-        1. NEVER make up information. If you don't know → use a tool or say \"I don't know\".\n\
-        2. If asked about notifications/battery/wifi → ALWAYS call the tool. NEVER guess.\n\
-        3. If asked to open an app → call open_app tool. Don't just say \"Opening...\".\n\
-        4. If asked about the weather → use http_get with wttr.in. Never invent forecasts.\n\
-        5. If a tool gives you data → use THAT data in your reply. Don't add fake data.\n\
-        6. You CAN say \"I don't have access to [X]\" — that is honest. Hallucinating is not.\n\
-        7. Respond in the same language the user writes in.\n\
-        ════════════════════════════════════════\n\n\
-        Long-term memory:\n{}{}\n\n\
-        Capabilities you DO have: check real device state, open apps, search web, get weather, remember things, run shell commands (with Shizuku).\n\
-        Capabilities you DON'T have: read SMS without permission, access calendar without permission, control other apps' UI without accessibility permission.",
-        persona,
-        device_snapshot,
-        tools_block,
-        mem_context,
-        var_context
+        "{persona}\n\n\
+        DEVICE STATE RIGHT NOW:\n{device}\n\n\
+        RULES (follow these strictly):\n\
+        1. NEVER guess or make up information. Use tools to get real data.\n\
+        2. For battery/wifi/notifications → call get_device_state or the specific tool.\n\
+        3. For weather → call http_get with url=\"https://wttr.in/CITY?format=3\".\n\
+        4. For web questions → call web_search with your query.\n\
+        5. For opening apps → call open_app with the package name.\n\
+        6. To remember something → call add_memory.\n\
+        7. Tools are available as function calls — use them freely and proactively.\n\
+        8. Respond in the same language the user writes in.\n\n\
+        Long-term memory:\n{memory}{vars}",
+        persona = persona,
+        device = device_snapshot,
+        memory = mem_context,
+        vars = var_context,
     )
 }
+
+
 
 
 
@@ -2149,18 +2124,23 @@ pub fn clean_reply(text: &str) -> String {
 /// Shizuku/intent tools are queued for Java via /shell/next
 pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,String>) -> String {
     match name {
+        // ── Pure-Rust memory tools ────────────────────────────────────────────
         "add_memory" => {
             let content = params.get("content").cloned().unwrap_or_default();
             if content.is_empty() { return "error: content required".into(); }
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let idx = s.memory_index.len();
-            s.memory_index.push(MemoryEntry { key: format!("mem_{}", idx), value: content.clone(), tags: vec![], ts: now_ms(), relevance: 1.0, access_count: 0 });
-            format!("memory added: {}", &content[..content.len().min(50)])
+            s.memory_index.push(MemoryEntry {
+                key: format!("mem_{}", idx), value: content.clone(),
+                tags: vec![], ts: now_ms(), relevance: 1.0, access_count: 0
+            });
+            format!("Memory saved: {}", &content[..content.len().min(60)])
         }
         "search_memory" => {
             let query = params.get("query").cloned().unwrap_or_default();
             search_memory(&query)
         }
+        // ── Pure-Rust variable tools ──────────────────────────────────────────
         "get_variable" => {
             let key = params.get("key").cloned().unwrap_or_default();
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -2169,104 +2149,294 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         "set_variable" => {
             let key = params.get("key").cloned().unwrap_or_default();
             let val = params.get("value").cloned().unwrap_or_default();
-            { let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-                let ts = now_ms();
-                s.variables.entry(key.clone()).and_modify(|v| v.value = val.clone())
-                    .or_insert(AutoVariable { name: key.clone(), value: val.clone(),
-                        var_type: "string".to_string(), persistent: false, created_ms: ts, updated_ms: ts });
-            }
-            format!("set {} = {}", key, val)
+            let ts = now_ms();
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.variables.entry(key.clone())
+                .and_modify(|v| { v.value = val.clone(); v.updated_ms = ts; })
+                .or_insert(AutoVariable {
+                    name: key.clone(), value: val.clone(),
+                    var_type: "string".to_string(), persistent: false,
+                    created_ms: ts, updated_ms: ts,
+                });
+            format!("Variable {} = {}", key, val)
         }
+        // ── Pure-Rust device state tools ──────────────────────────────────────
         "get_battery" => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!("{}% {}", s.battery_pct,
-                if s.battery_charging { "charging" } else { "not charging" })
+                if s.battery_charging { "(charging)" } else { "(not charging)" })
         }
         "get_wifi" => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            if !s.sig_wifi_ssid.is_empty() {
-                format!("connected: {}", s.sig_wifi_ssid)
-            } else { "disconnected".into() }
+            if s.sig_wifi_ssid.is_empty() { "Not connected to WiFi".into() }
+            else { format!("Connected to: {}", s.sig_wifi_ssid) }
         }
         "get_notifications" => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             if s.notifications.is_empty() {
-                "No notifications currently. (Notifications appear here when apps send them while Kira is running.)".to_string()
+                "No notifications in queue. (Notifications are captured when apps send them while Kira runs.)".into()
             } else {
                 let items: Vec<String> = s.notifications.iter().rev().take(10)
-                    .map(|n| format!("[{}] {}: {}", n.pkg.split('.').last().unwrap_or(&n.pkg), n.title, &n.text[..n.text.len().min(80)]))
+                    .map(|n| format!("[{}] {}: {}",
+                        n.pkg.split('.').last().unwrap_or(&n.pkg),
+                        n.title,
+                        &n.text[..n.text.len().min(100)]))
                     .collect();
-                format!("{} recent notifications:
-{}", items.len(), items.join("
-"))
+                format!("{} notifications:\n{}", items.len(), items.join("\n"))
             }
         }
         "get_foreground_app" => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            if s.screen_pkg.is_empty() {
-                "Unknown (accessibility service may not be running)".to_string()
-            } else {
-                format!("Current app: {}", s.screen_pkg)
-            }
+            if s.screen_pkg.is_empty() { "Unknown (accessibility service may not be running)".into() }
+            else { format!("Foreground app: {}", s.screen_pkg) }
         }
         "get_device_state" => {
-            // One-shot tool: battery + wifi + foreground app + notifications count
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!(
-                "Battery: {}% {}
-Wifi: {}
-Foreground app: {}
-Pending notifications: {}
-Memories stored: {}",
+                "Battery: {}%{}\nWiFi: {}\nForeground app: {}\nNotifications queued: {}\nMemory facts stored: {}",
                 s.battery_pct,
-                if s.battery_charging { "(charging)" } else { "" },
-                if s.sig_wifi_ssid.is_empty() { "disconnected".to_string() } else { format!("connected to {}", s.sig_wifi_ssid) },
+                if s.battery_charging { " (charging)" } else { "" },
+                if s.sig_wifi_ssid.is_empty() { "disconnected".to_string() }
+                else { format!("connected to {}", s.sig_wifi_ssid) },
                 if s.screen_pkg.is_empty() { "unknown".to_string() } else { s.screen_pkg.clone() },
                 s.notifications.len(),
                 s.memory_index.len()
             )
         }
-        // Shell, file, and intent tools: queue for Java
-        // "think" tool: chain-of-thought. Not shown to user, just returns ack.
+        // ── Think: chain-of-thought (pure Rust, not shown to user) ───────────
         "think" => {
-            // The LLM's reasoning is in the 'thoughts' param — we acknowledge it
-            // and let the loop continue to produce a final response.
-            "Reasoning noted. Continue with your response.".to_string()
+            let thoughts = params.get("thoughts").cloned().unwrap_or_default();
+            if thoughts.is_empty() {
+                "Acknowledged. Continue with your response.".into()
+            } else {
+                // Thoughts are logged internally but not shown
+                format!("Reasoning acknowledged ({} chars). Continue.", thoughts.len())
+            }
         }
-        // "web_search" → DuckDuckGo HTML lite (no API key needed)
+        // ── Pure-Rust HTTP tools (use existing rustls/https_get) ─────────────
+        "http_get" => {
+            let url = params.get("url").cloned().unwrap_or_default();
+            if url.is_empty() { return "error: url required".into(); }
+            dispatch_http_get(&url)
+        }
         "web_search" => {
             let query = params.get("query").cloned().unwrap_or_default();
-            if query.is_empty() { return "error: query required".to_string(); }
-            let encoded = query.replace(' ', "+").replace('&', "%26");
-            // Queue as http_get so Java does the actual fetch
+            if query.is_empty() { return "error: query required".into(); }
+            let encoded = query.chars().map(|c| match c {
+                ' ' => '+', '&' => 'a', _ => c
+            }).collect::<String>();
             let url = format!("https://html.duckduckgo.com/html/?q={}", encoded);
-            let arg = url;
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id:      format!("websearch_{}", now_ms()),
-                cmd:     format!("http_get:{}", arg),
-                timeout: 15_000,
-                created: now_ms(),
-            });
-            "__shell__:web_search:queued".to_string()
+            let raw = dispatch_http_get(&url);
+            // Strip HTML tags for cleaner LLM consumption
+            let stripped = strip_html(&raw);
+            // Extract meaningful lines
+            let meaningful: Vec<&str> = stripped.lines()
+                .map(|l| l.trim())
+                .filter(|l| l.len() > 40)
+                .take(25)
+                .collect();
+            if meaningful.is_empty() { raw[..raw.len().min(2000)].to_string() }
+            else { meaningful.join("\n")[..meaningful.join("\n").len().min(3000)].to_string() }
         }
-        "run_shell" | "open_app" | "read_file" | "write_file" | "list_files" |
-        "http_get"  | "http_post" | "send_message" => {
-            // Queue for Java execution — Java handles network/intents/shell
-            let arg = params.get("cmd")
-                .or_else(|| params.get("package"))
-                .or_else(|| params.get("url"))
-                .or_else(|| params.get("to"))
-                .or_else(|| params.get("number"))
-                .or_else(|| params.get("path"))
-                .or_else(|| params.get("query"))
+        // ── Pure-Rust file tools ──────────────────────────────────────────────
+        "read_file" => {
+            let path = params.get("path").cloned().unwrap_or_default();
+            if path.is_empty() { return "error: path required".into(); }
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    if content.len() > 8000 {
+                        format!("{}...\n[truncated — file is {} bytes]", &content[..8000], content.len())
+                    } else { content }
+                }
+                Err(e) => format!("error reading {}: {}", path, e),
+            }
+        }
+        "list_files" => {
+            let path = params.get("path").cloned().unwrap_or_else(|| "/sdcard".to_string());
+            match std::fs::read_dir(&path) {
+                Ok(entries) => {
+                    let mut files: Vec<String> = entries
+                        .filter_map(|e| e.ok())
+                        .map(|e| {
+                            let name = e.file_name().to_string_lossy().to_string();
+                            let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                            if is_dir { format!("{}/", name) } else { name }
+                        })
+                        .collect();
+                    files.sort();
+                    format!("{} items in {}:\n{}", files.len(), path, files.join("\n"))
+                }
+                Err(e) => format!("error listing {}: {}", path, e),
+            }
+        }
+        "write_file" => {
+            let path    = params.get("path").cloned().unwrap_or_default();
+            let content = params.get("content").cloned().unwrap_or_default();
+            if path.is_empty() { return "error: path required".into(); }
+            // Create parent dirs
+            if let Some(parent) = std::path::Path::new(&path).parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            match std::fs::write(&path, &content) {
+                Ok(_)  => format!("Wrote {} bytes to {}", content.len(), path),
+                Err(e) => format!("error writing {}: {}", path, e),
+            }
+        }
+        // ── Java-side action tools: queue + return immediate confirmation ─────
+        // These are fire-and-forget from the LLM's perspective.
+        // Java drains the queue after run_agent() returns.
+        "open_app" => {
+            let pkg = params.get("package")
+                .or_else(|| params.get("app"))
+                .or_else(|| params.get("name"))
                 .cloned()
                 .unwrap_or_default();
-            format!("__shell__:{}:{}", name, arg)
+            if pkg.is_empty() { return "error: package name required".into(); }
+            // Resolve friendly name to package if needed
+            let resolved_pkg = app_name_to_pkg(&pkg);
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id:      format!("open_app_{}", now_ms()),
+                cmd:     format!("open_app:{}", resolved_pkg),
+                timeout: 10_000,
+                created: now_ms(),
+            });
+            format!("Opening {}... (launching now)", resolved_pkg)
         }
-        _ => format!("unknown tool: {}", name),
+        "run_shell" => {
+            let cmd = params.get("cmd").cloned().unwrap_or_default();
+            if cmd.is_empty() { return "error: cmd required".into(); }
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let job_id = format!("shell_{}", now_ms());
+            s.pending_shell.push_back(ShellJob {
+                id: job_id.clone(), cmd: cmd.clone(),
+                timeout: params.get("timeout_ms")
+                    .and_then(|t| t.parse::<u64>().ok())
+                    .unwrap_or(15_000),
+                created: now_ms(),
+            });
+            format!("Shell command queued: {}", &cmd[..cmd.len().min(100)])
+        }
+        "send_sms" | "send_message" => {
+            let to  = params.get("to").or_else(|| params.get("number")).cloned().unwrap_or_default();
+            let msg = params.get("body").or_else(|| params.get("message")).or_else(|| params.get("text")).cloned().unwrap_or_default();
+            if to.is_empty() { return "error: to/number required".into(); }
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending_shell.push_back(ShellJob {
+                id:      format!("sms_{}", now_ms()),
+                cmd:     format!("send_message:{}\n{}", to, msg),
+                timeout: 10_000,
+                created: now_ms(),
+            });
+            format!("Message queued for {}", to)
+        }
+        _ => format!("Unknown tool: {}. Available: get_battery, get_wifi, get_notifications, get_device_state, get_foreground_app, http_get, web_search, open_app, read_file, write_file, list_files, run_shell, add_memory, search_memory, think, set_variable, get_variable, send_sms", name),
     }
 }
+
+/// Perform an HTTP GET using the existing rustls stack.
+/// Returns the response body (HTML stripped if HTML content).
+fn dispatch_http_get(url: &str) -> String {
+    // Validate URL
+    let url = url.trim();
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return format!("error: invalid URL (must start with http:// or https://)");
+    }
+    // Parse host and path
+    let (host, port, path) = match parse_api_url(url) {
+        Ok(v)  => v,
+        Err(e) => return format!("error parsing URL {}: {}", url, e),
+    };
+    let result = if port == 443 || url.starts_with("https://") {
+        // Use rustls via catch_unwind to prevent TLS panics from crashing
+        let host_c = host.clone();
+        let path_c = path.clone();
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            https_get(&host_c, port, &path_c, 20)
+        })).unwrap_or_else(|_| Err("TLS error — try again".to_string()))
+    } else {
+        // Plain HTTP
+        use std::io::{Write, BufRead, BufReader};
+        let addr = format!("{}:{}", host, port);
+        match std::net::TcpStream::connect(&addr) {
+            Err(e) => return format!("error connecting to {}: {}", addr, e),
+            Ok(mut stream) => {
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(20)));
+                let req = format!("GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: KiraAI/1.0\r\nConnection: close\r\n\r\n", path, host);
+                let _ = stream.write_all(req.as_bytes());
+                let mut body = Vec::new();
+                let mut reader = BufReader::new(stream);
+                let mut past_headers = false;
+                let mut line = String::new();
+                while let Ok(n) = reader.read_line(&mut line) {
+                    if n == 0 { break; }
+                    if !past_headers {
+                        if line.trim().is_empty() { past_headers = true; }
+                    } else {
+                        body.extend_from_slice(line.as_bytes());
+                        if body.len() > 256_000 { break; }
+                    }
+                    line.clear();
+                }
+                Ok(String::from_utf8_lossy(&body).into_owned())
+            }
+        }
+    };
+    match result {
+        Err(e) => format!("HTTP error: {}", e),
+        Ok(body) => {
+            let stripped = strip_html(&body);
+            let out = stripped.trim().to_string();
+            if out.len() > 4000 { format!("{}...", &out[..4000]) } else { out }
+        }
+    }
+}
+
+/// Strip HTML tags and decode common entities.
+fn strip_html(html: &str) -> String {
+    // Remove <style> and <script> blocks
+    let mut s = html.to_string();
+    while let Some(start) = s.find("<style") {
+        if let Some(end) = s[start..].find("</style>") {
+            s = format!("{} {}", &s[..start], &s[start+end+8..]);
+        } else { break; }
+    }
+    while let Some(start) = s.find("<script") {
+        if let Some(end) = s[start..].find("</script>") {
+            s = format!("{} {}", &s[..start], &s[start+end+9..]);
+        } else { break; }
+    }
+    // Remove all remaining tags
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => { in_tag = false; out.push(' '); }
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    // Decode common entities
+    let out = out
+        .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        .replace("&nbsp;", " ").replace("&quot;", "\"").replace("&#39;", "'");
+    // Collapse whitespace
+    let mut result = String::new();
+    let mut last_space = true;
+    for c in out.chars() {
+        if c.is_whitespace() {
+            if !last_space { result.push(' '); }
+            last_space = true;
+        } else {
+            result.push(c);
+            last_space = false;
+        }
+    }
+    result.trim().to_string()
+}
+
+
 
 
 /// Build the JSON payload Java sends to the LLM API.

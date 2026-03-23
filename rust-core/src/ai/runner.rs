@@ -480,12 +480,12 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
         let messages_json = build_messages_json(&turns);
         let body = if cfg.tools_json.is_empty() || cfg.tools_json == "[]" {
             format!(
-                r#"{{"model":{},"max_tokens":4096,"messages":{}}}"#,
+                r#"{{"model":{},"max_tokens":8192,"messages":{}}}"#,
                 json_escape_str(&cfg.model), messages_json
             )
         } else {
             format!(
-                r#"{{"model":{},"max_tokens":4096,"messages":{},"tools":{},"tool_choice":"auto"}}"#,
+                r#"{{"model":{},"max_tokens":8192,"messages":{},"tools":{},"tool_choice":"auto"}}"#,
                 json_escape_str(&cfg.model), messages_json, cfg.tools_json
             )
         };
@@ -668,9 +668,14 @@ fn extract_content_from_response(json: &str) -> Option<String> {
     if let Some(mi) = json.find("\"message\":{") {
         if let Some(c) = find_str(&json[mi..], "content") { return Some(c); }
     }
-    // Anthropic: content[0].text
-    if json.contains("\"type\":\"text\"") {
-        if let Some(c) = find_str(json, "text") { return Some(c); }
+    // Anthropic: content[0].text (content block format)
+    if json.contains("\"type\":\"text\"") || json.contains("\"content\":[") {
+        // Try to find text in content array: {"type":"text","text":"..."}
+        if let Some(ti) = json.find("\"text\":\"") {
+            if let Some(c) = find_str(&json[ti..], "text") {
+                if !c.is_empty() { return Some(c); }
+            }
+        }
     }
     // Gemini: candidates[0].content.parts[0].text
     if json.contains("\"candidates\":[") {

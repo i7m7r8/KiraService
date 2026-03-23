@@ -414,32 +414,14 @@ public class KiraAI {
                 if ("no_api_key".equals(err)) {
                     KiraConfig cfg = KiraConfig.load(ctx);
                     if (cfg.apiKey != null && !cfg.apiKey.isEmpty()) {
-                        // Sync config to Rust and retry getChatContext directly.
-                        // Do NOT call buildFallbackContext here — it would push the user
-                        // turn a second time if getChatContext is still called inside it.
+                        // Sync config to Rust and retry
                         try { cfg.save(ctx); } catch (Throwable ignored2) {}
-                        // Retry: Rust now has the key, so getChatContext will push the
-                        // turn exactly once and return the full context with tools + history.
-                        try {
-                            requestJson = RustBridge.getChatContext(userMessage);
-                            JSONObject retryCheck = new JSONObject(requestJson);
-                            if (retryCheck.has("error")) {
-                                // getChatContext still failing — use plain fallback (no Rust push)
-                                requestJson = buildFallbackContext(userMessage);
-                            }
-                        } catch (Throwable e2) {
-                            requestJson = buildFallbackContext(userMessage);
-                        }
+                        // Rebuild request with loaded config
+                        requestJson = buildFallbackContext(userMessage);
                         if (requestJson == null) {
                             if (cb != null) cb.onError("No API key - go to Settings");
                             return null;
                         }
-                        // CRITICAL: re-parse j from the updated requestJson so the
-                        // base_url fixup below operates on the NEW valid JSON, not the
-                        // stale {"error":"no_api_key"} object. Without this, j.toString()
-                        // overwrites requestJson with the error JSON (no "messages" key)
-                        // and callLlmStreaming fires "No messages in request".
-                        try { j = new JSONObject(requestJson); } catch (Exception ignored3) { return requestJson; }
                     } else {
                         if (cb != null) cb.onError("No API key - go to Settings");
                         return null;
@@ -607,9 +589,6 @@ public class KiraAI {
     }
 
     private String buildFallbackContext(String msg) {
-        // NOTE: This method must NOT call RustBridge.getChatContext() — doing so would
-        // push the user turn into Rust history a second time (double-push bug).
-        // It is only called when Rust is unavailable or has no API key yet.
         try {
             KiraConfig cfg = KiraConfig.load(ctx);
             if (cfg.apiKey == null || cfg.apiKey.isEmpty()) return null;
@@ -622,12 +601,19 @@ public class KiraAI {
             JSONArray messages = new JSONArray();
             messages.put(new JSONObject().put("role","system").put("content", persona));
             messages.put(new JSONObject().put("role","user").put("content", msg));
-            return new JSONObject()
-                .put("api_key", cfg.apiKey)
-                .put("base_url", base)
-                .put("model", model)
-                .put("messages", messages)
-                .toString();
+            // Try to get tools schema from Rust if available
+            JSONObject result = new JSONObject()
+                .put("api_key", cfg.apiKey).put("base_url", base)
+                .put("model", model).put("messages", messages);
+            try {
+                // Get full context from Rust if possible (has tools + history)
+                String rustCtx = RustBridge.getChatContext(msg);
+                if (rustCtx != null && !rustCtx.isEmpty()) {
+                    JSONObject rustJ = new JSONObject(rustCtx);
+                    if (!rustJ.has("error")) return rustCtx;
+                }
+            } catch (Throwable ignored) {}
+            return result.toString();
         } catch (Exception e) { return null; }
     }
 

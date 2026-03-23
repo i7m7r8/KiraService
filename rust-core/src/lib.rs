@@ -1109,7 +1109,6 @@ struct KiraState {
     // ── Session D: shell command queue ─────────────────────────────────────
     pending_shell:     std::collections::VecDeque<ShellJob>,
     shell_results:     std::collections::HashMap<String, String>,
-    shell_results:     std::collections::HashMap<String, String>,
     // ── Session E: agent task log ─────────────────────────────────────────
     agent_tasks:       std::collections::VecDeque<AgentTask>,
     // ── Session F: Telegram state ─────────────────────────────────────────
@@ -4075,6 +4074,31 @@ Context: {}",
         let action = s.pending_java_actions.pop_front()
             .unwrap_or_default();
         unsafe { jni_str(env, &action) }
+    }
+
+
+    /// After drainShellQueue, substitute actual shell results into messages_json.
+    /// Replaces "pending_shell_result:JOB_ID" markers with real results.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_resolveShellResults(
+        env: JNIEnv, _c: JObject,
+        messages_json: *const c_char,
+    ) -> JString {
+        let json = cs_safe(messages_json, 524288);
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut result = json.clone();
+        let keys: Vec<String> = s.shell_results.keys().cloned().collect();
+        for key in keys {
+            let placeholder = format!("pending_shell_result:{}", key);
+            if result.contains(&placeholder) {
+                let val = s.shell_results.remove(&key)
+                    .unwrap_or_else(|| "no result".to_string());
+                let escaped_placeholder = esc(&placeholder);
+                let escaped_val = esc(&val[..val.len().min(3000)]);
+                result = result.replace(&escaped_placeholder, &escaped_val);
+            }
+        }
+        unsafe { jni_str(env, &result) }
     }
 
 }

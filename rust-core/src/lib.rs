@@ -15,6 +15,7 @@
 // All existing functionality in lib.rs is 100% preserved  -  nothing removed.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+pub mod acp;
 pub mod ai;
 pub mod channels;
 pub mod memory;
@@ -1210,6 +1211,8 @@ struct KiraState {
     // Replaces the bare HashMap<String, Session> above for new sessions.
     // Old `sessions` field kept for legacy routes; session_store is authoritative.
     pub session_store: crate::gateway::sessions::SessionStore,
+    // ── Session 1: ACP event bus ───────────────────────────────────────────
+    pub acp_bus: crate::acp::AcpBus,
 
     // Panic hook storage (jni_bridge)
     pub last_panic:  String,
@@ -4278,13 +4281,35 @@ Context: {}",
                     let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                     push_turn_compressed(&mut s, "assistant", &final_reply);
                     s.theme.is_thinking = false;
+                    // Emit Done ACP event
+                    s.acp_bus.emit(crate::acp::AcpEvent::Done {
+                        session:     s.active_session.clone(),
+                        stop_reason: crate::acp::StopReason::EndTurn,
+                        usage:       crate::acp::Usage::default(),
+                    });
                 }
                 format!(r#"{{"done":true,"reply":"{}","tools_used":[]}}"#, esc(&final_reply))
             } else {
                 let mut tool_results: Vec<(String, String, String)> = Vec::new();
                 let mut tools_used:   Vec<String> = Vec::new();
 
+                // Get active session for ACP events
+                let active_session = {
+                    let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                    s.active_session.clone()
+                };
+
                 for tc in &json_tcs {
+                    // Emit ToolStart ACP event
+                    {
+                        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                        s.acp_bus.emit(crate::acp::AcpEvent::ToolStart {
+                            session: active_session.clone(),
+                            id:      tc.id.clone(),
+                            tool:    tc.name.clone(),
+                            input:   tc.args_json.clone(),
+                        });
+                    }
                     let mut res = dispatch_tool(&tc.name, &tc.params);
                     if res.starts_with("__shell_http__:") {
                         res = format!("pending_shell_result:{}", res.trim_start_matches("__shell_http__:"));
@@ -4296,6 +4321,17 @@ Context: {}",
                         s.pending_shell.push_back(ShellJob {
                             id: tc.id.clone(), cmd: format!("{}:{}", tc.name, arg),
                             timeout: 15_000, created: now_ms(),
+                        });
+                    } else {
+                        // Emit ToolResult ACP event for pure-Rust tools (not shell jobs)
+                        let is_err = res.starts_with("error:") || res.starts_with("Error:");
+                        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+                        s.acp_bus.emit(crate::acp::AcpEvent::ToolResult {
+                            session:  active_session.clone(),
+                            id:       tc.id.clone(),
+                            tool:     tc.name.clone(),
+                            output:   res[..res.len().min(500)].to_string(),
+                            is_error: is_err,
                         });
                     }
                     tool_results.push((tc.id.clone(), tc.name.clone(), res));
@@ -4406,6 +4442,39 @@ Context: {}",
         }));
     }
 
+
+    /// === Session 1: ACP ===
+
+    /// Poll ACP events for a session (drain and return as JSON array).
+    /// Java calls this every 100-250ms to get streaming text, tool events, done signals.
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_pollEvents(
+        env: JNIEnv, _c: JObject,
+        session_id: *const c_char,
+    ) -> JString {
+        let sid = cs_safe(session_id, 256);
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let result = s.acp_bus.drain(&sid);
+        unsafe { jni_str(env, &result) }
+    }
+
+    /// Emit a text delta to a session's ACP bus (called from runner during streaming)
+    #[no_mangle]
+    pub extern "C" fn Java_com_kira_service_RustBridge_emitTextDelta(
+        _e: JNIEnv, _c: JObject,
+        session_id: *const c_char,
+        delta:      *const c_char,
+    ) {
+        let sid   = cs_safe(session_id, 256);
+        let delta = cs_safe(delta, 65536);
+        if let Ok(mut s) = STATE.lock() {
+            s.acp_bus.emit(crate::acp::AcpEvent::TextDelta {
+                session:   sid,
+                delta,
+                block_idx: 0,
+            });
+        }
+    }
 
     /// After drainShellQueue, substitute actual shell results into messages_json.
     /// Replaces "pending_shell_result:JOB_ID" markers with real results.
@@ -4551,7 +4620,102 @@ fn extract_json_str_inline(json: &str, key: &str) -> Option<String> {
 
 fn route_http(method: &str, path: &str, body: &str) -> String {
     let path_clean = path.split('?').next().unwrap_or(path);
+    // ACP query-param extraction (session id)
+    let acp_session = path.find("session=")
+        .map(|i| {
+            let s = &path[i+8..];
+            s.find('&').map(|e| &s[..e]).unwrap_or(s).to_string()
+        })
+        .unwrap_or_else(|| "default".to_string());
+
     match (method, path_clean) {
+
+        // ── ACP event bus (Session 1) ─────────────────────────────────────
+        // GET /acp/events?session=X  -  poll and consume pending events for a session
+        ("GET", "/acp/events") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.acp_bus.drain(&acp_session)
+        }
+        // GET /acp/peek?session=X  -  inspect without consuming
+        ("GET", "/acp/peek") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.acp_bus.peek(&acp_session)
+        }
+        // GET /acp/status  -  queue sizes for all sessions
+        ("GET", "/acp/status") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.acp_bus.status_json()
+        }
+        // POST /acp/abort?session=X  -  abort a running session
+        ("POST", "/acp/abort") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            // Push an abort event and mark the session as aborting
+            s.acp_bus.emit(crate::acp::AcpEvent::Error {
+                session: acp_session.clone(),
+                code:    crate::acp::ErrorCode::Aborted,
+                message: "Session aborted by client".to_string(),
+            });
+            // Signal abort via existing abort flag mechanism
+            s.agent_abort.store(true, std::sync::atomic::Ordering::Relaxed);
+            format!(r#"{{"ok":true,"session":"{}"}}"#, esc(&acp_session))
+        }
+        // GET /acp/sessions  -  list all sessions with ACP metadata
+        ("GET", "/acp/sessions") => {
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.session_store.list_sessions_json()
+        }
+        // POST /acp/sessions  -  create a new session
+        ("POST", "/acp/sessions") => {
+            let id      = extract_json_str(body, "id").unwrap_or_else(|| format!("s_{}", now_ms()));
+            let channel = extract_json_str(body, "channel").unwrap_or_else(|| "api".to_string());
+            let now     = now_ms() as u128;
+            let mut s   = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.session_store.get_or_create(&id, &channel, now);
+            format!(r#"{{"ok":true,"session_id":"{}"}}"#, esc(&id))
+        }
+        // DELETE /acp/sessions/:id
+        ("DELETE", p) if p.starts_with("/acp/sessions/") => {
+            let sid = &p["/acp/sessions/".len()..];
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let deleted = s.session_store.delete_and_purge(sid);
+            s.acp_bus.purge(sid);
+            format!(r#"{{"ok":{},"session_id":"{}"}}"#, deleted, esc(sid))
+        }
+        // PATCH /acp/sessions/:id  -  apply a SessionPatch
+        ("PATCH", p) if p.starts_with("/acp/sessions/") => {
+            let sid   = &p["/acp/sessions/".len()..].to_string();
+            let patch = crate::acp::SessionPatch::from_json(body);
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let now   = now_ms() as u128;
+            let sess  = s.session_store.get_or_create(sid, "api", now);
+            // Apply patch fields that map to existing session fields
+            let mut response = format!(r#"{{"ok":true,"session_id":"{}","applied":{{"#, esc(sid));
+            let mut applied_fields: Vec<String> = Vec::new();
+            if let Some(model) = &patch.model {
+                // Store model preference in session (we update global config as well)
+                s.config.model = model.clone();
+                applied_fields.push(format!(r#""model":"{}""#, esc(model)));
+            }
+            if let Some(agent_id) = &patch.agent_id {
+                if let Some(sess) = s.session_store.get_mut(sid) {
+                    sess.agent_id = agent_id.clone();
+                }
+                applied_fields.push(format!(r#""agent_id":"{}""#, esc(agent_id)));
+            }
+            drop(sess); // release borrow
+            response.push_str(&applied_fields.join(","));
+            response.push_str("}}}");
+            response
+        }
+        // GET /acp/sessions/:id/transcript  -  get session transcript as JSON
+        ("GET", p) if p.starts_with("/acp/sessions/") && p.ends_with("/transcript") => {
+            let sid = &p["/acp/sessions/".len()..p.len()-"/transcript".len()];
+            let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let turns = s.session_store.get_turns(sid);
+            let items: Vec<String> = turns.iter().map(|t| t.to_json()).collect();
+            format!("[{}]", items.join(","))
+        }
+
         // Health & stats
         // Auth management (localhost only  -  sets the shared secret)
         ("POST", "/auth/set_secret") => {
@@ -6956,7 +7120,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         ("GET", "/ui/dashboard") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             Some(format!(
-                r#"{{"version":"0.1.5","uptime_ms":{},"requests":{},"tool_calls":{},"memory_entries":{},"skills":{},"cron_jobs":{},"sub_agents":{},"telegram":{},"whatsapp":{},"canvas_seq":{},"voice_status":"{}"}}"#,
+                r#"{{"version":"0.64.0","uptime_ms":{},"requests":{},"tool_calls":{},"memory_entries":{},"skills":{},"cron_jobs":{},"sub_agents":{},"telegram":{},"whatsapp":{},"canvas_seq":{},"voice_status":"{}"}}"#,
                 now_ms() - s.uptime_start,
                 s.request_count,
                 s.tool_call_count,

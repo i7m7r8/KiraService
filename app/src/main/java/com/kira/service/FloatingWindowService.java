@@ -54,6 +54,14 @@ public class FloatingWindowService extends Service {
         wm      = (WindowManager) getSystemService(WINDOW_SERVICE);
         handler = new Handler(Looper.getMainLooper());
         ai      = new KiraAI(this);
+        // Ensure Rust STATE has the API key before the user sends any message.
+        // Without this, the first chat from the floating bubble always hits the
+        // no_api_key path because FloatingWindowService never called syncConfig.
+        try {
+            com.kira.service.ai.KiraConfig cfg =
+                com.kira.service.ai.KiraConfig.load(this);
+            cfg.save(this); // internally calls RustBridge.syncConfig(...)
+        } catch (Throwable ignored) {}
         startForegroundCompat();
         buildBubble();
     }

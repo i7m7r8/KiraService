@@ -279,6 +279,10 @@ public class KiraAI {
                                 cb.onPartial(partial);
                                 lastPartial  = partial;
                                 lastPartialMs = now;
+                                // Emit to ACP bus so Rust-side listeners get the delta
+                                try {
+                                    RustBridge.emitTextDelta("default", contentDelta);
+                                } catch (Throwable ignored) {}
                             }
                         }
                     }
@@ -414,14 +418,32 @@ public class KiraAI {
                 if ("no_api_key".equals(err)) {
                     KiraConfig cfg = KiraConfig.load(ctx);
                     if (cfg.apiKey != null && !cfg.apiKey.isEmpty()) {
-                        // Sync config to Rust and retry
+                        // Sync config to Rust and retry getChatContext directly.
+                        // Do NOT call buildFallbackContext here — it would push the user
+                        // turn a second time if getChatContext is still called inside it.
                         try { cfg.save(ctx); } catch (Throwable ignored2) {}
-                        // Rebuild request with loaded config
-                        requestJson = buildFallbackContext(userMessage);
+                        // Retry: Rust now has the key, so getChatContext will push the
+                        // turn exactly once and return the full context with tools + history.
+                        try {
+                            requestJson = RustBridge.getChatContext(userMessage);
+                            JSONObject retryCheck = new JSONObject(requestJson);
+                            if (retryCheck.has("error")) {
+                                // getChatContext still failing — use plain fallback (no Rust push)
+                                requestJson = buildFallbackContext(userMessage);
+                            }
+                        } catch (Throwable e2) {
+                            requestJson = buildFallbackContext(userMessage);
+                        }
                         if (requestJson == null) {
                             if (cb != null) cb.onError("No API key - go to Settings");
                             return null;
                         }
+                        // CRITICAL: re-parse j from the updated requestJson so the
+                        // base_url fixup below operates on the NEW valid JSON, not the
+                        // stale {"error":"no_api_key"} object. Without this, j.toString()
+                        // overwrites requestJson with the error JSON (no "messages" key)
+                        // and callLlmStreaming fires "No messages in request".
+                        try { j = new JSONObject(requestJson); } catch (Exception ignored3) { return requestJson; }
                     } else {
                         if (cb != null) cb.onError("No API key - go to Settings");
                         return null;
@@ -431,11 +453,12 @@ public class KiraAI {
                     return null;
                 }
             }
-            // Validate base_url before returning
+            // Validate base_url: only patch if clearly wrong, use string replace not j.toString()
+            // j.toString() can corrupt large nested JSON (tools schema), so avoid it
             String baseUrl = j.optString("base_url", "");
             if (baseUrl.isEmpty() || (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))) {
-                j.put("base_url", "https://api.groq.com/openai/v1");
-                requestJson = j.toString();
+                // Safe string-level patch: replace the base_url value without re-serializing
+                requestJson = patchJsonString(requestJson, "base_url", "https://api.groq.com/openai/v1");
             }
         } catch (Exception ignored) {}
         return requestJson;
@@ -588,7 +611,35 @@ public class KiraAI {
         return "{\"done\":true,\"reply\":\"Done.\",\"tools_used\":\"[]\"}";
     }
 
+    /** Safely patch a string field in a JSON object without re-serializing the whole object. */
+    private static String patchJsonString(String json, String key, String newValue) {
+        // Find "key":"value" and replace the value part
+        String searchKey = "\"" + key + "\":\"";
+        int start = json.indexOf(searchKey);
+        if (start < 0) {
+            // Key not present - insert before the last }
+            int last = json.lastIndexOf('}');
+            if (last < 0) return json;
+            boolean hasFields = json.indexOf(':') >= 0;
+            String insert = (hasFields ? "," : "") + "\"" + key + "\":\"" + newValue + "\"";
+            return json.substring(0, last) + insert + "}";
+        }
+        int valueStart = start + searchKey.length();
+        // Find the closing quote (skip escaped quotes)
+        int valueEnd = valueStart;
+        while (valueEnd < json.length()) {
+            char c = json.charAt(valueEnd);
+            if (c == '\\') { valueEnd += 2; continue; }
+            if (c == '"') break;
+            valueEnd++;
+        }
+        return json.substring(0, valueStart) + newValue + json.substring(valueEnd);
+    }
+
     private String buildFallbackContext(String msg) {
+        // NOTE: This method must NOT call RustBridge.getChatContext() — doing so would
+        // push the user turn into Rust history a second time (double-push bug).
+        // It is only called when Rust is unavailable or has no API key yet.
         try {
             KiraConfig cfg = KiraConfig.load(ctx);
             if (cfg.apiKey == null || cfg.apiKey.isEmpty()) return null;
@@ -601,19 +652,12 @@ public class KiraAI {
             JSONArray messages = new JSONArray();
             messages.put(new JSONObject().put("role","system").put("content", persona));
             messages.put(new JSONObject().put("role","user").put("content", msg));
-            // Try to get tools schema from Rust if available
-            JSONObject result = new JSONObject()
-                .put("api_key", cfg.apiKey).put("base_url", base)
-                .put("model", model).put("messages", messages);
-            try {
-                // Get full context from Rust if possible (has tools + history)
-                String rustCtx = RustBridge.getChatContext(msg);
-                if (rustCtx != null && !rustCtx.isEmpty()) {
-                    JSONObject rustJ = new JSONObject(rustCtx);
-                    if (!rustJ.has("error")) return rustCtx;
-                }
-            } catch (Throwable ignored) {}
-            return result.toString();
+            return new JSONObject()
+                .put("api_key", cfg.apiKey)
+                .put("base_url", base)
+                .put("model", model)
+                .put("messages", messages)
+                .toString();
         } catch (Exception e) { return null; }
     }
 

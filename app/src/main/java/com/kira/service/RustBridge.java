@@ -157,6 +157,12 @@ public class RustBridge {
     public static native void   postShellResult(String jobId, String stdout);
     public static native String resolveShellResults(String messagesJson);
 
+    // === Session 1: ACP event bus ===
+    /** Poll and consume ACP events for a session. Returns JSON array of AcpEvent. */
+    public static native String pollEvents(String sessionId);
+    /** Emit a text delta directly to the ACP bus (used by streaming path). */
+    public static native void   emitTextDelta(String sessionId, String delta);
+
     // ── Session E: Agent + Chain ─────────────────────────────
     public static native String agentSync(String goal, int maxSteps, String session);
     public static native String chainSync(String goal, int depth);

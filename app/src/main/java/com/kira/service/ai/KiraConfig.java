@@ -9,7 +9,7 @@ import android.content.SharedPreferences;
  */
 public class KiraConfig {
     private static final String PREFS   = "kira_config";
-    private static final int    VERSION = 6; // v6: stricter api_key validation - reject encrypted garbage
+    private static final int    VERSION = 6; // v6: strict api_key validation (v64)
 
     public String  userName          = "User";
     public String  apiKey            = "";

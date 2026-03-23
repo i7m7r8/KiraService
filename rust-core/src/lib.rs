@@ -1,7 +1,7 @@
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// kira-core  v56  —  Session 1: OpenClaw module split
+// kira-core  v56   -   Session 1: OpenClaw module split
 //
-// Module tree (all new — created in Session 1):
+// Module tree (all new  -  created in Session 1):
 //   ai/          AI loop, ReAct runner, tool registry, sub-agents, compaction
 //   channels/    Messaging adapters (Telegram, WhatsApp, …)
 //   memory/      Vector memory store, cosine similarity, MMR re-ranking
@@ -12,7 +12,7 @@
 //   automation/  Macro/trigger/profile engine (reserved; logic still in lib.rs)
 //
 // Each module is a skeleton today; future sessions fill in the logic.
-// All existing functionality in lib.rs is 100% preserved — nothing removed.
+// All existing functionality in lib.rs is 100% preserved  -  nothing removed.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 pub mod ai;
@@ -719,26 +719,26 @@ impl ThemeConfig {
     /// Design language: "Warm Intelligence"
     ///
     /// Core insight: most AI dark themes use cold blue/teal which feels sterile.
-    /// Aether uses a warm indigo-purple primary — premium, approachable, distinct.
+    /// Aether uses a warm indigo-purple primary  -  premium, approachable, distinct.
     ///
     /// Palette:
-    ///   Primary:      #7C6AF6  Aether violet — vibrant but not neon
-    ///   On-primary:   #FFFFFF  Pure white — maximum legibility
-    ///   Secondary:    #C792EA  Soft lavender — complement, not compete
+    ///   Primary:      #7C6AF6  Aether violet  -  vibrant but not neon
+    ///   On-primary:   #FFFFFF  Pure white  -  maximum legibility
+    ///   Secondary:    #C792EA  Soft lavender  -  complement, not compete
     ///   On-secondary: #1A0030  Deep purple on lavender
-    ///   Tertiary:     #FFD166  Warm gold — energy, highlights, badges
+    ///   Tertiary:     #FFD166  Warm gold  -  energy, highlights, badges
     ///   On-tertiary:  #2C1A00  Deep brown on gold
     ///   BG:           #0F0E17  Near-black with warm purple undertone
-    ///   Surface 0:    #14131E  Warm dark surface — base
+    ///   Surface 0:    #14131E  Warm dark surface  -  base
     ///   Surface 2:    #1C1B2A  Nav rail, drawer (+2 tonal)
     ///   Surface 3:    #201F30  App bar (+3 tonal)
     ///   Surface 5:    #272539  Dialogs, menus (+5 tonal)
     ///   Card:         #1C1B2A  = Surface 2 for cards
-    ///   On-surface:   #E8E3FF  Warm white — subtle purple tint, reduces harshness
+    ///   On-surface:   #E8E3FF  Warm white  -  subtle purple tint, reduces harshness
     ///   Surface-var:  #2D2B45  Elevated surface variant (bottom sheets)
     ///   Outline:      #4E4B6E  Subtle warm-purple border
     ///   Outline-var:  #2A2840  Barely-visible dividers
-    ///   Error:        #FF6B80  Warm rose — friendlier than pure red
+    ///   Error:        #FF6B80  Warm rose  -  friendlier than pure red
     ///   Success:      #58D68D  Mint green
     ///   Warning:      #FFD166  = Tertiary (gold doubles as warning)
     ///   Scrim:        #CC0F0E17 Semi-transparent bg
@@ -753,7 +753,7 @@ impl ThemeConfig {
             secondary_color:  0xFFC792EA, // Soft lavender
             on_secondary:     0xFF1A0030, // Deep purple text on lavender
             // ── Tertiary / highlights ─────────────────────────────────────────
-            tertiary_color:   0xFFFFD166, // Warm gold — badges, highlights
+            tertiary_color:   0xFFFFD166, // Warm gold  -  badges, highlights
             on_tertiary:      0xFF2C1A00, // Deep brown on gold
             // ── Backgrounds & surfaces ────────────────────────────────────────
             bg_color:         0xFF0F0E17, // Near-black, warm purple undertone
@@ -764,7 +764,7 @@ impl ThemeConfig {
             card_color:       0xFF1C1B2A, // Card = surface2
             surface_var_color:0xFF2D2B45, // Bottom sheets, elevated panels
             // ── On-surface text ───────────────────────────────────────────────
-            on_surface_color: 0xFFE8E3FF, // Warm white — purple tint reduces harshness
+            on_surface_color: 0xFFE8E3FF, // Warm white  -  purple tint reduces harshness
             muted_color:      0xFF8A84B3, // Muted secondary text / icons
             // ── Borders ───────────────────────────────────────────────────────
             outline_color:    0xFF4E4B6E, // Visible borders
@@ -775,7 +775,7 @@ impl ThemeConfig {
             warning_color:    0xFFFFD166, // Gold warning (= tertiary)
             // ── Overlays ──────────────────────────────────────────────────────
             scrim_color:      0xCC0F0E17, // Modal backdrop
-            ripple_color:     0x1F7C6AF6, // Touch ripple — tinted violet
+            ripple_color:     0x1F7C6AF6, // Touch ripple  -  tinted violet
             // ── Shape / corner radii (Material 3 spec) ────────────────────────
             corner_radius_sm: 8,          // Chip, badge, small fab
             corner_radius_md: 16,         // Card, button, text field
@@ -806,7 +806,7 @@ impl ThemeConfig {
     ///   Primary:    #5B4BE0  Deeper violet (accessible on white)
     ///   Secondary:  #7B59C0  Mid-purple secondary
     ///   Tertiary:   #D4900A  Warm amber (gold darkened for light surface)
-    ///   BG:         #FAFAFF  Warm white — subtle violet tint, not harsh
+    ///   BG:         #FAFAFF  Warm white  -  subtle violet tint, not harsh
     ///   Surface 0:  #FFFFFF  Pure white cards
     ///   Surface 2:  #F0EEFF  Tinted nav rail
     ///   Surface 3:  #EAE7FF  App bar tint
@@ -856,14 +856,14 @@ impl ThemeConfig {
         }
     }
 
-    /// ── Catppuccin Mocha — "Mocha Lens" ─────────────────────────────────────
+    /// ── Catppuccin Mocha  -  "Mocha Lens" ─────────────────────────────────────
     /// Warm dark, soft glass, pastel accents. Official Catppuccin Mocha palette.
     /// Primary:   Lavender #B4BEFE  Secondary: Mauve #CBA6F7
     /// Tertiary:  Peach    #FAB387  Success:   Green #A6E3A1
     /// Error:     Pink     #F38BA8  Warning:   Peach #FAB387
     /// BG:        Crust    #11111B  Surface:   Base  #1E1E2E
     /// Text:      #CDD6F4           Muted:     #9399B2
-    /// Catppuccin Mocha — default Kira theme
+    /// Catppuccin Mocha  -  default Kira theme
     fn catppuccin_mocha() -> Self {
         ThemeConfig {
             accent_color:     0xFFB4BEFE, // Lavender
@@ -1829,7 +1829,7 @@ fn action_to_json(a: &MacroAction) -> String {
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session D — AI engine helpers (called by /ai/chat route)
+// Session D  -  AI engine helpers (called by /ai/chat route)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// Shell job queued for Java to execute via Shizuku
@@ -1859,7 +1859,7 @@ pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
         else { format!("\n\nSession variables:\n{}", vars.join("\n")) }
     };
 
-    // Live device snapshot — injected so Kira never needs to guess basics
+    // Live device snapshot  -  injected so Kira never needs to guess basics
     let device_snapshot = format!(
         "Battery: {}%{}  |  WiFi: {}  |  Foreground app: {}  |  Notifications: {}",
         state.battery_pct,
@@ -1881,7 +1881,7 @@ pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
         4. For web questions → call web_search with your query.\n\
         5. For opening apps → call open_app with the package name.\n\
         6. To remember something → call add_memory.\n\
-        7. Tools are available as function calls — use them freely and proactively.\n\
+        7. Tools are available as function calls  -  use them freely and proactively.\n\
         8. Respond in the same language the user writes in.\n\n\
         Long-term memory:\n{memory}{vars}",
         persona = persona,
@@ -1919,7 +1919,7 @@ pub fn call_llm_sync(
         esc(model), messages_json
     );
 
-    // Sanitize base_url — reject binary garbage, fall back to Groq
+    // Sanitize base_url  -  reject binary garbage, fall back to Groq
     let fallback = "https://api.groq.com/openai/v1";
     let safe_url: &str = if base_url.is_ascii()
         && (base_url.starts_with("http://") || base_url.starts_with("https://"))
@@ -1930,7 +1930,7 @@ pub fn call_llm_sync(
     let (host, port, base_path) = parse_api_url(url_clean)?;
     let path = format!("{}/chat/completions", base_path.trim_end_matches('/'));
 
-    // Use rustls HTTPS (Session K) — pure Rust, no Java round-trip needed
+    // Use rustls HTTPS (Session K)  -  pure Rust, no Java round-trip needed
     // Falls back to plain TCP for http:// endpoints (e.g. localhost, LAN providers)
     let response_body = if port == 443 || base_url.starts_with("https://") {
         https_post(&host, port, &path, &body, api_key, 60)?
@@ -1944,11 +1944,6 @@ pub fn call_llm_sync(
             .map_err(|e| e.to_string())?;
         let request = format!(
             "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-            path_owned, host_owned, auth_owned, body_owned.len(), body_owned
-Content-Length: {}
-Connection: close
-
-{}",
             path, host, api_key, body.len(), body
         );
         stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
@@ -1980,7 +1975,7 @@ fn parse_api_url(url: &str) -> Result<(String, u16, String), String> {
     } else if url.starts_with("http://") {
         ("http", &url[7..])
     } else {
-        // Corrupt URL (likely old encrypted data) — silently use Groq default
+        // Corrupt URL (likely old encrypted data)  -  silently use Groq default
         return parse_api_url("https://api.groq.com/openai/v1");
     };
     let (host_port, path) = match rest.find('/') {
@@ -2016,7 +2011,7 @@ fn extract_llm_content(json: &str) -> Option<String> {
             if bytes[end] == b'"' && (end == 0 || bytes[end-1] != b'\\') { break; }
             end += 1;
         }
-        // Return Some even for empty string — empty content is a valid response
+        // Return Some even for empty string  -  empty content is a valid response
         Some(unescape(&json[start..end]))
     }
 
@@ -2118,7 +2113,7 @@ pub fn clean_reply(text: &str) -> String {
     out.trim().to_string()
 }
 
-/// Dispatch a tool call — pure Rust tools execute here,
+/// Dispatch a tool call  -  pure Rust tools execute here,
 /// Shizuku/intent tools are queued for Java via /shell/next
 pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,String>) -> String {
     match name {
@@ -2243,7 +2238,7 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
             match std::fs::read_to_string(&path) {
                 Ok(content) => {
                     if content.len() > 8000 {
-                        format!("{}...\n[truncated — file is {} bytes]", &content[..8000], content.len())
+                        format!("{}...\n[truncated  -  file is {} bytes]", &content[..8000], content.len())
                     } else { content }
                 }
                 Err(e) => format!("error reading {}: {}", path, e),
@@ -2351,7 +2346,7 @@ fn dispatch_http_get(url: &str) -> String {
         let path_c = path.clone();
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
             https_get(&host_c, port, &path_c, 20)
-        })).unwrap_or_else(|_| Err("TLS error — try again".to_string()))
+        })).unwrap_or_else(|_| Err("TLS error  -  try again".to_string()))
     } else {
         // Plain HTTP
         use std::io::{Write, BufRead, BufReader};
@@ -2443,7 +2438,7 @@ fn strip_html(html: &str) -> String {
 pub fn build_llm_request_json(state: &KiraState) -> String {
     let cfg = &state.config;
     let persona = if cfg.persona.is_empty() {
-        "You are Kira, a smart AI assistant running on Android. You have tools to check real device information and take actions. Always use tools to get real data — never guess or make up information.".to_string()
+        "You are Kira, a smart AI assistant running on Android. You have tools to check real device information and take actions. Always use tools to get real data  -  never guess or make up information.".to_string()
     } else {
         cfg.persona.clone()
     };
@@ -2508,7 +2503,7 @@ mod jni_bridge {
         if p.is_null() { return String::new(); }
         let s = unsafe { CStr::from_ptr(p).to_string_lossy().into_owned() };
         if s.len() > max_len {
-            // Truncate rather than reject — avoids Java crash on oversized input
+            // Truncate rather than reject  -  avoids Java crash on oversized input
             return s[..max_len].to_string();
         }
         s
@@ -2847,7 +2842,7 @@ mod jni_bridge {
         heartbeat:i32, setup_done:bool,
     ) {
         let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        // Only overwrite non-empty values — prevents cold-start race where
+        // Only overwrite non-empty values  -  prevents cold-start race where
         // Java reads prefs before Rust has loaded and wipes the stored key.
         let v_user   = cs(user_name);
         let v_key    = cs(api_key);
@@ -3087,7 +3082,7 @@ mod jni_bridge {
         let sess_id = s.active_session.clone();
         s.total_tokens += tokens as u64;
         s.daily_log.push_back(format!("[{}] {}: {}", ts, role, &content[..content.len().min(80)]));
-        // Also push compressed copy (Session B) — for memory-efficient context loading
+        // Also push compressed copy (Session B)  -  for memory-efficient context loading
         push_turn_compressed(&mut s, &role, &content);
         s.context_turns.push_back(ContextTurn { role, content, ts, tokens, session:sess_id });
         if s.context_turns.len() > 60 { compact_context(&mut s); }
@@ -3698,12 +3693,12 @@ Context: {}",
         sha256: *const c_char,
     ) -> JString {
         let (path, sha) = (cs(path), cs(sha256));
-        // SECURITY: Validate APK path — must end with .apk, no path traversal
+        // SECURITY: Validate APK path  -  must end with .apk, no path traversal
         // Android getCacheDir() returns /data/user/0/<pkg>/cache/ or /data/data/<pkg>/cache/
         let path_ok = path.ends_with(".apk")
             && !path.contains("..")
             && !path.contains("//")
-            && path.starts_with("/");  // must be absolute — allows all valid Android paths
+            && path.starts_with("/");  // must be absolute  -  allows all valid Android paths
         if !path_ok {
             return unsafe { jni_str(env, r#"{"ok":false,"error":"invalid_apk_path"}"#) };
         }
@@ -3867,7 +3862,7 @@ Context: {}",
 
         // ── Session D: AI chat JNI + shell queue exports ─────────────────────────
 
-    /// Single-call AI chat — replaces KiraAI.java entirely.
+    /// Single-call AI chat  -  replaces KiraAI.java entirely.
     /// Java calls this from a background thread; blocks until reply is ready.
     /// Returns JSON: {"role":"assistant","content":"..","tools_used":["x"],"done":true}
     #[no_mangle]
@@ -3883,7 +3878,7 @@ Context: {}",
             r#"{{"message":"{}","session":"{}","max_tool_steps":{}}}"#,
             esc(&msg), esc(&sess), max_tool_steps
         );
-        // Reuse the HTTP route handler — same logic, no code duplication
+        // Reuse the HTTP route handler  -  same logic, no code duplication
         let result = route_http("POST", "/ai/chat", &body);
         unsafe { jni_str(env, &result) }
     }
@@ -4027,7 +4022,7 @@ Context: {}",
 
     // ── Session 14: Notification intelligence JNI ────────────────────────────
 
-    /// Java calls this for each notification — already handled by signalNotif
+    /// Java calls this for each notification  -  already handled by signalNotif
     /// This version carries more metadata for proactive AI
     #[no_mangle]
     pub extern "C" fn Java_com_kira_service_RustBridge_onNotification(
@@ -4089,7 +4084,7 @@ fn run_http(port: u16) {
     for stream in listener.incoming().flatten() { thread::spawn(|| handle_http(stream)); }
 }
 
-/// Lock STATE recovering from poison — if a thread panicked while holding the
+/// Lock STATE recovering from poison  -  if a thread panicked while holding the
 /// lock, we recover the state rather than panicking the HTTP thread too.
 #[allow(unused_macros)]
 macro_rules! state_lock {
@@ -4169,13 +4164,13 @@ fn check_auth(token: Option<&str>) -> bool {
             let tb = t.as_bytes();
             let sb = secret.as_bytes();
             if tb.len() != sb.len() { return false; }
-            // fold XOR — result is 0 only if every byte matches
+            // fold XOR  -  result is 0 only if every byte matches
             tb.iter().zip(sb.iter()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
         }
     }
 }
 
-/// Entry point called by handle_http — wraps route_http with auth check.
+/// Entry point called by handle_http  -  wraps route_http with auth check.
 fn route_http_with_raw(method: &str, path: &str, body: &str, raw_req: &str) -> String {
     let path_clean = path.split('?').next().unwrap_or(path);
     if requires_auth(path_clean) {
@@ -4197,7 +4192,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
     let path_clean = path.split('?').next().unwrap_or(path);
     match (method, path_clean) {
         // Health & stats
-        // Auth management (localhost only — sets the shared secret)
+        // Auth management (localhost only  -  sets the shared secret)
         ("POST", "/auth/set_secret") => {
             let secret = extract_json_str(body, "secret").unwrap_or_default();
             if secret.len() >= 16 {
@@ -4209,7 +4204,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         }
         ("DELETE", "/auth/secret") => {
             STATE.lock().unwrap_or_else(|e| e.into_inner()).http_secret = String::new();
-            r#"{"ok":true,"warning":"auth disabled — all endpoints open"}"#.to_string()
+            r#"{"ok":true,"warning":"auth disabled  -  all endpoints open"}"#.to_string()
         }
 
         ("GET", "/health") | ("GET", "/status") => {
@@ -4293,7 +4288,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             s.theme.activity_level = (tools_recent as f32 / 10.0).min(1.0);
             s.theme.to_json()
         }
-        // GET /layer0 — full Layer 0 star field animation state
+        // GET /layer0  -  full Layer 0 star field animation state
         // Polled by GalaxyView every 500ms to drive the living canvas.
         // Returns: phase(0-1, 3s period), bpm, activity(0-1), thinking,
         //          hue_shift(-12 to +12 degrees, sine-driven),
@@ -4342,7 +4337,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
                 (tools_recent as f32 / 10.0).min(1.0),
                 s.theme.is_thinking)
         }
-        // POST /theme/thinking {"active":true}  — set thinking state
+        // POST /theme/thinking {"active":true}   -  set thinking state
         ("POST", "/theme/thinking")     => {
             let active = body.contains(r#""active":true"#);
             STATE.lock().unwrap_or_else(|e| e.into_inner()).theme.is_thinking = active;
@@ -4351,7 +4346,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
 
         // ── Layer 5: Settings page Rust endpoints ─────────────────────────────
 
-        // GET /settings/health — compact health summary for settings page header
+        // GET /settings/health  -  compact health summary for settings page header
         // Returns: {shizuku, setup, api_key_set, model, automation_count, memory_count,
         //           uptime_ms, tool_calls, pulse_bpm, activity}
         ("GET",  "/settings/health") => {
@@ -4374,16 +4369,16 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             )
         }
 
-        // GET /settings/shizuku — Shizuku status with Layer 5 border color token
+        // GET /settings/shizuku  -  Shizuku status with Layer 5 border color token
         // Returns: {installed, running, permission, border_color, border_name, pulse}
         ("GET",  "/settings/shizuku") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let (border_color, border_name) = if s.shizuku.permission_granted {
-                (0xFFB4BEFEu32, "lavender")   // god mode — Lavender
+                (0xFFB4BEFEu32, "lavender")   // god mode  -  Lavender
             } else if s.shizuku.installed {
-                (0xFFFAB387u32, "peach")      // partial — Peach
+                (0xFFFAB387u32, "peach")      // partial  -  Peach
             } else {
-                (0xFFF38BA8u32, "pink")       // absent  — Pink
+                (0xFFF38BA8u32, "pink")       // absent   -  Pink
             };
             format!(
                 r#"{{"installed":{},"running":{},"permission":{},"border_color":{},"border_name":"{}","pulse_ms":1500}}"#,
@@ -4393,7 +4388,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             )
         }
 
-        // POST /settings/row_tap {"row":"api_key"} — log a settings row tap
+        // POST /settings/row_tap {"row":"api_key"}  -  log a settings row tap
         // Used by UI to record which settings the user accesses most often
         ("POST", "/settings/row_tap") => {
             let row = extract_json_str(body, "row").unwrap_or_default();
@@ -4407,7 +4402,7 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /settings/sections — section visibility state for header underline
+        // GET /settings/sections  -  section visibility state for header underline
         // Returns ordered list of section names with their Lavender animate flag
         ("GET",  "/settings/sections") => {
             let sections = vec![
@@ -4421,12 +4416,12 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             format!(r#"{{"sections":[{}]}}"#, items.join(","))
         }
 
-        // POST /theme/flash {"dark":true}  — record theme switch for analytics
+        // POST /theme/flash {"dark":true}   -  record theme switch for analytics
         // ── Crash reporting endpoints ─────────────────────────────────────────
 
         // POST /crash {"thread":"..","trace":"..","ts":1234}
         // Called by KiraApp crash handler to persist crashes in Rust memory
-        // GET /memory/compression — LZ4 compression stats (Session B)
+        // GET /memory/compression  -  LZ4 compression stats (Session B)
         ("GET",  "/memory/compression") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let raw_bytes: usize = s.context_turns.iter()
@@ -4447,11 +4442,11 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session D — AI Chat engine (replaces KiraAI.java)
+        // Session D  -  AI Chat engine (replaces KiraAI.java)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session E — Agent + Chain endpoints (replaces KiraAgent.java + KiraChain.java)
+        // Session E  -  Agent + Chain endpoints (replaces KiraAgent.java + KiraChain.java)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         // POST /ai/agent
@@ -4506,7 +4501,7 @@ You are executing a multi-step task autonomously.
             let mut final_summary = String::new();
             let mut success = false;
 
-            // Agent context — separate from chat history
+            // Agent context  -  separate from chat history
             let mut agent_ctx: Vec<(String, String)> = Vec::new();
             agent_ctx.push(("user".into(), format!("Task: {}", goal)));
 
@@ -4547,7 +4542,7 @@ You are executing a multi-step task autonomously.
                 // Extract + execute tool calls
                 let calls = parse_tool_calls(&resp);
                 if calls.is_empty() {
-                    // No tool call — treat as final answer if we have content
+                    // No tool call  -  treat as final answer if we have content
                     if !clean.is_empty() {
                         final_summary = clean;
                         success = true;
@@ -4651,7 +4646,7 @@ You are executing a multi-step task autonomously.
                 steps_json, esc(&conclusion), reasoning.len())
         }
 
-        // GET /ai/agent/status — current running agent task
+        // GET /ai/agent/status  -  current running agent task
         ("GET",  "/ai/agent/status") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.agent_tasks.back() {
@@ -4663,7 +4658,7 @@ You are executing a multi-step task autonomously.
             }
         }
 
-        // POST /ai/agent/stop — cancel running agent
+        // POST /ai/agent/stop  -  cancel running agent
         ("POST", "/ai/agent/stop") => {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.theme.is_thinking = false;
@@ -4691,7 +4686,7 @@ You are executing a multi-step task autonomously.
                 let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 let cfg = &s.config;
                 let persona = if cfg.persona.is_empty() {
-                    "You are Kira, a smart AI assistant on Android. Always use tools to get real data — never guess or make up information.".to_string()
+                    "You are Kira, a smart AI assistant on Android. Always use tools to get real data  -  never guess or make up information.".to_string()
                 } else { cfg.persona.clone() };
                 let sys = build_system_prompt(&s, &persona);
                 (cfg.api_key.clone(), cfg.base_url.clone(), cfg.model.clone(),
@@ -4699,7 +4694,7 @@ You are executing a multi-step task autonomously.
             };
 
             if api_key.is_empty() {
-                return r#"{"error":"no API key — go to settings and add one","done":true}"#.to_string();
+                return r#"{"error":"no API key  -  go to settings and add one","done":true}"#.to_string();
             }
             // Validate and auto-heal corrupt base_url from old encrypted storage
             let base_url = if base_url.is_ascii()
@@ -4799,7 +4794,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // GET /ai/history — current compressed context as readable JSON
+        // GET /ai/history  -  current compressed context as readable JSON
         ("GET",  "/ai/history") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let turns = decompress_context(&s);
@@ -4810,7 +4805,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"count":{},"turns":[{}]}}"#, items.len(), items.join(","))
         }
 
-        // DELETE /ai/history — clear conversation context
+        // DELETE /ai/history  -  clear conversation context
         ("DELETE", "/ai/history") | ("POST", "/ai/history/clear") => {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.context_turns.clear();
@@ -4819,7 +4814,7 @@ You are executing a multi-step task autonomously.
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session H — Macro loop (replaces KiraWatcher.java logic)
+        // Session H  -  Macro loop (replaces KiraWatcher.java logic)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
         // POST /macro/tick
@@ -4945,7 +4940,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"ok":true,"fired":{},"ts":{}}}"#, fired, now)
         }
 
-        // GET /macro/pending_results — results queued for Java to dispatch
+        // GET /macro/pending_results  -  results queued for Java to dispatch
         // Java polls this for completed macro actions requiring Android intents
         ("GET",  "/macro/pending_results") => {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -4962,10 +4957,10 @@ You are executing a multi-step task autonomously.
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session F — Telegram (replaces KiraTelegram.java)
+        // Session F  -  Telegram (replaces KiraTelegram.java)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        // POST /telegram/incoming — called by Java after polling getUpdates
+        // POST /telegram/incoming  -  called by Java after polling getUpdates
         // body: {"update_id":123,"chat_id":456,"user":"name","text":"hello"}
         // Rust processes message through AI and queues reply for Java to send
         ("POST", "/telegram/incoming") => {
@@ -5015,7 +5010,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"ok":true,"reply":"{}"}}"#, esc(&reply))
         }
 
-        // GET /telegram/next_send — Java polls for messages to send
+        // GET /telegram/next_send  -  Java polls for messages to send
         ("GET",  "/telegram/next_send") => {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.tg_pending_sends.pop_front() {
@@ -5026,13 +5021,13 @@ You are executing a multi-step task autonomously.
             }
         }
 
-        // GET /telegram/last_update_id — Java uses this for getUpdates offset
+        // GET /telegram/last_update_id  -  Java uses this for getUpdates offset
         ("GET",  "/telegram/last_update_id") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!(r#"{{"update_id":{}}}"#, s.tg_last_update_id)
         }
 
-        // GET /telegram/log — last received messages
+        // GET /telegram/log  -  last received messages
         ("GET",  "/telegram/log") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.tg_message_log.iter().rev().take(20).map(|m|
@@ -5043,10 +5038,10 @@ You are executing a multi-step task autonomously.
         }
 
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        // Session J — Setup wizard data from Rust (reduces SetupActivity hardcoding)
+        // Session J  -  Setup wizard data from Rust (reduces SetupActivity hardcoding)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        // GET /setup/providers — list of AI providers with base URLs + models
+        // GET /setup/providers  -  list of AI providers with base URLs + models
         // SetupActivity calls this instead of hardcoding the list
         ("GET",  "/setup/providers") => {
             r#"[
@@ -5059,7 +5054,7 @@ You are executing a multi-step task autonomously.
             ]"#.to_string()
         }
 
-        // POST /setup/validate — validate API key format + test connection
+        // POST /setup/validate  -  validate API key format + test connection
         // body: {"provider":"groq","api_key":"gsk_...","model":"llama-3.1-8b-instant"}
         ("POST", "/setup/validate") => {
             let provider = extract_json_str(body, "provider").unwrap_or_default();
@@ -5088,13 +5083,13 @@ You are executing a multi-step task autonomously.
                 return format!(r#"{{"valid":false,"error":"{}"}}"#, hint);
             }
 
-            // Quick syntax validation passed — mark as valid
+            // Quick syntax validation passed  -  mark as valid
             // (actual connection test done by Java to avoid blocking)
             format!(r#"{{"valid":true,"provider":"{}","model":"{}","hint":"Format valid. Tap Next to continue."}}"#,
                 esc(&provider), esc(&model))
         }
 
-        // GET /setup/status — current setup completion state
+        // GET /setup/status  -  current setup completion state
         ("GET",  "/setup/status") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             format!(r#"{{"setup_done":{},"has_api_key":{},"provider":"{}","model":"{}","user_name":"{}"}}"#,
@@ -5132,14 +5127,14 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"ok":{},"plaintext":"{}"}}"#, ok, esc(&plain))
         }
 
-        // GET /crypto/status — reports encryption availability
+        // GET /crypto/status  -  reports encryption availability
         ("GET",  "/crypto/status") => {
             r#"{"available":true,"algorithm":"AES-256-GCM","key_derivation":"derive_aes_key(ANDROID_ID:pkg)","nonce":"domain-derived-12-byte","tag_bits":128}"#.to_string()
         }
 
                 // ── Session L: Security audit endpoint ───────────────────────────────────
 
-        // GET /security/audit — reports current security posture
+        // GET /security/audit  -  reports current security posture
         ("GET",  "/security/audit") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let has_secret  = !s.http_secret.is_empty();
@@ -5153,7 +5148,7 @@ You are executing a multi-step task autonomously.
                 has_secret, has_api_key, key_encrypted, shizuku_ok)
         }
 
-        // POST /security/rotate_secret — generate and set a new random HTTP secret
+        // POST /security/rotate_secret  -  generate and set a new random HTTP secret
         ("POST", "/security/rotate_secret") => {
             // Derive new secret from current time + existing key material
             let new_secret = {
@@ -5163,7 +5158,7 @@ You are executing a multi-step task autonomously.
                 k.iter().map(|b| format!("{:02x}", b)).collect::<String>()[..32].to_string()
             };
             STATE.lock().unwrap_or_else(|e| e.into_inner()).http_secret = new_secret.clone();
-            format!(r#"{{"ok":true,"new_secret":"{}","note":"store this — required for all future API calls"}}"#,
+            format!(r#"{{"ok":true,"new_secret":"{}","note":"store this  -  required for all future API calls"}}"#,
                 &new_secret)
         }
 
@@ -5185,7 +5180,7 @@ You are executing a multi-step task autonomously.
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /crash/log — returns all stored crash entries as JSON array
+        // GET /crash/log  -  returns all stored crash entries as JSON array
         ("GET",  "/crash/log") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.crash_log.iter().map(|c| {
@@ -5198,13 +5193,13 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"count":{},"crashes":[{}]}}"#, items.len(), items.join(","))
         }
 
-        // POST /crash/clear — wipe the crash log
+        // POST /crash/clear  -  wipe the crash log
         ("POST", "/crash/clear") => {
             STATE.lock().unwrap_or_else(|e| e.into_inner()).crash_log.clear();
             r#"{"ok":true,"cleared":true}"#.to_string()
         }
 
-        // GET /crash/latest — just the most recent crash (fast poll)
+        // GET /crash/latest  -  just the most recent crash (fast poll)
         ("GET",  "/crash/latest") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             match s.crash_log.back() {
@@ -5221,7 +5216,7 @@ You are executing a multi-step task autonomously.
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /settings/automation/summary — automation engine summary for settings card
+        // GET /settings/automation/summary  -  automation engine summary for settings card
         ("GET",  "/settings/automation/summary") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let enabled = s.macros.iter().filter(|m| m.enabled).count();
@@ -5238,9 +5233,9 @@ You are executing a multi-step task autonomously.
         }
 
 
-        // ── Layer 5: Settings Page — Rust-backed endpoints ──────────────────────
+        // ── Layer 5: Settings Page  -  Rust-backed endpoints ──────────────────────
 
-        // GET /settings/counters — live counter values for CounterAnimator
+        // GET /settings/counters  -  live counter values for CounterAnimator
         // Returns numbers that the UI animates from old→new over 600ms EaseOut.
         ("GET", "/settings/counters") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -5262,7 +5257,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // GET /settings/activity — activity stream for last 20 events
+        // GET /settings/activity  -  activity stream for last 20 events
         // Used by the settings page activity feed (Row-level visual feedback)
         ("GET", "/settings/activity") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -5295,7 +5290,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"count":{},"items":[{}]}}"#, items.len(), items.join(","))
         }
 
-        // GET /settings/shizuku/halo — Layer 9: God mode halo state
+        // GET /settings/shizuku/halo  -  Layer 9: God mode halo state
         // Returns border color + animation params for the screen-edge halo
         ("GET", "/settings/shizuku/halo") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -5317,7 +5312,7 @@ You are executing a multi-step task autonomously.
         }
 
         // POST /settings/row_interaction {"row":"api_key","action":"tap|long_press|edit"}
-        // Enhanced row analytics — tracks not just tap but interaction type
+        // Enhanced row analytics  -  tracks not just tap but interaction type
         ("POST", "/settings/row_interaction") => {
             let row    = extract_json_str(body, "row").unwrap_or_default();
             let action = extract_json_str(body, "action").unwrap_or_else(|| "tap".to_string());
@@ -5341,7 +5336,7 @@ You are executing a multi-step task autonomously.
             r#"{"ok":true}"#.to_string()
         }
 
-        // GET /settings/top_rows — most-accessed settings rows (for smart ordering)
+        // GET /settings/top_rows  -  most-accessed settings rows (for smart ordering)
         ("GET", "/settings/top_rows") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let mut rows: Vec<(String, u32)> = s.variables.iter()
@@ -5360,7 +5355,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"top_rows":[{}]}}"#, items.join(","))
         }
 
-        // GET /settings/memory/stats — detailed memory stats for memory card
+        // GET /settings/memory/stats  -  detailed memory stats for memory card
         ("GET", "/settings/memory/stats") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let total    = s.memory_index.len();
@@ -5383,7 +5378,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // GET /settings/theme/palette — full Catppuccin Mocha palette for settings
+        // GET /settings/theme/palette  -  full Catppuccin Mocha palette for settings
         // Used by theme card to show all swatches
         ("GET", "/settings/theme/palette") => {
             // Catppuccin Mocha full palette
@@ -5407,7 +5402,7 @@ You are executing a multi-step task autonomously.
             format!(r#"{{"theme":"catppuccin_mocha","swatches":[{}]}}"#, items.join(","))
         }
 
-                // GET /layer1 — Neural Nav Bar state for Java
+                // GET /layer1  -  Neural Nav Bar state for Java
         // Returns Catppuccin colour tokens + keyboard state hint
         // Java NeuralNavBar polls this to stay in sync with Rust theme
         ("GET",  "/layer1") => {
@@ -5425,11 +5420,11 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // POST /layer0/burst — called by Java when Kira finishes replying
+        // POST /layer0/burst  -  called by Java when Kira finishes replying
         // Sets a one-shot burst flag that /layer0 will return as burst:true
         // ── Layer 2: Chat Interface state endpoints ───────────────────────────
 
-        // GET /layer2/header — header bar state (pulse, subtitle cycle index)
+        // GET /layer2/header  -  header bar state (pulse, subtitle cycle index)
         // Java polls at 500ms to drive header border and subtitle crossfade
         ("GET",  "/layer2/header") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -5440,7 +5435,7 @@ You are executing a multi-step task autonomously.
                 0.27 + (phase * 2.0 * std::f32::consts::PI).sin().abs() * 0.08
             } else { 0.12f32 };
             // Subtitle index: cycles through 4 states (ready/thinking/reasoning/composing)
-            // 0=ready, 1=thinking, 2=reasoning, 3=composing — driven by request state
+            // 0=ready, 1=thinking, 2=reasoning, 3=composing  -  driven by request state
             let subtitle_idx: u32 = if !s.theme.is_thinking { 0 }
                 else { ((uptime_ms / 1_800) % 3 + 1) as u32 }; // cycle 1-3 while thinking
             format!(
@@ -5449,7 +5444,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // GET /layer2/bubbles — bubble styling tokens for chat UI
+        // GET /layer2/bubbles  -  bubble styling tokens for chat UI
         // Returns Catppuccin colour tokens for user/kira bubbles + shadow specs
         ("GET",  "/layer2/bubbles") => {
             r#"{"user_bg":3292050, "user_bg_alpha":255, "kira_bg":2040622, "lavender":11862782, "peach":16430983, "green_dark":2023454, "shadow_color":1144397, "shadow_alpha":102, "shadow_blur_dp":8, "shadow_y_dp":2, "spring_stiffness":300, "spring_damping":28, "spring_duration_ms":320, "translate_dp":40}"#.to_string()
@@ -5457,7 +5452,7 @@ You are executing a multi-step task autonomously.
             // lavender = 0xFFB4BEFE, peach = 0xFFFAB387, green_dark = 0xFF1E2E1E
         }
 
-        // GET /layer2/typing — typing indicator animation params
+        // GET /layer2/typing  -  typing indicator animation params
         // Three Lavender dots, sinusoidal, each offset 120ms
         ("GET",  "/layer2/typing") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -5473,7 +5468,7 @@ You are executing a multi-step task autonomously.
             )
         }
 
-        // POST /layer2/message — record that a message was sent/received
+        // POST /layer2/message  -  record that a message was sent/received
         // Updates request_count, last_message_ts, triggers K badge rotation signal
         ("POST", "/layer2/message") => {
             let role = extract_json_str(body, "role").unwrap_or_else(||"user".to_string());
@@ -5490,7 +5485,7 @@ You are executing a multi-step task autonomously.
         }
 
                 ("POST", "/layer0/burst") => {
-            // We use is_thinking flip as the burst signal — Java detects thinking→false
+            // We use is_thinking flip as the burst signal  -  Java detects thinking→false
             STATE.lock().unwrap_or_else(|e| e.into_inner()).theme.is_thinking = false;
             r#"{"ok":true}"#.to_string()
         }
@@ -5575,17 +5570,17 @@ You are executing a multi-step task autonomously.
 
         // OpenClaw v3 / NanoBot / ZeroClaw routes
         // ── OTA Engine v43 ────────────────────────────────────────────────────
-        // GET  /ota/status        — full OTA state JSON
-        // POST /ota/begin_check   — Java signals it's about to call GitHub API
-        // POST /ota/release       — Java posts parsed GitHub release data to Rust
-        // POST /ota/progress      — Java reports download progress
-        // POST /ota/downloaded    — Java signals APK is on disk (path + sha256)
-        // POST /ota/installing    — Java signals install session opened
-        // POST /ota/installed     — Java signals successful install
-        // POST /ota/failed        — Java signals any error
-        // POST /ota/skip          — skip this version
-        // POST /ota/set_version   — update current installed version
-        // GET  /ota/install_cmd   — get the install command for Shizuku
+        // GET  /ota/status         -  full OTA state JSON
+        // POST /ota/begin_check    -  Java signals it's about to call GitHub API
+        // POST /ota/release        -  Java posts parsed GitHub release data to Rust
+        // POST /ota/progress       -  Java reports download progress
+        // POST /ota/downloaded     -  Java signals APK is on disk (path + sha256)
+        // POST /ota/installing     -  Java signals install session opened
+        // POST /ota/installed      -  Java signals successful install
+        // POST /ota/failed         -  Java signals any error
+        // POST /ota/skip           -  skip this version
+        // POST /ota/set_version    -  update current installed version
+        // GET  /ota/install_cmd    -  get the install command for Shizuku
         ("GET",  "/ota/status")     => { STATE.lock().unwrap_or_else(|e| e.into_inner()).ota.to_json() }
         ("POST", "/ota/begin_check") => {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -5941,7 +5936,7 @@ fn route_channels(method: &str, path: &str, body: &str) -> Option<String> {
             }
         }
 
-        // WhatsApp Cloud API webhook — GET for verification, POST for messages
+        // WhatsApp Cloud API webhook  -  GET for verification, POST for messages
         ("GET", "/whatsapp/webhook") => {
             // Meta sends: ?hub.mode=subscribe&hub.verify_token=xxx&hub.challenge=yyy
             let challenge = path.split("hub.challenge=").nth(1)
@@ -6034,7 +6029,7 @@ fn route_channels(method: &str, path: &str, body: &str) -> Option<String> {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Sessions 11-19 — Advanced features
+// Sessions 11-19  -  Advanced features
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// Session 14: fire proactive AI if notification matches a keyword trigger
@@ -6048,7 +6043,7 @@ fn check_notif_keyword_triggers(pkg: &str, title: &str, text: &str, importance: 
     for (keyword, goal) in triggers {
         if haystack.contains(&keyword.to_lowercase()) {
             let goal_with_context = format!(
-                "{}. Context: notification from '{}' — title: '{}', text: '{}'",
+                "{}. Context: notification from '{}'  -  title: '{}', text: '{}'",
                 goal, pkg, title, &text[..text.len().min(200)]
             );
             thread::spawn(move || {
@@ -6074,11 +6069,11 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
     match (method, path) {
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 11 — Canvas (A2UI)
+        // SESSION 11  -  Canvas (A2UI)
         // ════════════════════════════════════════════════════════════════════
 
         ("GET", "/canvas") => {
-            // Serve the A2UI host HTML — FloatingWindowService WebView loads this
+            // Serve the A2UI host HTML  -  FloatingWindowService WebView loads this
             Some(CANVAS_HTML.to_string())
         }
 
@@ -6117,7 +6112,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
             ))
         }
 
-        // SSE stream for canvas updates — WebView long-polls this
+        // SSE stream for canvas updates  -  WebView long-polls this
         ("GET", "/canvas/stream") => {
             // Return current state as SSE event (WebView reconnects for each update)
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -6130,7 +6125,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 12 — Browser tool
+        // SESSION 12  -  Browser tool
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/browser/navigate") => {
@@ -6143,7 +6138,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         ("POST", "/browser/snapshot") => {
-            // Queue snapshot request — Java captures and calls onBrowserSnapshot
+            // Queue snapshot request  -  Java captures and calls onBrowserSnapshot
             let cmd = r#"{"action":"snapshot"}"#.to_string();
             STATE.lock().unwrap_or_else(|e| e.into_inner())
                 .browser_pending_cmd = Some(cmd);
@@ -6193,7 +6188,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 13 — Voice / TTS
+        // SESSION 13  -  Voice / TTS
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/voice/start") => {
@@ -6235,7 +6230,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
             thread::spawn(move || {
                 // Transcription via Whisper (OpenAI /audio/transcriptions)
                 // For now: use accumulated chunks as proxy text until Whisper integration
-                // Full Whisper: Session 13 advanced — would assemble WAV and POST to API
+                // Full Whisper: Session 13 advanced  -  would assemble WAV and POST to API
                 let transcript = if chunk_count > 0 {
                     // Signal to Java that we need transcription
                     // Java should call /voice/transcript with the result
@@ -6333,7 +6328,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 14 — Notification intelligence
+        // SESSION 14  -  Notification intelligence
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/notifications/trigger/add") => {
@@ -6380,7 +6375,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 15 — Java action queue (device tools)
+        // SESSION 15  -  Java action queue (device tools)
         // ════════════════════════════════════════════════════════════════════
 
         ("GET", "/java/pending_action") => {
@@ -6418,7 +6413,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 16 — Multi-agent routing
+        // SESSION 16  -  Multi-agent routing
         // ════════════════════════════════════════════════════════════════════
 
         ("GET", "/routing/agents") => {
@@ -6460,7 +6455,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 17 — Model failover
+        // SESSION 17  -  Model failover
         // ════════════════════════════════════════════════════════════════════
 
         ("GET", "/models/failover") => {
@@ -6522,7 +6517,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 18 — Security: DM policy + allowlists
+        // SESSION 18  -  Security: DM policy + allowlists
         // ════════════════════════════════════════════════════════════════════
 
         ("GET", "/security/pairing/pending") => {
@@ -6590,7 +6585,7 @@ fn route_advanced(method: &str, path: &str, body: &str) -> Option<String> {
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 19 — Control UI
+        // SESSION 19  -  Control UI
         // ════════════════════════════════════════════════════════════════════
 
         ("GET", "/ui") | ("GET", "/ui/") => {
@@ -6761,7 +6756,7 @@ fn get_llm_config_snapshot() -> (String, String, String, String, Vec<(String, St
     let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let cfg = &s.config;
     let persona = if cfg.persona.is_empty() {
-        "You are Kira, a powerful Android AI agent. Use tools to get real data — never guess.".to_string()
+        "You are Kira, a powerful Android AI agent. Use tools to get real data  -  never guess.".to_string()
     } else { cfg.persona.clone() };
     let sys = build_system_prompt(&s, &persona);
     let hist = decompress_context(&s);
@@ -6782,7 +6777,7 @@ fn register_subagent_shims() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session 2 — ReAct loop support helpers
+// Session 2  -  ReAct loop support helpers
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /// Build a minimal OpenAI tools schema JSON for tools in the allowlist.
@@ -6853,7 +6848,7 @@ fn build_kira_tools_schema_filtered(allowlist: &[String], denylist: &[String]) -
 
 
 
-/// LLM call shim for runner — wraps the existing https_post infrastructure
+/// LLM call shim for runner  -  wraps the existing https_post infrastructure
 fn llm_call_for_runner(api_key: &str, base_url: &str, body: &str) -> Result<String, String> {
     let fallback = "https://api.groq.com/openai/v1";
     let safe_url = if base_url.is_ascii()
@@ -6897,7 +6892,7 @@ fn llm_call_for_runner(api_key: &str, base_url: &str, body: &str) -> Result<Stri
     }
 }
 
-/// Dispatch shim for runner — bridges into existing dispatch_tool()
+/// Dispatch shim for runner  -  bridges into existing dispatch_tool()
 fn dispatch_for_runner(name: &str, params: &std::collections::HashMap<String, String>) -> String {
     dispatch_tool(name, params)
 }
@@ -6920,14 +6915,14 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
 
     match (method, path) {
 
-        // ── AI run status — live from RUN_STATE ──────────────────────────────
+        // ── AI run status  -  live from RUN_STATE ──────────────────────────────
         ("GET", "/ai/run/status") => {
             let rs = crate::ai::runner::RUN_STATE.lock()
                 .unwrap_or_else(|e| e.into_inner());
             Some(rs.to_json())
         }
 
-        // ── POST /ai/run — spawn non-blocking ReAct loop ─────────────────────
+        // ── POST /ai/run  -  spawn non-blocking ReAct loop ─────────────────────
         // body: {"message":"..","session":"default","max_steps":25}
         ("POST", "/ai/run") => {
             let req = crate::ai::runner::AiRunRequest::from_json(body);
@@ -6949,7 +6944,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
                 let cfg = &s.config;
                 let persona = if cfg.persona.is_empty() {
-                    "You are Kira, a powerful Android AI agent. Use tools to get real data — never guess.".to_string()
+                    "You are Kira, a powerful Android AI agent. Use tools to get real data  -  never guess.".to_string()
                 } else { cfg.persona.clone() };
                 let sys = build_system_prompt(&s, &persona);
                 let hist = decompress_context(&s);
@@ -7009,7 +7004,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
             ))
         }
 
-        // ── POST /ai/run/abort — signal the running loop to stop ─────────────
+        // ── POST /ai/run/abort  -  signal the running loop to stop ─────────────
         ("POST", "/ai/run/abort") => {
             let mut rs = crate::ai::runner::RUN_STATE.lock()
                 .unwrap_or_else(|e| e.into_inner());
@@ -7025,7 +7020,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
             }
         }
 
-        // ── Tool schema — exposes all registered tools as OpenAI JSON ─────────
+        // ── Tool schema  -  exposes all registered tools as OpenAI JSON ─────────
         ("GET", "/ai/tools/schema") => {
             let s = s_lock();
             // Build schema from existing tool_allowlist + known tool names
@@ -7036,7 +7031,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 tool_names.join(","), s.tool_allowlist.len()))
         }
 
-        // ── Sessions v2 — richer session info ────────────────────────────────
+        // ── Sessions v2  -  richer session info ────────────────────────────────
         ("GET", "/sessions/v2") => {
             let s = s_lock();
             let items: Vec<String> = s.sessions.values().map(|sess| {
@@ -7050,7 +7045,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
             Some(format!("[{}]", items.join(",")))
         }
 
-        // ── Memory v2 — search using new memory::index keyword search ─────────
+        // ── Memory v2  -  search using new memory::index keyword search ─────────
         ("GET", "/memory/v2/search") => {
             // Extract q= from query string
             let query = path.split('?').nth(1)
@@ -7090,7 +7085,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 esc(&query), results.len(), results.join(",")))
         }
 
-        // ── Skills v2 — list with full metadata ───────────────────────────────
+        // ── Skills v2  -  list with full metadata ───────────────────────────────
         ("GET", "/skills/v2") => {
             let s = s_lock();
             let items: Vec<String> = s.skills.values().map(|sk| {
@@ -7104,7 +7099,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 items.len(), items.join(",")))
         }
 
-        // ── Cron v2 — list with schedule info ────────────────────────────────
+        // ── Cron v2  -  list with schedule info ────────────────────────────────
         ("GET", "/cron/v2") => {
             let s = s_lock();
             let items: Vec<String> = s.cron_jobs.iter().map(|j| {
@@ -7121,7 +7116,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 items.len(), items.join(",")))
         }
 
-        // ── Agents — list agent configs (stub; Session 16 expands) ───────────
+        // ── Agents  -  list agent configs (stub; Session 16 expands) ───────────
         ("GET", "/agents/v2") => {
             let default = crate::gateway::routing::AgentConfig::default_agent();
             Some(format!("[{}]", default.to_json()))
@@ -7143,7 +7138,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 3 — Sub-agents
+        // SESSION 3  -  Sub-agents
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/agents/spawn") => {
@@ -7178,7 +7173,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
         // /agents/:id/status handled below via prefix match
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 4 — Persistent Sessions
+        // SESSION 4  -  Persistent Sessions
         // ════════════════════════════════════════════════════════════════════
 
         ("GET", "/sessions/persist/list") => {
@@ -7216,7 +7211,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 5 — Memory: embeddings + vector search
+        // SESSION 5  -  Memory: embeddings + vector search
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/memory/add") => {
@@ -7296,7 +7291,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 6 — Skills from disk
+        // SESSION 6  -  Skills from disk
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/skills/install") => {
@@ -7350,7 +7345,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 9 — Cron v2 (full AI-firing scheduler)
+        // SESSION 9  -  Cron v2 (full AI-firing scheduler)
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/cron/create") => {
@@ -7399,7 +7394,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                         let tools_json = { let s=STATE.lock().unwrap_or_else(|e|e.into_inner()); build_kira_tools_schema_filtered(&s.tool_allowlist, &s.tool_denylist) };
                         let cfg = crate::ai::runner::AgentRunConfig {
                             api_key, base_url, model,
-                            system_prompt: format!("{}\n\nAutomated cron task — complete and stop.", sys),
+                            system_prompt: format!("{}\n\nAutomated cron task  -  complete and stop.", sys),
                             session_id: format!("cron_{}", jid2),
                             user_message: action,
                             history: vec![], max_steps: 15, tools_json,
@@ -7425,7 +7420,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // SESSION 10 — Webhooks
+        // SESSION 10  -  Webhooks
         // ════════════════════════════════════════════════════════════════════
 
         ("POST", "/webhooks/register") => {
@@ -7437,7 +7432,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
                 .unwrap_or_else(|| "Process the incoming webhook payload.".into());
             let target = extract_json_str(body, "delivery_target");
 
-            // Generate a URL token (not the secret — the token is in the URL)
+            // Generate a URL token (not the secret  -  the token is in the URL)
             let token = format!("{:x}", {
                 let mut h: u64 = 0x_dead_beef_u64;
                 for b in id.bytes().chain(secret.bytes()).chain(now_ms().to_le_bytes()) {
@@ -7606,7 +7601,7 @@ fn run_trigger_watcher() {
 }
 
 fn run_cron_scheduler() {
-    // Session 9: upgraded cron scheduler — fires AI agent runs for each due job
+    // Session 9: upgraded cron scheduler  -  fires AI agent runs for each due job
     loop {
         std::thread::sleep(std::time::Duration::from_secs(10));
         let now = now_ms();
@@ -10079,7 +10074,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&mid), esc(&state), esc(&action)))
         }
 
-        // GET /auto/list  — friendly summary of all automations
+        // GET /auto/list   -  friendly summary of all automations
         ("GET", "/auto/list") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.macros.iter().map(|m| {
@@ -10215,7 +10210,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
                 esc(&mid), esc(&name), acts.len()))
         }
 
-        // POST /auto/run_now {"id":"macro_id"} — trigger immediately
+        // POST /auto/run_now {"id":"macro_id"}  -  trigger immediately
         ("POST", "/auto/run_now") => {
             let id = extract_json_str(body, "id").unwrap_or_default();
             if id.is_empty() { return Some(r#"{"error":"need id"}"#.to_string()); }
@@ -10255,7 +10250,7 @@ fn route_openclaw_v3(method: &str, path: &str, body: &str) -> Option<String> {
             }
         }
 
-        // GET /auto/history — last 50 runs
+        // GET /auto/history  -  last 50 runs
         ("GET", "/auto/history") => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let items: Vec<String> = s.macro_run_log.iter().rev().take(50)
@@ -11247,7 +11242,7 @@ fn route_openclaw(method: &str, path: &str, body: &str) -> Option<String> {
 }
 
 // Crypto
-// SECURITY: Credential key derivation — 1024 rounds of byte mixing.
+// SECURITY: Credential key derivation  -  1024 rounds of byte mixing.
 // This is obfuscation (in-memory protection), NOT cryptographic encryption.
 // For real encryption-at-rest, use Android Keystore via JNI.
 fn derive_key(name: &str) -> Vec<u8> {
@@ -11306,7 +11301,7 @@ fn extract_json_f32(json: &str, key: &str) -> Option<f32> {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session C — AES-256-GCM authenticated encryption for secrets
+// Session C  -  AES-256-GCM authenticated encryption for secrets
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
@@ -11314,7 +11309,7 @@ use aes_gcm::aead::Aead;
 
 /// Derive a stable 32-byte key from a device-specific seed string.
 /// Seed is typically: SHA256(ANDROID_ID + package_name), supplied by Java.
-/// Uses 64 rounds of XOR + rotate mixing — lightweight but sufficient
+/// Uses 64 rounds of XOR + rotate mixing  -  lightweight but sufficient
 /// as a KDF since the seed itself comes from a 256-bit random source.
 pub fn derive_aes_key(seed: &str) -> [u8; 32] {
     let mut key = [0u8; 32];
@@ -11350,7 +11345,7 @@ fn derive_nonce(key: &[u8; 32], domain: &str) -> [u8; 12] {
 }
 
 /// Encrypt plaintext with AES-256-GCM. Returns hex-encoded ciphertext+tag.
-/// domain: field name ("api_key", "tg_token", etc) — prevents cross-field decryption.
+/// domain: field name ("api_key", "tg_token", etc)  -  prevents cross-field decryption.
 pub fn aes_encrypt(plaintext: &str, key_seed: &str, domain: &str) -> String {
     let key_bytes  = derive_aes_key(key_seed);
     let nonce_bytes = derive_nonce(&key_bytes, domain);
@@ -11389,7 +11384,7 @@ pub fn aes_decrypt(hex_ciphertext: &str, key_seed: &str, domain: &str) -> String
 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Session K — Pure-Rust HTTPS client via rustls
+// Session K  -  Pure-Rust HTTPS client via rustls
 // Works on arm64-v8a. Falls back to plain HTTP on other ABIs (or through
 // Java bridge via /http_proxy endpoint).
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -11401,7 +11396,7 @@ use rustls::pki_types::ServerName;
 /// Send HTTPS POST and return response body.
 /// Uses rustls with webpki-roots (Mozilla CA bundle compiled in).
 /// Decode an HTTP/1.1 response: strip headers, decode chunked transfer encoding.
-/// Handles: plain body, chunked encoding, gzip (skipped — return raw).
+/// Handles: plain body, chunked encoding, gzip (skipped  -  return raw).
 fn decode_http_response(raw: &str) -> String {
     // Find end of headers (blank line)
     let header_end = raw.find("\r\n\r\n")
@@ -11459,7 +11454,7 @@ fn decode_http_response(raw: &str) -> String {
         }
 
         if chunk_size > rest.len() {
-            // Truncated — take what we have
+            // Truncated  -  take what we have
             decoded.push_str(rest);
             break;
         }
@@ -11522,11 +11517,6 @@ pub fn https_post(
         let request = format!(
             "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             path_owned, host_owned, auth_owned, body_owned.len(), body_owned
-Content-Length: {}
-Connection: close
-
-{}",
-            path_owned, host_owned, auth_owned, body_owned.len(), body_owned
         );
         tls_stream.write_all(request.as_bytes())
             .map_err(|e| format!("write: {}", e))?;
@@ -11551,7 +11541,7 @@ Connection: close
     let raw_response = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(inner)) {
         Ok(Ok(bytes))  => bytes,
         Ok(Err(e))     => return Err(e),
-        Err(_panic)    => return Err("TLS error (rustls panicked — try again)".to_string()),
+        Err(_panic)    => return Err("TLS error (rustls panicked - try again)".to_string()),
     };
 
     let response = Vec::from(raw_response);
@@ -11587,7 +11577,6 @@ pub fn https_get(host: &str, port: u16, path: &str, timeout_s: u64) -> Result<St
 
     let request = format!(
         "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: KiraAI/1.0\r\nConnection: close\r\n\r\n",
-",
         path, host
     );
     stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;

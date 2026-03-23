@@ -38,38 +38,25 @@ public class KiraConfig {
     public static KiraConfig load(Context ctx) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
 
-        // One-time migration: wipe old encrypted keys that cause "unknown scheme" crash
+        // One-time migration: remove known encrypted keys from old versions
         if (p.getInt("config_version", 0) < VERSION) {
-            // Migration: preserve valid plaintext values, clear only corrupt/encrypted ones
-            boolean wasDone  = p.getBoolean("setupDone", false);
-            String savedName = p.getString("userName", "User");
-            String savedModel= p.getString("model", "llama-3.1-8b-instant");
-            // Preserve apiKey if it looks like a valid key (printable ASCII, not a binary blob)
-            String savedKey  = p.getString("apiKey", "");
-            // Validate API key: must be printable ASCII, not too short or long
-            if (!isAscii(savedKey) || savedKey.length() > 512 || savedKey.length() < 8) {
-                savedKey = "";
+            SharedPreferences.Editor me = p.edit();
+            // Remove old encrypted fields (they contain binary garbage)
+            me.remove("apiKey_enc");
+            me.remove("tgToken_enc");
+            me.remove("baseUrl_enc");
+            // If current apiKey fails ASCII check, clear it so user re-enters
+            String existingKey = p.getString("apiKey", "");
+            if (!isAscii(existingKey)) {
+                me.remove("apiKey");
             }
-            // Preserve baseUrl if valid
-            String savedUrl  = p.getString("baseUrl", "https://api.groq.com/openai/v1");
-            if (!isAscii(savedUrl) || (!savedUrl.startsWith("http://") && !savedUrl.startsWith("https://"))) {
-                savedUrl = "https://api.groq.com/openai/v1";
+            // If baseUrl is invalid, reset to default
+            String existingUrl = p.getString("baseUrl", "");
+            if (!existingUrl.isEmpty() && !isAscii(existingUrl)) {
+                me.putString("baseUrl", "https://api.groq.com/openai/v1");
             }
-            // Preserve tgToken and persona if valid ASCII
-            String savedTg   = p.getString("tgToken", "");
-            if (!isAscii(savedTg) || savedTg.length() > 256) savedTg = "";
-            String savedPer  = p.getString("persona", "");
-            if (!isAscii(savedPer)) savedPer = "";
-            p.edit().clear()
-                .putBoolean("setupDone",      wasDone)
-                .putString("userName",        savedName)
-                .putString("model",           savedModel)
-                .putString("apiKey",          savedKey)
-                .putString("baseUrl",         savedUrl)
-                .putString("tgToken",         savedTg)
-                .putString("persona",         savedPer)
-                .putInt("config_version",     VERSION)
-                .commit();
+            me.putInt("config_version", VERSION);
+            me.apply();
         }
 
         KiraConfig c = new KiraConfig();

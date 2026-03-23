@@ -508,13 +508,24 @@ public class KiraAI {
                 ? "https://api.groq.com/openai/v1" : cfg.baseUrl;
             String model = (cfg.model == null || cfg.model.isEmpty())
                 ? "llama-3.1-8b-instant" : cfg.model;
+            String persona = (cfg.persona == null || cfg.persona.isEmpty())
+                ? "You are Kira, a smart AI assistant on Android. Use tools to get real data." : cfg.persona;
             JSONArray messages = new JSONArray();
-            messages.put(new JSONObject().put("role","system")
-                .put("content","You are Kira, a helpful AI on Android."));
+            messages.put(new JSONObject().put("role","system").put("content", persona));
             messages.put(new JSONObject().put("role","user").put("content", msg));
-            return new JSONObject()
+            // Try to get tools schema from Rust if available
+            JSONObject result = new JSONObject()
                 .put("api_key", cfg.apiKey).put("base_url", base)
-                .put("model", model).put("messages", messages).toString();
+                .put("model", model).put("messages", messages);
+            try {
+                // Get full context from Rust if possible (has tools + history)
+                String rustCtx = RustBridge.getChatContext(msg);
+                if (rustCtx != null && !rustCtx.isEmpty()) {
+                    JSONObject rustJ = new JSONObject(rustCtx);
+                    if (!rustJ.has("error")) return rustCtx;
+                }
+            } catch (Throwable ignored) {}
+            return result.toString();
         } catch (Exception e) { return null; }
     }
 

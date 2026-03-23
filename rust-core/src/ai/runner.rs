@@ -561,6 +561,11 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
         total_tokens_in  += estimate_tokens(&messages_json);
         total_tokens_out += estimate_tokens(&response_body);
 
+        // Try OpenAI function-calling format first, then XML fallback
+        let json_tool_calls = parse_tool_calls_json(&response_body);
+        let text_content = extract_content_from_response(&response_body)
+            .unwrap_or_default();
+
         // Update streaming state: partial text visible to Java while still running
         {
             let mut rs = RUN_STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -569,11 +574,6 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
             rs.thinking_log.push(format!("Step {}: LLM responded ({} chars)",
                 step + 1, response_body.len()));
         }
-
-        // Try OpenAI function-calling format first, then XML fallback
-        let json_tool_calls = parse_tool_calls_json(&response_body);
-        let text_content = extract_content_from_response(&response_body)
-            .unwrap_or_default();
 
         if json_tool_calls.is_empty() {
             // No tool calls — this is the final answer

@@ -7344,7 +7344,7 @@ fn route_openclaw_modules(method: &str, path: &str, body: &str) -> Option<String
         ("POST", "/cron/create") => {
             let id   = extract_json_str(body, "id")
                 .unwrap_or_else(|| format!("cron_{}", now_ms()));
-            let name = extract_json_str(body, "name").unwrap_or_else(|| id.clone());
+            let _name = extract_json_str(body, "name").unwrap_or_else(|| id.clone());
             let expr = extract_json_str(body, "expression")
                 .or_else(|| extract_json_str(body, "schedule"))
                 .unwrap_or_else(|| "every 1h".into());

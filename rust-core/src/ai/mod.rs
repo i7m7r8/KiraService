@@ -19,6 +19,8 @@ pub mod models;
 pub mod tools;
 pub mod subagents;
 pub mod compaction;
+pub mod failover;    // S5: FailoverState with cooldown logic
+pub mod streaming;   // S5: Unified SSE parser (Anthropic/OpenAI/Google)
 
 pub use runner::{
     AiRunStatus, AiRunRequest, AiRunResult,
@@ -36,3 +38,6 @@ pub use subagents::{
     spawn_subagent, register_subagent_fns,
 };
 pub use compaction::{compact_turns, compact_session, CompactionConfig};
+pub use failover::{FailoverState, FailureKind};
+pub use streaming::{StreamParser, StreamChunk, StreamUsage};
+pub use models::{ProviderConfig, ProviderCatalog};

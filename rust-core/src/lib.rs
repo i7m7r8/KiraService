@@ -4683,27 +4683,48 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             s.acp_bus.purge(sid);
             format!(r#"{{"ok":{},"session_id":"{}"}}"#, exists, esc(sid))
         }
-        // PATCH /acp/sessions/:id  -  apply a SessionPatch
+        // PATCH /acp/sessions/:id  -  apply a SessionPatch (S1-S2: full OpenClaw fields)
         ("PATCH", p) if p.starts_with("/acp/sessions/") => {
-            let sid   = &p["/acp/sessions/".len()..].to_string();
+            let sid   = p["/acp/sessions/".len()..].to_string();
             let patch = crate::acp::SessionPatch::from_json(body);
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let now   = now_ms() as u128;
-            // Ensure session exists (get_or_create needs mut borrow — do it first, drop result)
-            { s.session_store.get_or_create(sid, "api", now); }
-            let mut applied_fields: Vec<String> = Vec::new();
-            if let Some(model) = &patch.model {
-                s.config.model = model.clone();
-                applied_fields.push(format!(r#""model":"{}""#, esc(model)));
-            }
-            if let Some(agent_id) = &patch.agent_id {
-                if let Some(sess) = s.session_store.get_mut(sid) {
-                    sess.agent_id = agent_id.clone();
-                }
-                applied_fields.push(format!(r#""agent_id":"{}""#, esc(agent_id)));
-            }
-            format!(r#"{{"ok":true,"session_id":"{}","applied":{{{}}}}}"#,
-                esc(sid), applied_fields.join(","))
+            s.session_store.get_or_create(&sid, "api", now);
+            if let Some(ref m) = patch.model { if !m.is_empty() { s.config.model = m.clone(); } }
+            s.session_store.patch_session(&sid, &patch)
+        }
+        // POST /sessions/patch  -  OpenClaw-compat body patch (S2)
+        ("POST", "/sessions/patch") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_patch(&mut s.session_store, body)
+        }
+        // POST /sessions/reset  -  reset session transcript (S3)
+        ("POST", "/sessions/reset") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_reset(&mut s.session_store, body)
+        }
+        // POST /sessions/chat  -  push user message into session run queue (S3)
+        ("POST", "/sessions/chat") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_chat(
+                &mut s.session_store, &mut s.acp_bus, body)
+        }
+        // POST /sessions/compact  -  compact a session now (S3)
+        ("POST", "/sessions/compact") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_compact(&mut s.session_store, body)
+        }
+        // GET /sessions/get?key=X  -  get one session (S3)
+        ("GET", "/sessions/get") => {
+            let s   = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let key = crate::gateway::routing::extract_param(path, "key").unwrap_or_default();
+            s.session_store.get_json(&key)
+        }
+        // DELETE /sessions/delete  -  delete session + transcript (S3)
+        ("DELETE", "/sessions/delete") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_delete(
+                &mut s.session_store, &mut s.acp_bus, body)
         }
         // GET /acp/sessions/:id/transcript  -  get session transcript as JSON
         ("GET", p) if p.starts_with("/acp/sessions/") && p.ends_with("/transcript") => {
@@ -6019,6 +6040,45 @@ You are executing a multi-step task autonomously.
         ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }
         ("GET",  "/appstats")          => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!(r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"active_profile":"{}","variables":{}}}"#, s.memory_index.len(),s.context_turns.len(), if s.shizuku.permission_granted{"active \u{2713}"}else if s.shizuku.installed{"no permission"}else{"not running"}, if !s.agent_context.is_empty(){"enabled \u{2713}"}else{"disabled"}, esc(&s.config.model),esc(&s.config.base_url),now_ms().saturating_sub(s.uptime_start),s.macros.len(),esc(&s.active_profile),s.variables.len()) }
         ("GET",  "/providers")         => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.providers.iter().map(|p| format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)).collect(); format!("[{}]", items.join(",")) }
+        // S4: Full model provider catalog
+        ("GET", "/catalog/providers") => {
+            crate::ai::models::ProviderCatalog::to_json()
+        }
+        ("GET", "/catalog/providers/find") => {
+            let id = crate::gateway::routing::extract_param(path, "id").unwrap_or_default();
+            match crate::ai::models::ProviderCatalog::find(&id) {
+                Some(p) => p.to_json_safe(),
+                None    => format!(r#"{{"error":"not_found","id":"{}"}}"#, esc(&id)),
+            }
+        }
+        // GET /ai/failover — failover state from provider catalog (S5)
+        ("GET", "/ai/failover") => {
+            let now = now_ms() as u128;
+            let providers = crate::ai::models::ProviderCatalog::all_entries();
+            let fs = crate::ai::failover::FailoverState::new(providers);
+            fs.to_json(now)
+        }
+        // GET /catalog/streaming-formats — which providers use which format (S5)
+        ("GET", "/catalog/streaming-formats") => {
+            let entries = crate::ai::models::ProviderCatalog::all_entries();
+            let items: Vec<String> = entries.iter().map(|p| {
+                let fmt = if p.provider.is_anthropic_native() { "anthropic" }
+                          else if p.provider.is_google_native() { "google" }
+                          else { "openai" };
+                format!(r#"{{"id":"{}","format":"{}"}}"#,
+                    esc(&p.id), fmt)
+            }).collect();
+            format!("[{}]", items.join(","))
+        }
+        // GET /v1/models — OpenAI-compatible model list (S4)
+        ("GET", "/v1/models") => {
+            let entries = crate::ai::models::ProviderCatalog::all_entries();
+            let items: Vec<String> = entries.iter().map(|p| {
+                format!(r#"{{"id":"{}","object":"model","owned_by":"{}","created":0}}"#,
+                    esc(&p.model_id), esc(p.provider.as_str()))
+            }).collect();
+            format!(r#"{{"object":"list","data":[{}]}}"#, items.join(","))
+        }
         ("POST", "/providers/set")     => { let id=extract_json_str(body,"id").unwrap_or_default(); if !id.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let found=s.providers.iter().find(|p| p.id==id).cloned(); if let Some(p)=found { s.active_provider=id.clone(); s.config.base_url=p.base_url; s.config.model=p.model; } } format!(r#"{{"ok":true,"active":"{}"}}"#, id) }
         ("POST", "/providers/custom")  => { let url=extract_json_str(body,"url").unwrap_or_default(); let model=extract_json_str(body,"model").unwrap_or_default(); if !url.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.setup.custom_url=url.clone(); s.setup.selected_provider_id="custom".to_string(); s.config.base_url=url.clone(); if !model.is_empty() { s.config.model=model.clone(); } if let Some(p)=s.providers.iter_mut().find(|p| p.id=="custom") { p.base_url=url; if !model.is_empty() { p.model=model; } } s.active_provider="custom".to_string(); } r#"{"ok":true}"#.to_string() }
 

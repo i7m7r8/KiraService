@@ -280,111 +280,57 @@ pub enum AcpCommand {
 #[derive(Clone, Debug, Default)]
 pub struct SessionPatch {
     // Identity
-    pub label:                  Option<String>,
-    pub agent_id:               Option<String>,
+    pub label:           Option<String>,
+    pub agent_id:        Option<String>,
 
     // Model selection
-    pub model:                  Option<String>,
-    pub provider:               Option<String>,
+    pub model:           Option<String>,
+    pub provider:        Option<String>,
 
-    // Thinking / reasoning
-    pub thinking_level:         Option<String>,   // off|minimal|low|medium|high|xhigh
-    pub reasoning_level:        Option<String>,   // off|on|stream
-    pub fast_mode:              Option<bool>,
+    // Thinking / fast mode
+    pub thinking_level:  Option<ThinkingLevel>,   // "none" | "low" | "medium" | "high"
+    pub fast_mode:       Option<bool>,
 
-    // Verbosity
-    pub verbose_level:          Option<String>,   // off|on|full
-    pub response_usage:         Option<String>,   // off|tokens|full
-    pub elevated_level:         Option<String>,
+    // Exec security (mirrors execSecurity from OpenClaw)
+    pub exec_security:   Option<ExecSecurity>,
+    pub exec_ask:        Option<bool>,
 
-    // Exec
-    pub exec_security:          Option<String>,   // strict|default|relaxed
-    pub exec_ask:               Option<String>,   // always|auto|never
-    pub exec_host:              Option<String>,
-    pub exec_node:              Option<String>,
+    // Response verbosity
+    pub response_usage:  Option<ResponseUsage>,
 
     // Sub-agent metadata
-    pub spawned_by:             Option<String>,
-    pub spawned_workspace:      Option<String>,
-    pub spawn_depth:            Option<u32>,
-    pub subagent_role:          Option<String>,   // orchestrator|leaf
-    pub subagent_control_scope: Option<String>,   // children|none
-
-    // Channel / group
-    pub send_policy:            Option<String>,   // allow|deny
-    pub group_activation:       Option<String>,   // mention|always
+    pub spawned_by:      Option<String>,
+    pub spawn_depth:     Option<u8>,
+    pub subagent_role:   Option<String>,
 
     // Skills
-    pub skill_ids:              Option<Vec<String>>,
+    pub skill_ids:       Option<Vec<String>>,
 }
 
 impl SessionPatch {
-    /// Parse a JSON object into a SessionPatch.
-    /// Mirrors OpenClaw: SessionsPatchParamsSchema (src/gateway/protocol/schema/sessions.ts)
+    /// Parse a JSON object into a SessionPatch (lightweight, no serde)
     pub fn from_json(json: &str) -> Self {
         let mut p = SessionPatch::default();
-        // Helper: parse optional nullable string ("null" JSON value → None)
-        let opt = |s: Option<String>| -> Option<String> {
-            s.filter(|v| v != "null")
-        };
-        if let Some(v) = opt(extract_str(json, "label"))                { p.label = Some(v); }
-        if let Some(v) = opt(extract_str(json, "agent_id"))             { p.agent_id = Some(v); }
-        if let Some(v) = opt(extract_str(json, "model"))                { p.model = Some(v); }
-        if let Some(v) = opt(extract_str(json, "provider"))             { p.provider = Some(v); }
-        if let Some(v) = opt(extract_str(json, "thinkingLevel")
-                         .or_else(|| extract_str(json, "thinking_level"))) {
-            p.thinking_level = Some(v);
+        if let Some(v) = extract_str(json, "label")     { p.label = Some(v); }
+        if let Some(v) = extract_str(json, "agent_id")  { p.agent_id = Some(v); }
+        if let Some(v) = extract_str(json, "model")     { p.model = Some(v); }
+        if let Some(v) = extract_str(json, "provider")  { p.provider = Some(v); }
+        if let Some(v) = extract_str(json, "thinking_level") {
+            p.thinking_level = Some(ThinkingLevel::from_str(&v));
         }
-        if let Some(v) = opt(extract_str(json, "reasoningLevel")
-                         .or_else(|| extract_str(json, "reasoning_level"))) {
-            p.reasoning_level = Some(v);
+        if json.contains(r#""fast_mode":true"#)  { p.fast_mode = Some(true);  }
+        if json.contains(r#""fast_mode":false"#) { p.fast_mode = Some(false); }
+        if json.contains(r#""exec_ask":true"#)   { p.exec_ask = Some(true);   }
+        if json.contains(r#""exec_ask":false"#)  { p.exec_ask = Some(false);  }
+        if let Some(v) = extract_str(json, "exec_security") {
+            p.exec_security = Some(ExecSecurity::from_str(&v));
         }
-        if let Some(v) = opt(extract_str(json, "verboseLevel")
-                         .or_else(|| extract_str(json, "verbose_level"))) {
-            p.verbose_level = Some(v);
+        if let Some(v) = extract_str(json, "response_usage") {
+            p.response_usage = Some(ResponseUsage::from_str(&v));
         }
-        if let Some(v) = opt(extract_str(json, "responseUsage")
-                         .or_else(|| extract_str(json, "response_usage"))) {
-            p.response_usage = Some(v);
-        }
-        if let Some(v) = opt(extract_str(json, "elevatedLevel")
-                         .or_else(|| extract_str(json, "elevated_level"))) {
-            p.elevated_level = Some(v);
-        }
-        if let Some(v) = opt(extract_str(json, "execHost")
-                         .or_else(|| extract_str(json, "exec_host")))   { p.exec_host = Some(v); }
-        if let Some(v) = opt(extract_str(json, "execSecurity")
-                         .or_else(|| extract_str(json, "exec_security"))){ p.exec_security = Some(v); }
-        if let Some(v) = opt(extract_str(json, "execAsk")
-                         .or_else(|| extract_str(json, "exec_ask")))    { p.exec_ask = Some(v); }
-        if let Some(v) = opt(extract_str(json, "execNode")
-                         .or_else(|| extract_str(json, "exec_node")))   { p.exec_node = Some(v); }
-        if let Some(v) = opt(extract_str(json, "spawnedBy")
-                         .or_else(|| extract_str(json, "spawned_by")))  { p.spawned_by = Some(v); }
-        if let Some(v) = opt(extract_str(json, "spawnedWorkspaceDir")
-                         .or_else(|| extract_str(json, "spawned_workspace"))) {
-            p.spawned_workspace = Some(v);
-        }
-        if let Some(v) = opt(extract_str(json, "subagentRole")
-                         .or_else(|| extract_str(json, "subagent_role"))){ p.subagent_role = Some(v); }
-        if let Some(v) = opt(extract_str(json, "subagentControlScope")
-                         .or_else(|| extract_str(json, "subagent_control_scope"))) {
-            p.subagent_control_scope = Some(v);
-        }
-        if let Some(v) = opt(extract_str(json, "sendPolicy")
-                         .or_else(|| extract_str(json, "send_policy"))) { p.send_policy = Some(v); }
-        if let Some(v) = opt(extract_str(json, "groupActivation")
-                         .or_else(|| extract_str(json, "group_activation"))) {
-            p.group_activation = Some(v);
-        }
-        // Booleans
-        if json.contains(r#""fastMode":true"#)  || json.contains(r#""fast_mode":true"#)  { p.fast_mode = Some(true);  }
-        if json.contains(r#""fastMode":false"#) || json.contains(r#""fast_mode":false"#) { p.fast_mode = Some(false); }
-        // spawn_depth
-        if let Some(d) = extract_u8(json, "spawnDepth")
-                     .or_else(|| extract_u8(json, "spawn_depth")) {
-            p.spawn_depth = Some(d as u32);
-        }
+        if let Some(v) = extract_str(json, "spawned_by")   { p.spawned_by = Some(v); }
+        if let Some(v) = extract_str(json, "subagent_role") { p.subagent_role = Some(v); }
+        if let Some(d) = extract_u8(json, "spawn_depth")   { p.spawn_depth = Some(d); }
         p
     }
 }

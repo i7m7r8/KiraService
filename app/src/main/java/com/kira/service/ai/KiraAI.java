@@ -74,31 +74,18 @@ public class KiraAI {
                 while (step < MAX_STEPS) {
                     // Step 2: Java calls LLM via OkHttp (SSE streaming)
                     if (cb != null) cb.onThinkingStep("Step " + (step + 1) + ": calling LLM...");
-                    ParsedLlmResponse parsed = callLlmStreaming(requestJson, cb);
-                    if (parsed == null) return;
+                    String rawResponse = callLlmStreaming(requestJson, cb);
+                    if (rawResponse == null) return;
 
                     // Drain Java shell jobs queued during this step
                     drainShellQueue(cb);
 
-                    // Step 3: if no tool calls, we have the final reply directly in Java.
-                    // No need to pass through Rust's extract_llm_content which is fragile
-                    // with org.json's serialization format.
-                    if (parsed.toolCalls == null || parsed.toolCalls.length() == 0) {
-                        // No tool calls — content IS the final reply
-                        String reply = parsed.content.trim();
-                        if (reply.isEmpty()) reply = "Done.";
-                        // Push to Rust history so context is maintained
-                        try { RustBridge.pushContextTurn("assistant", reply); } catch (Throwable ignored) {}
-                        if (cb != null) cb.onReply(reply);
-                        return;
-                    }
-
-                    // Has tool calls — let Rust dispatch them and build the follow-up request
+                    // Step 3: Rust parses tool_calls, dispatches pure-Rust tools, builds follow-up
                     String processResult;
                     try {
-                        processResult = RustBridge.processLlmReply(parsed.rawJson, step);
+                        processResult = RustBridge.processLlmReply(rawResponse, step);
                     } catch (UnsatisfiedLinkError e) {
-                        processResult = legacyProcessReply(parsed.rawJson);
+                        processResult = legacyProcessReply(rawResponse);
                     }
 
                     if (processResult == null || processResult.isEmpty()) {
@@ -107,6 +94,10 @@ public class KiraAI {
                     }
 
                     JSONObject result = new JSONObject(processResult);
+                    if (result == null) {
+                        if (cb != null) cb.onError("Null result from Rust");
+                        return;
+                    }
                     if (result.has("error")) {
                         if (cb != null) cb.onError(result.optString("error", "Unknown error"));
                         return;
@@ -132,10 +123,8 @@ public class KiraAI {
                     drainShellQueue(cb);
 
                     if (done) {
-                        // Rust decided done=true after tool dispatch (rare — e.g. max steps in Rust)
-                        String reply = result.optString("reply", "");
-                        if (reply.trim().isEmpty()) reply = parsed.content.trim();
-                        if (reply.trim().isEmpty()) reply = "Done.";
+                        String reply = result.optString("reply", "Done.");
+                        if (reply == null || reply.trim().isEmpty()) reply = "Done.";
                         saveMemoryIfNeeded(result);
                         if (cb != null) cb.onReply(reply);
                         return;
@@ -148,7 +137,8 @@ public class KiraAI {
                         return;
                     }
                     // If messages_json contains pending_shell_result: placeholders,
-                    // drain Java shell queue first, then resolve placeholders
+                    // drain Java shell queue first (runs http_get via OkHttp),
+                    // then resolve placeholders with actual results
                     if (nextReqJson.contains("pending_shell_result:")) {
                         drainShellQueue(cb);
                         try {
@@ -171,23 +161,9 @@ public class KiraAI {
         }, "KiraAI-Chat").start();
     }
 
-    // ── Parsed LLM response container ────────────────────────────────────────
-    // Holds the fully parsed SSE result so we never pass raw JSON through Rust
-    // for content extraction (Rust's extract_llm_content is fragile with org.json output).
-    private static class ParsedLlmResponse {
-        final String content;        // assembled text content (never null, may be "")
-        final JSONArray toolCalls;   // null if no tool calls
-        final String rawJson;        // fakeResp JSON for RustBridge.processLlmReply
-        ParsedLlmResponse(String content, JSONArray toolCalls, String rawJson) {
-            this.content   = content;
-            this.toolCalls = toolCalls;
-            this.rawJson   = rawJson;
-        }
-    }
-
     // ── SSE Streaming LLM call (Java OkHttp — no Rust TLS) ───────────────────
 
-    private ParsedLlmResponse callLlmStreaming(String requestJson, Callback cb) {
+    private String callLlmStreaming(String requestJson, Callback cb) {
         try {
             JSONObject req  = new JSONObject(requestJson);
             String apiKey   = req.optString("api_key", "");
@@ -267,7 +243,6 @@ public class KiraAI {
             // Parse SSE stream
             StringBuilder fullContent  = new StringBuilder();
             StringBuilder toolCallsRaw = new StringBuilder();
-            StringBuilder rawLines     = new StringBuilder(); // collect ALL lines for non-SSE fallback
             boolean hasToolCalls = false;
             String  lastPartial  = "";
             long    lastPartialMs = 0;
@@ -278,10 +253,9 @@ public class KiraAI {
                 return null;
             }
             BufferedReader reader = new BufferedReader(
-                new InputStreamReader(respBody.byteStream(), java.nio.charset.StandardCharsets.UTF_8));
+                new InputStreamReader(respBody.byteStream()));
             String line;
             while ((line = reader.readLine()) != null) {
-                rawLines.append(line).append("\n");
                 if (!line.startsWith("data: ")) continue;
                 String data = line.substring(6).trim();
                 if ("[DONE]".equals(data)) break;
@@ -289,25 +263,26 @@ public class KiraAI {
                     JSONObject chunk   = new JSONObject(data);
                     JSONArray  choices = chunk.optJSONArray("choices");
                     if (choices == null || choices.length() == 0) continue;
+                    if (choices.length() == 0) continue;
                     JSONObject choice0 = choices.optJSONObject(0);
                     if (choice0 == null) continue;
                     JSONObject delta = choice0.optJSONObject("delta");
                     if (delta == null) continue;
 
-                    // Use isNull() check — optString returns the STRING "null" for JSON null values
-                    if (!delta.isNull("content")) {
-                        String contentDelta = delta.optString("content", "");
-                        if (!contentDelta.isEmpty()) {
-                            fullContent.append(contentDelta);
-                            long now = System.currentTimeMillis();
-                            if (cb != null && now - lastPartialMs > 250) {
-                                String partial = fullContent.toString();
-                                if (!partial.equals(lastPartial)) {
-                                    cb.onPartial(partial);
-                                    lastPartial   = partial;
-                                    lastPartialMs = now;
-                                    try { RustBridge.emitTextDelta("default", contentDelta); } catch (Throwable ignored) {}
-                                }
+                    String contentDelta = delta.optString("content", "");
+                    if (!contentDelta.isEmpty()) {
+                        fullContent.append(contentDelta);
+                        long now = System.currentTimeMillis();
+                        if (cb != null && now - lastPartialMs > 250) {
+                            String partial = fullContent.toString();
+                            if (!partial.equals(lastPartial)) {
+                                cb.onPartial(partial);
+                                lastPartial  = partial;
+                                lastPartialMs = now;
+                                // Emit to ACP bus so Rust-side listeners get the delta
+                                try {
+                                    RustBridge.emitTextDelta("default", contentDelta);
+                                } catch (Throwable ignored) {}
                             }
                         }
                     }
@@ -322,69 +297,32 @@ public class KiraAI {
             }
             reader.close();
 
+            // Reconstruct non-streaming response for Rust to parse
             String finalContent = fullContent.toString();
-
-            // ── Non-SSE fallback ──────────────────────────────────────────────
-            // If we got zero content AND zero tool_calls, the server may have returned
-            // a plain JSON response (no "data: " prefix) instead of an SSE stream.
-            // Parse it directly so we never return an empty result.
-            if (finalContent.isEmpty() && !hasToolCalls) {
-                String raw = rawLines.toString().trim();
-                try {
-                    // Try parsing the whole body as one JSON object
-                    JSONObject plainResp = new JSONObject(raw);
-                    JSONArray plainChoices = plainResp.optJSONArray("choices");
-                    if (plainChoices != null && plainChoices.length() > 0) {
-                        JSONObject c0  = plainChoices.optJSONObject(0);
-                        JSONObject msg = c0 != null ? c0.optJSONObject("message") : null;
-                        if (msg != null) {
-                            if (!msg.isNull("content")) finalContent = msg.optString("content", "");
-                            JSONArray tcs = msg.optJSONArray("tool_calls");
-                            if (tcs != null && tcs.length() > 0) {
-                                // Return a ParsedLlmResponse with full tool_calls from plain JSON
-                                String fakeRaw = buildFakeResp(finalContent, tcs);
-                                return new ParsedLlmResponse(finalContent, tcs, fakeRaw);
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {}
-            }
-
-            // Build fakeResp for Rust's processLlmReply (tool dispatch, history push)
-            JSONArray toolCallsArray = null;
+            JSONObject fakeResp    = new JSONObject();
+            JSONArray  fakeChoices = new JSONArray();
+            JSONObject fakeChoice  = new JSONObject();
+            JSONObject fakeMessage = new JSONObject();
+            fakeMessage.put("role", "assistant");
+            fakeMessage.put("content", finalContent);
             if (hasToolCalls && toolCallsRaw.length() > 0) {
-                toolCallsArray = buildToolCallsFromSse(toolCallsRaw.toString());
-                if (toolCallsArray.length() == 0) toolCallsArray = null;
+                // Build tool_calls array from accumulated SSE deltas
+                JSONArray toolCallsArray = buildToolCallsFromSse(toolCallsRaw.toString());
+                if (toolCallsArray.length() > 0) {
+                    fakeMessage.put("tool_calls", toolCallsArray);
+                }
             }
-            String fakeRespJson = buildFakeResp(finalContent, toolCallsArray);
-            return new ParsedLlmResponse(finalContent, toolCallsArray, fakeRespJson);
+            fakeChoice.put("message", fakeMessage);
+            fakeChoice.put("finish_reason", hasToolCalls ? "tool_calls" : "stop");
+            fakeChoices.put(fakeChoice);
+            fakeResp.put("choices", fakeChoices);
+
+            return fakeResp.toString();
 
         } catch (Exception e) {
             Log.e(TAG, "callLlmStreaming", e);
             if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "HTTP error");
             return null;
-        }
-    }
-
-    /** Build a fake non-streaming response JSON for Rust's processLlmReply. */
-    private String buildFakeResp(String content, JSONArray toolCalls) {
-        try {
-            JSONObject fakeMessage = new JSONObject();
-            fakeMessage.put("role", "assistant");
-            fakeMessage.put("content", content);
-            if (toolCalls != null && toolCalls.length() > 0) {
-                fakeMessage.put("tool_calls", toolCalls);
-            }
-            JSONObject fakeChoice = new JSONObject();
-            fakeChoice.put("message", fakeMessage);
-            fakeChoice.put("finish_reason", (toolCalls != null && toolCalls.length() > 0) ? "tool_calls" : "stop");
-            JSONArray fakeChoices = new JSONArray();
-            fakeChoices.put(fakeChoice);
-            JSONObject fakeResp = new JSONObject();
-            fakeResp.put("choices", fakeChoices);
-            return fakeResp.toString();
-        } catch (Exception e) {
-            return "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"" + content.replace("\"","\\\"") + "\"},\"finish_reason\":\"stop\"}]}";
         }
     }
 

@@ -1340,6 +1340,10 @@ lazy_static! {
         ..Default::default()
     
         }));
+
+    // Condvar woken by postShellResult — lets queue_and_wait_shell block without polling.
+    static ref SHELL_READY: (std::sync::Mutex<()>, std::sync::Condvar) =
+        (std::sync::Mutex::new(()), std::sync::Condvar::new());
 }
 
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
@@ -1347,6 +1351,91 @@ lazy_static! {
 // \u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}
 
 /// Expand %VAR_NAME% tokens and built-ins in a string
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Blocking shell helpers
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/// Queue a shell job, BLOCK until Java posts its real result, return it.
+fn queue_and_wait_shell(cmd: &str, timeout_ms: u64) -> String {
+    let job_id = format!("sh_{}", now_ms());
+    {
+        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        s.pending_shell.push_back(ShellJob {
+            id: job_id.clone(), cmd: cmd.to_string(),
+            timeout: timeout_ms, created: now_ms(),
+        });
+    }
+    let deadline = now_ms() + timeout_ms;
+    let (lock, cvar) = &*SHELL_READY;
+    loop {
+        {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(result) = s.shell_results.remove(&job_id) {
+                return result;
+            }
+        }
+        let remaining = deadline.saturating_sub(now_ms());
+        if remaining == 0 { return format!("(timeout after {}ms for: {})", timeout_ms, &cmd[..cmd.len().min(40)]); }
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = cvar.wait_timeout(guard, std::time::Duration::from_millis(remaining.min(50)));
+    }
+}
+
+/// Queue screen_read: and block until accessibility returns structured text.
+fn read_screen_blocking(timeout_ms: u64) -> String {
+    let result = queue_and_wait_shell("screen_read:", timeout_ms);
+    if result.is_empty() || result.starts_with("(timeout") {
+        let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        if !s.screen_nodes.is_empty() {
+            return extract_text_from_nodes_json(&s.screen_nodes);
+        }
+        return "Screen content unavailable".to_string();
+    }
+    result
+}
+
+fn extract_text_from_nodes_json(json: &str) -> String {
+    let mut texts: Vec<String> = Vec::new();
+    let mut pos = 0usize;
+    while pos < json.len() {
+        if let Some(idx) = json[pos..].find("\"text\":\"") {
+            let start = pos + idx + 8;
+            if let Some(end_idx) = json[start..].find('"') {
+                let t = &json[start..start + end_idx];
+                if !t.is_empty() && !texts.contains(&t.to_string()) { texts.push(t.to_string()); }
+                pos = start + end_idx + 1;
+            } else { break; }
+        } else { break; }
+    }
+    if texts.is_empty() { "No text visible".to_string() } else { texts.join("\n") }
+}
+
+fn extract_clickable_from_nodes_json(json: &str) -> String {
+    if json.is_empty() { return String::new(); }
+    let mut results: Vec<String> = Vec::new();
+    let mut pos = 0usize;
+    while pos < json.len() {
+        if let Some(os) = json[pos..].find('{') {
+            let obj_s = pos + os;
+            if let Some(oe) = json[obj_s..].find('}') {
+                let obj_e = obj_s + oe + 1;
+                let obj = &json[obj_s..obj_e];
+                if obj.contains("\"clickable\":true") {
+                    if let Some(ti) = obj.find("\"text\":\"") {
+                        let ts = ti + 8;
+                        if let Some(te) = obj[ts..].find('"') {
+                            let t = &obj[ts..ts + te];
+                            if !t.is_empty() { results.push(format!("[TAP] \"{}\"", t)); }
+                        }
+                    }
+                }
+                pos = obj_e;
+            } else { break; }
+        } else { break; }
+    }
+    results.join("\n")
+}
+
 fn expand_vars(s: &KiraState, text: &str) -> String {
     let mut out = text.to_string();
     // Built-in variables
@@ -1875,18 +1964,7 @@ pub fn build_system_prompt(state: &KiraState, persona: &str) -> String {
     );
 
     format!(
-        "{persona}\n\n\
-        DEVICE STATE RIGHT NOW:\n{device}\n\n\
-        RULES (follow these strictly):\n\
-        1. NEVER guess or make up information. Use tools to get real data.\n\
-        2. For battery/wifi/notifications → call get_device_state or the specific tool.\n\
-        3. For weather → call http_get with url=\"https://wttr.in/CITY?format=3\".\n\
-        4. For web questions → call web_search with your query.\n\
-        5. For opening apps → call open_app with the package name.\n\
-        6. To remember something → call add_memory.\n\
-        7. Tools are available as function calls  -  use them freely and proactively.\n\
-        8. Respond in the same language the user writes in.\n\n\
-        Long-term memory:\n{memory}{vars}",
+        "{persona}\n\nDEVICE STATE:\n{device}\n\n\u{2501}\u{2501}\u{2501} CORE RULES \u{2501}\u{2501}\u{2501}\n1. NEVER guess. Use tools to get real data every time.\n2. Respond in the same language the user writes in.\n3. Web: web_search. Weather: http_get(url=https://wttr.in/CITY?format=3).\n4. Remember facts: add_memory.\n\n\u{2501}\u{2501}\u{2501} ANDROID AUTOMATION \u{2501}\u{2501}\u{2501}\nYou have FULL control of this Android device via accessibility + Shizuku shell.\nTools return REAL results from the device. Act on what they report.\n\nAUTOMATION WORKFLOW:\n1. open_app(package=X) - opens app, waits 1.5s, shows you the launch screen.\n2. screen_read() - reads ALL visible text + clickable elements.\n3. screen_tap(text=<exact visible text>) - taps; returns success or NOT FOUND with hint.\n4. To type: screen_tap_and_type(field=<input label>, text=<your text>)\n5. Repeat screen_read + screen_tap until task is done.\n6. Element not found: screen_swipe(x1=540,y1=1200,x2=540,y2=400) to scroll, then screen_read.\n\nCRITICAL RULES:\n- ALWAYS call screen_read BEFORE tapping. You must see the screen first.\n- Use EXACT text from screen_read output in screen_tap calls.\n- TAP FAILED means element not visible - scroll then retry with fresh screen_read.\n- run_shell(cmd=...) gives real adb shell output via Shizuku.\n- After any action that changes screen, call screen_read before next action.\n\nPACKAGE NAMES:\nYouTube=com.google.android.youtube | WhatsApp=com.whatsapp | Chrome=com.android.chrome\nGmail=com.google.android.gm | Maps=com.google.android.apps.maps\nInstagram=com.instagram.android | Settings=com.android.settings\nTelegram=org.telegram.messenger | Spotify=com.spotify.music\nSamsung Notes=com.samsung.android.app.notes | Google Keep=com.google.android.keep\nDiscord=com.discord | Twitter/X=com.twitter.android | TikTok=com.zhiliaoapp.musically\n\nEXAMPLE - Search YouTube for lo-fi:\nopen_app(youtube) -> screen_tap(text=Search) -> screen_type(text=lo-fi) -> screen_tap(text=Search) -> screen_read() -> screen_tap(text=<video title>)\n\nEXAMPLE - Send WhatsApp message:\nopen_app(whatsapp) -> screen_tap_and_type(field=Search, text=John) -> screen_read() -> screen_tap(text=John) -> screen_tap_and_type(field=Message, text=Hey!) -> screen_tap(text=Send)\n\nLong-term memory:\n{memory}{vars}",
         persona = persona,
         device = device_snapshot,
         memory = mem_context,
@@ -2288,36 +2366,31 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         // These are fire-and-forget from the LLM's perspective.
         // Java drains the queue after run_agent() returns.
         "open_app" => {
+            // BLOCKING: launch, wait 1.5s for app to load, return screen content.
             let pkg = params.get("package")
                 .or_else(|| params.get("app"))
                 .or_else(|| params.get("name"))
                 .cloned()
                 .unwrap_or_default();
             if pkg.is_empty() { return "error: package name required".into(); }
-            // Resolve friendly name to package if needed
             let resolved_pkg = app_name_to_pkg(&pkg);
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id:      format!("open_app_{}", now_ms()),
-                cmd:     format!("open_app:{}", resolved_pkg),
-                timeout: 10_000,
-                created: now_ms(),
-            });
-            format!("Opening {}... (launching now)", resolved_pkg)
+            let launch = queue_and_wait_shell(&format!("open_app:{}", resolved_pkg), 8_000);
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            let screen = read_screen_blocking(4_000);
+            format!("OPENED {}: {}
+SCREEN AFTER LAUNCH:
+{}", resolved_pkg, launch,
+                &screen[..screen.len().min(1500)])
         }
         "run_shell" => {
+            // BLOCKING: execute via Shizuku, return real output.
             let cmd = params.get("cmd").cloned().unwrap_or_default();
             if cmd.is_empty() { return "error: cmd required".into(); }
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            let job_id = format!("shell_{}", now_ms());
-            s.pending_shell.push_back(ShellJob {
-                id: job_id.clone(), cmd: cmd.clone(),
-                timeout: params.get("timeout_ms")
-                    .and_then(|t| t.parse::<u64>().ok())
-                    .unwrap_or(15_000),
-                created: now_ms(),
-            });
-            format!("Shell command queued: {}", &cmd[..cmd.len().min(100)])
+            let timeout = params.get("timeout_ms")
+                .and_then(|t| t.parse::<u64>().ok()).unwrap_or(15_000);
+            let result = queue_and_wait_shell(&cmd, timeout);
+            format!("$ {}
+{}", &cmd[..cmd.len().min(120)], result)
         }
         "send_sms" | "send_message" => {
             let to  = params.get("to").or_else(|| params.get("number")).cloned().unwrap_or_default();
@@ -2334,98 +2407,105 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         }
         // ── Session 21: Accessibility tools (dispatched to Java) ──────────
         "screen_read" => {
-            // Return cached screen_nodes text, or queue Java to fetch it
-            let screen_text = {
+            // BLOCKING: get real screen text from accessibility service.
+            let screen_text = read_screen_blocking(6_000);
+            let clickable = {
                 let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-                if s.screen_nodes.is_empty() {
-                    String::new()
-                } else {
-                    // Extract "text":"VALUE" fields from the nodes JSON
-                    let nodes = s.screen_nodes.clone();
-                    let key = r#""text":""#;
-                    let mut texts: Vec<String> = Vec::new();
-                    let mut pos = 0;
-                    while let Some(idx) = nodes[pos..].find(key) {
-                        pos += idx + key.len();
-                        if let Some(end) = nodes[pos..].find('"') {
-                            let t = &nodes[pos..pos + end];
-                            if !t.is_empty() { texts.push(t.to_string()); }
-                            pos += end + 1;
-                        } else { break; }
-                    }
-                    texts.join(" | ")
-                }
+                extract_clickable_from_nodes_json(&s.screen_nodes)
             };
-            if !screen_text.is_empty() {
-                return format!("Screen text: {}", &screen_text[..screen_text.len().min(2000)]);
+            if clickable.is_empty() {
+                format!("SCREEN CONTENT:
+{}", &screen_text[..screen_text.len().min(3000)])
+            } else {
+                format!("SCREEN CONTENT:
+{}
+
+CLICKABLE ELEMENTS:
+{}",
+                    &screen_text[..screen_text.len().min(2000)],
+                    &clickable[..clickable.len().min(800)])
             }
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id:      format!("screen_read_{}", now_ms()),
-                cmd:     "screen_read:".to_string(),
-                timeout: 5_000,
-                created: now_ms(),
-            });
-            "Queued screen read - result will arrive via shell queue".to_string()
         }
         "screen_tap" => {
+            // BLOCKING: execute tap, return real result, settle 500ms.
             let text = params.get("text").cloned().unwrap_or_default();
             let x    = params.get("x").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
             let y    = params.get("y").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
-            let cmd  = if !text.is_empty() {
-                format!("find_and_tap:{}", text)
+            let cmd = if !text.is_empty() { format!("find_and_tap:{}", text) }
+                      else if x != 0 || y != 0 { format!("tap:{},{}", x, y) }
+                      else { return "error: provide text= or x=/y= coordinates".to_string(); };
+            let result = queue_and_wait_shell(&cmd, 6_000);
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if result.contains("not found") || result.contains("error") || result.contains("failed") {
+                format!("TAP FAILED: {} — call screen_read to see current elements", result)
             } else {
-                format!("tap:{},{}", x, y)
-            };
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id: format!("tap_{}", now_ms()), cmd, timeout: 5_000, created: now_ms(),
-            });
-            if !text.is_empty() { format!("Tapping element: {}", text) }
-            else { format!("Tapping ({}, {})", x, y) }
+                format!("TAPPED: {} — {}", if !text.is_empty() { text.as_str() } else { "coordinates" }, result)
+            }
         }
         "screen_swipe" => {
-            let x1 = params.get("x1").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
-            let y1 = params.get("y1").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
-            let x2 = params.get("x2").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
-            let y2 = params.get("y2").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            // BLOCKING: execute swipe, wait for result.
+            let x1  = params.get("x1").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let y1  = params.get("y1").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let x2  = params.get("x2").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let y2  = params.get("y2").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
             let dur = params.get("duration_ms").and_then(|v| v.parse::<i32>().ok()).unwrap_or(300);
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id:      format!("swipe_{}", now_ms()),
-                cmd:     format!("swipe:{},{},{},{},{}", x1, y1, x2, y2, dur),
-                timeout: 5_000,
-                created: now_ms(),
-            });
-            format!("Swiping ({},{}) -> ({},{}) over {}ms", x1, y1, x2, y2, dur)
+            let result = queue_and_wait_shell(&format!("swipe:{},{},{},{},{}", x1, y1, x2, y2, dur), 6_000);
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            format!("SWIPED ({},{}) -> ({},{}): {}", x1, y1, x2, y2, result)
         }
         "screen_type" => {
+            // BLOCKING: type into focused field.
             let text = params.get("text").cloned().unwrap_or_default();
             if text.is_empty() { return "error: text required".into(); }
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id:      format!("type_{}", now_ms()),
-                cmd:     format!("type:{}", text),
-                timeout: 5_000,
-                created: now_ms(),
-            });
-            format!("Typing: {}", &text[..text.len().min(50)])
+            let result = queue_and_wait_shell(&format!("type:{}", text), 5_000);
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            if result.contains("failed") || result.contains("error") || result.is_empty() {
+                format!("TYPE FAILED: {} — use screen_tap_and_type(field=<label>, text=<text>)", result)
+            } else { format!("TYPED "{}" — {}", &text[..text.len().min(50)], result) }
+        }
+        "screen_tap_and_type" => {
+            // Atomic: tap a field then type. Handles focus automatically.
+            let field = params.get("field").cloned().unwrap_or_default();
+            let text  = params.get("text").cloned().unwrap_or_default();
+            if field.is_empty() || text.is_empty() {
+                return "error: field= (visible input label) and text= both required".into();
+            }
+            let tap_result = queue_and_wait_shell(&format!("find_and_tap:{}", field), 5_000);
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            if tap_result.contains("not found") || tap_result.contains("error") {
+                return format!("FIELD NOT FOUND: "{}" — call screen_read to see elements", field);
+            }
+            let type_result = queue_and_wait_shell(&format!("type:{}", text), 5_000);
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            format!("TAPPED "{}" then TYPED "{}" — {}", field, &text[..text.len().min(50)], type_result)
         }
         "screen_back" => {
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id: format!("back_{}", now_ms()), cmd: "back:".to_string(),
-                timeout: 3_000, created: now_ms(),
-            });
-            "Pressed Back".to_string()
+            let r = queue_and_wait_shell("back:", 3_000);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            format!("BACK: {}", r)
         }
         "screen_home" => {
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id: format!("home_{}", now_ms()), cmd: "home:".to_string(),
-                timeout: 3_000, created: now_ms(),
-            });
-            "Pressed Home".to_string()
+            let r = queue_and_wait_shell("home:", 3_000);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            format!("HOME: {}", r)
+        }
+        "screen_recents" => {
+            let r = queue_and_wait_shell("recents:", 3_000);
+            format!("RECENTS: {}", r)
+        }
+        "long_press" => {
+            let x = params.get("x").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            let y = params.get("y").and_then(|v| v.parse::<i32>().ok()).unwrap_or(0);
+            if x == 0 && y == 0 { return "error: x and y required".into(); }
+            let r = queue_and_wait_shell(&format!("long_press:{},{}", x, y), 5_000);
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            format!("LONG PRESS ({},{}): {}", x, y, r)
+        }
+        "wait_ms" => {
+            let ms = params.get("ms").or_else(|| params.get("duration_ms"))
+                .and_then(|v| v.parse::<u64>().ok()).unwrap_or(1000).min(10_000);
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+            format!("Waited {}ms", ms)
         }
         "clipboard_get" => {
             let s = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -2434,14 +2514,8 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
         }
         "clipboard_set" => {
             let text = params.get("text").cloned().unwrap_or_default();
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            s.pending_shell.push_back(ShellJob {
-                id:      format!("clip_{}", now_ms()),
-                cmd:     format!("clipboard_set:{}", text),
-                timeout: 3_000,
-                created: now_ms(),
-            });
-            format!("Clipboard set to: {}", &text[..text.len().min(50)])
+            let r = queue_and_wait_shell(&format!("clipboard_set:{}", text), 3_000);
+            format!("Clipboard set: {}", r)
         }
         // ── Session 22: Plugin system ──────────────────────────────────────
         "plugin_list" => {
@@ -2475,7 +2549,9 @@ pub fn dispatch_tool(name: &str, params: &std::collections::HashMap<String,Strin
                 }
             }
         }
-        _ => format!("Unknown tool: {}. Available: get_battery, get_wifi, get_notifications, get_device_state, get_foreground_app, http_get, web_search, open_app, read_file, write_file, list_files, run_shell, add_memory, search_memory, think, set_variable, get_variable, send_sms", name),
+        _ => format!(
+            "Unknown tool: \'{}\'. Available:\nUI: open_app, screen_read, screen_tap, screen_swipe, screen_type, screen_tap_and_type, screen_back, screen_home, screen_recents, long_press, wait_ms, clipboard_get, clipboard_set\nSHELL: run_shell | NET: http_get, web_search | MEMORY: add_memory, search_memory\nDEVICE: get_battery, get_wifi, get_notifications, get_device_state, get_foreground_app, get_location\nFILES: read_file, write_file, list_files | COMMS: send_sms, list_contacts | VARS: set_variable, get_variable",
+            name),
     }
 }
 
@@ -4067,8 +4143,11 @@ Context: {}",
         stdout: *const c_char,
     ) {
         let (id, out) = (cs(job_id), cs(stdout));
-        let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-        s.shell_results.insert(id, out);
+        {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.shell_results.insert(id, out);
+        }
+        SHELL_READY.1.notify_all();
     }
 
         // ── Session C: AES-256-GCM secret encryption JNI exports ─────────────────
@@ -4683,27 +4762,48 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
             s.acp_bus.purge(sid);
             format!(r#"{{"ok":{},"session_id":"{}"}}"#, exists, esc(sid))
         }
-        // PATCH /acp/sessions/:id  -  apply a SessionPatch
+        // PATCH /acp/sessions/:id  -  apply a SessionPatch (S1-S2: full OpenClaw fields)
         ("PATCH", p) if p.starts_with("/acp/sessions/") => {
-            let sid   = &p["/acp/sessions/".len()..].to_string();
+            let sid   = p["/acp/sessions/".len()..].to_string();
             let patch = crate::acp::SessionPatch::from_json(body);
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let now   = now_ms() as u128;
-            // Ensure session exists (get_or_create needs mut borrow — do it first, drop result)
-            { s.session_store.get_or_create(sid, "api", now); }
-            let mut applied_fields: Vec<String> = Vec::new();
-            if let Some(model) = &patch.model {
-                s.config.model = model.clone();
-                applied_fields.push(format!(r#""model":"{}""#, esc(model)));
-            }
-            if let Some(agent_id) = &patch.agent_id {
-                if let Some(sess) = s.session_store.get_mut(sid) {
-                    sess.agent_id = agent_id.clone();
-                }
-                applied_fields.push(format!(r#""agent_id":"{}""#, esc(agent_id)));
-            }
-            format!(r#"{{"ok":true,"session_id":"{}","applied":{{{}}}}}"#,
-                esc(sid), applied_fields.join(","))
+            s.session_store.get_or_create(&sid, "api", now);
+            if let Some(ref m) = patch.model { if !m.is_empty() { s.config.model = m.clone(); } }
+            s.session_store.patch_session(&sid, &patch)
+        }
+        // POST /sessions/patch  -  OpenClaw-compat body patch (S2)
+        ("POST", "/sessions/patch") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_patch(&mut s.session_store, body)
+        }
+        // POST /sessions/reset  -  reset session transcript (S3)
+        ("POST", "/sessions/reset") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_reset(&mut s.session_store, body)
+        }
+        // POST /sessions/chat  -  push user message into session run queue (S3)
+        ("POST", "/sessions/chat") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_chat(
+                &mut s.session_store, &mut s.acp_bus, body)
+        }
+        // POST /sessions/compact  -  compact a session now (S3)
+        ("POST", "/sessions/compact") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_compact(&mut s.session_store, body)
+        }
+        // GET /sessions/get?key=X  -  get one session (S3)
+        ("GET", "/sessions/get") => {
+            let s   = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let key = crate::gateway::routing::extract_param(path, "key").unwrap_or_default();
+            s.session_store.get_json(&key)
+        }
+        // DELETE /sessions/delete  -  delete session + transcript (S3)
+        ("DELETE", "/sessions/delete") => {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            crate::gateway::routing::handle_sessions_delete(
+                &mut s.session_store, &mut s.acp_bus, body)
         }
         // GET /acp/sessions/:id/transcript  -  get session transcript as JSON
         ("GET", p) if p.starts_with("/acp/sessions/") && p.ends_with("/transcript") => {
@@ -6019,6 +6119,45 @@ You are executing a multi-step task autonomously.
         ("POST", "/shizuku")           => { let installed=body.contains(r#""installed":true"#); let granted=body.contains(r#""permission_granted":true"#); let err=extract_json_str(body,"error").unwrap_or_default(); let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.shizuku.installed=installed; s.shizuku.permission_granted=granted; s.shizuku.error_msg=err; s.shizuku.last_checked_ms=now_ms(); r#"{"ok":true}"#.to_string() }
         ("GET",  "/appstats")          => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); format!(r#"{{"facts":{},"history":{},"shizuku":"{}","accessibility":"{}","model":"{}","provider":"{}","uptime_ms":{},"macros":{},"active_profile":"{}","variables":{}}}"#, s.memory_index.len(),s.context_turns.len(), if s.shizuku.permission_granted{"active \u{2713}"}else if s.shizuku.installed{"no permission"}else{"not running"}, if !s.agent_context.is_empty(){"enabled \u{2713}"}else{"disabled"}, esc(&s.config.model),esc(&s.config.base_url),now_ms().saturating_sub(s.uptime_start),s.macros.len(),esc(&s.active_profile),s.variables.len()) }
         ("GET",  "/providers")         => { let s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let items: Vec<String>=s.providers.iter().map(|p| format!(r#"{{"id":"{}","name":"{}","base_url":"{}","model":"{}","active":{}}}"#, esc(&p.id),esc(&p.name),esc(&p.base_url),esc(&p.model),p.id==s.active_provider)).collect(); format!("[{}]", items.join(",")) }
+        // S4: Full model provider catalog
+        ("GET", "/catalog/providers") => {
+            crate::ai::models::ProviderCatalog::to_json()
+        }
+        ("GET", "/catalog/providers/find") => {
+            let id = crate::gateway::routing::extract_param(path, "id").unwrap_or_default();
+            match crate::ai::models::ProviderCatalog::find(&id) {
+                Some(p) => p.to_json_safe(),
+                None    => format!(r#"{{"error":"not_found","id":"{}"}}"#, esc(&id)),
+            }
+        }
+        // GET /ai/failover  -  failover state from provider catalog (S5)
+        ("GET", "/ai/failover") => {
+            let now = now_ms() as u128;
+            let providers = crate::ai::models::ProviderCatalog::all_entries();
+            let fs = crate::ai::failover::FailoverState::new(providers);
+            fs.to_json(now)
+        }
+        // GET /catalog/streaming-formats  -  which providers use which format (S5)
+        ("GET", "/catalog/streaming-formats") => {
+            let entries = crate::ai::models::ProviderCatalog::all_entries();
+            let items: Vec<String> = entries.iter().map(|p| {
+                let fmt = if p.provider.is_anthropic_native() { "anthropic" }
+                          else if p.provider.is_google_native() { "google" }
+                          else { "openai" };
+                format!(r#"{{"id":"{}","format":"{}"}}"#,
+                    esc(&p.id), fmt)
+            }).collect();
+            format!("[{}]", items.join(","))
+        }
+        // GET /v1/models  -  OpenAI-compatible model list (S4)
+        ("GET", "/v1/models") => {
+            let entries = crate::ai::models::ProviderCatalog::all_entries();
+            let items: Vec<String> = entries.iter().map(|p| {
+                format!(r#"{{"id":"{}","object":"model","owned_by":"{}","created":0}}"#,
+                    esc(&p.model_id), esc(p.provider.as_str()))
+            }).collect();
+            format!(r#"{{"object":"list","data":[{}]}}"#, items.join(","))
+        }
         ("POST", "/providers/set")     => { let id=extract_json_str(body,"id").unwrap_or_default(); if !id.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); let found=s.providers.iter().find(|p| p.id==id).cloned(); if let Some(p)=found { s.active_provider=id.clone(); s.config.base_url=p.base_url; s.config.model=p.model; } } format!(r#"{{"ok":true,"active":"{}"}}"#, id) }
         ("POST", "/providers/custom")  => { let url=extract_json_str(body,"url").unwrap_or_default(); let model=extract_json_str(body,"model").unwrap_or_default(); if !url.is_empty() { let mut s=STATE.lock().unwrap_or_else(|e| e.into_inner()); s.setup.custom_url=url.clone(); s.setup.selected_provider_id="custom".to_string(); s.config.base_url=url.clone(); if !model.is_empty() { s.config.model=model.clone(); } if let Some(p)=s.providers.iter_mut().find(|p| p.id=="custom") { p.base_url=url; if !model.is_empty() { p.model=model; } } s.active_provider="custom".to_string(); } r#"{"ok":true}"#.to_string() }
 
@@ -7332,10 +7471,14 @@ fn build_kira_tools_schema(allowlist: &[String]) -> String {
         // ── Session 21: Accessibility / screen control ────────────────────
         ("screen_read",    "Read all visible text on the current screen",  &[]),
         ("screen_tap",     "Tap a UI element by visible text or coordinates", &[("text","Visible text of element to tap",false),("x","X coordinate",false),("y","Y coordinate",false)]),
-        ("screen_swipe",   "Swipe gesture on screen",                      &[("x1","Start X",true),("y1","Start Y",true),("x2","End X",true),("y2","End Y",true),("duration_ms","Duration ms",false)]),
-        ("screen_type",    "Type text into the focused input field",        &[("text","Text to type",true)]),
+        ("screen_swipe",   "Swipe. Scroll DOWN: x1=540,y1=1200,x2=540,y2=400", &[("x1","Start X",true),("y1","Start Y",true),("x2","End X",true),("y2","End Y",true),("duration_ms","Duration ms",false)]),
+        ("screen_type",    "Type into focused field. Use screen_tap_and_type when possible.", &[("text","Text to type",true)]),
+        ("screen_tap_and_type","Tap input field then type (atomic, handles focus)",  &[("field","Visible label of input to tap",true),("text","Text to type",true)]),
         ("screen_back",    "Press the Back button",                         &[]),
         ("screen_home",    "Press the Home button",                         &[]),
+        ("screen_recents", "Open recent apps switcher",                     &[]),
+        ("long_press",     "Long-press at x,y (for context menus)",        &[("x","X coordinate",true),("y","Y coordinate",true)]),
+        ("wait_ms",        "Wait N ms. Use after open_app if app is slow.", &[("ms","Milliseconds max 10000",true)]),
         ("clipboard_get",  "Get the current clipboard text",                &[]),
         ("clipboard_set",  "Set clipboard text",                            &[("text","Text to copy",true)]),
         // ── Session 22: Plugin / extension tools ──────────────────────────
@@ -7369,9 +7512,10 @@ fn build_kira_tools_schema_filtered(allowlist: &[String], denylist: &[String]) -
         "get_device_state","get_foreground_app","run_shell","read_file","write_file",
         "list_files","set_variable","get_variable","web_search","http_get","think",
         "open_app","send_sms","get_location","list_contacts","list_calendar","take_photo",
-        // Session 21: accessibility
+        // Session 21: accessibility + new tools
         "screen_read","screen_tap","screen_swipe","screen_type",
-        "screen_back","screen_home","clipboard_get","clipboard_set",
+        "screen_tap_and_type","screen_back","screen_home","screen_recents",
+        "long_press","wait_ms","clipboard_get","clipboard_set",
         // Session 22: plugins
         "plugin_call","plugin_list",
     ];

@@ -74,18 +74,38 @@ public class KiraAI {
                 while (step < MAX_STEPS) {
                     // Step 2: Java calls LLM via OkHttp (SSE streaming)
                     if (cb != null) cb.onThinkingStep("Step " + (step + 1) + ": calling LLM...");
-                    String rawResponse = callLlmStreaming(requestJson, cb);
-                    if (rawResponse == null) return;
+                    ParsedLlmResponse parsed = callLlmStreaming(requestJson, cb);
+                    if (parsed == null) return;
 
                     // Drain Java shell jobs queued during this step
                     drainShellQueue(cb);
 
-                    // Step 3: Rust parses tool_calls, dispatches pure-Rust tools, builds follow-up
+                    // Step 3: if no tool calls, we have the final reply directly in Java.
+                    // No need to pass through Rust's extract_llm_content which is fragile
+                    // with org.json's serialization format.
+                    if (parsed.toolCalls == null || parsed.toolCalls.length() == 0) {
+                        // No tool calls — content IS the final reply
+                        String reply = parsed.content.trim();
+                        if (reply.isEmpty()) {
+                            // Content empty after SSE parse — try extracting from rawJson directly
+                            reply = extractContentFromRaw(parsed.rawJson);
+                        }
+                        if (reply.isEmpty()) {
+                            Log.w(TAG, "LLM returned empty content with no tool calls");
+                            reply = "(No response)";
+                        }
+                        // Push to Rust history so context is maintained
+                        try { RustBridge.pushContextTurn("assistant", reply); } catch (Throwable ignored) {}
+                        if (cb != null) cb.onReply(reply);
+                        return;
+                    }
+
+                    // Has tool calls — let Rust dispatch them and build the follow-up request
                     String processResult;
                     try {
-                        processResult = RustBridge.processLlmReply(rawResponse, step);
+                        processResult = RustBridge.processLlmReply(parsed.rawJson, step);
                     } catch (UnsatisfiedLinkError e) {
-                        processResult = legacyProcessReply(rawResponse);
+                        processResult = legacyProcessReply(parsed.rawJson);
                     }
 
                     if (processResult == null || processResult.isEmpty()) {
@@ -94,10 +114,6 @@ public class KiraAI {
                     }
 
                     JSONObject result = new JSONObject(processResult);
-                    if (result == null) {
-                        if (cb != null) cb.onError("Null result from Rust");
-                        return;
-                    }
                     if (result.has("error")) {
                         if (cb != null) cb.onError(result.optString("error", "Unknown error"));
                         return;
@@ -123,8 +139,14 @@ public class KiraAI {
                     drainShellQueue(cb);
 
                     if (done) {
-                        String reply = result.optString("reply", "Done.");
-                        if (reply == null || reply.trim().isEmpty()) reply = "Done.";
+                        // Rust decided done=true after tool dispatch (rare — e.g. max steps in Rust)
+                        String reply = result.optString("reply", "");
+                        if (reply.trim().isEmpty()) reply = parsed.content.trim();
+                        if (reply.trim().isEmpty()) reply = extractContentFromRaw(parsed.rawJson);
+                        if (reply.trim().isEmpty()) {
+                            Log.w(TAG, "Rust done=true but reply is empty");
+                            reply = "(No response)";
+                        }
                         saveMemoryIfNeeded(result);
                         if (cb != null) cb.onReply(reply);
                         return;
@@ -137,8 +159,7 @@ public class KiraAI {
                         return;
                     }
                     // If messages_json contains pending_shell_result: placeholders,
-                    // drain Java shell queue first (runs http_get via OkHttp),
-                    // then resolve placeholders with actual results
+                    // drain Java shell queue first, then resolve placeholders
                     if (nextReqJson.contains("pending_shell_result:")) {
                         drainShellQueue(cb);
                         try {
@@ -161,9 +182,23 @@ public class KiraAI {
         }, "KiraAI-Chat").start();
     }
 
+    // ── Parsed LLM response container ────────────────────────────────────────
+    // Holds the fully parsed SSE result so we never pass raw JSON through Rust
+    // for content extraction (Rust's extract_llm_content is fragile with org.json output).
+    private static class ParsedLlmResponse {
+        final String content;        // assembled text content (never null, may be "")
+        final JSONArray toolCalls;   // null if no tool calls
+        final String rawJson;        // fakeResp JSON for RustBridge.processLlmReply
+        ParsedLlmResponse(String content, JSONArray toolCalls, String rawJson) {
+            this.content   = content;
+            this.toolCalls = toolCalls;
+            this.rawJson   = rawJson;
+        }
+    }
+
     // ── SSE Streaming LLM call (Java OkHttp — no Rust TLS) ───────────────────
 
-    private String callLlmStreaming(String requestJson, Callback cb) {
+    private ParsedLlmResponse callLlmStreaming(String requestJson, Callback cb) {
         try {
             JSONObject req  = new JSONObject(requestJson);
             String apiKey   = req.optString("api_key", "");
@@ -243,6 +278,7 @@ public class KiraAI {
             // Parse SSE stream
             StringBuilder fullContent  = new StringBuilder();
             StringBuilder toolCallsRaw = new StringBuilder();
+            StringBuilder rawLines     = new StringBuilder(); // collect ALL lines for non-SSE fallback
             boolean hasToolCalls = false;
             String  lastPartial  = "";
             long    lastPartialMs = 0;
@@ -253,9 +289,10 @@ public class KiraAI {
                 return null;
             }
             BufferedReader reader = new BufferedReader(
-                new InputStreamReader(respBody.byteStream()));
+                new InputStreamReader(respBody.byteStream(), java.nio.charset.StandardCharsets.UTF_8));
             String line;
             while ((line = reader.readLine()) != null) {
+                rawLines.append(line).append("\n");
                 if (!line.startsWith("data: ")) continue;
                 String data = line.substring(6).trim();
                 if ("[DONE]".equals(data)) break;
@@ -263,26 +300,25 @@ public class KiraAI {
                     JSONObject chunk   = new JSONObject(data);
                     JSONArray  choices = chunk.optJSONArray("choices");
                     if (choices == null || choices.length() == 0) continue;
-                    if (choices.length() == 0) continue;
                     JSONObject choice0 = choices.optJSONObject(0);
                     if (choice0 == null) continue;
                     JSONObject delta = choice0.optJSONObject("delta");
                     if (delta == null) continue;
 
-                    String contentDelta = delta.optString("content", "");
-                    if (!contentDelta.isEmpty()) {
-                        fullContent.append(contentDelta);
-                        long now = System.currentTimeMillis();
-                        if (cb != null && now - lastPartialMs > 250) {
-                            String partial = fullContent.toString();
-                            if (!partial.equals(lastPartial)) {
-                                cb.onPartial(partial);
-                                lastPartial  = partial;
-                                lastPartialMs = now;
-                                // Emit to ACP bus so Rust-side listeners get the delta
-                                try {
-                                    RustBridge.emitTextDelta("default", contentDelta);
-                                } catch (Throwable ignored) {}
+                    // Use isNull() check — optString returns the STRING "null" for JSON null values
+                    if (!delta.isNull("content")) {
+                        String contentDelta = delta.optString("content", "");
+                        if (!contentDelta.isEmpty()) {
+                            fullContent.append(contentDelta);
+                            long now = System.currentTimeMillis();
+                            if (cb != null && now - lastPartialMs > 250) {
+                                String partial = fullContent.toString();
+                                if (!partial.equals(lastPartial)) {
+                                    cb.onPartial(partial);
+                                    lastPartial   = partial;
+                                    lastPartialMs = now;
+                                    try { RustBridge.emitTextDelta("default", contentDelta); } catch (Throwable ignored) {}
+                                }
                             }
                         }
                     }
@@ -297,32 +333,69 @@ public class KiraAI {
             }
             reader.close();
 
-            // Reconstruct non-streaming response for Rust to parse
             String finalContent = fullContent.toString();
-            JSONObject fakeResp    = new JSONObject();
-            JSONArray  fakeChoices = new JSONArray();
-            JSONObject fakeChoice  = new JSONObject();
-            JSONObject fakeMessage = new JSONObject();
-            fakeMessage.put("role", "assistant");
-            fakeMessage.put("content", finalContent);
-            if (hasToolCalls && toolCallsRaw.length() > 0) {
-                // Build tool_calls array from accumulated SSE deltas
-                JSONArray toolCallsArray = buildToolCallsFromSse(toolCallsRaw.toString());
-                if (toolCallsArray.length() > 0) {
-                    fakeMessage.put("tool_calls", toolCallsArray);
-                }
-            }
-            fakeChoice.put("message", fakeMessage);
-            fakeChoice.put("finish_reason", hasToolCalls ? "tool_calls" : "stop");
-            fakeChoices.put(fakeChoice);
-            fakeResp.put("choices", fakeChoices);
 
-            return fakeResp.toString();
+            // ── Non-SSE fallback ──────────────────────────────────────────────
+            // If we got zero content AND zero tool_calls, the server may have returned
+            // a plain JSON response (no "data: " prefix) instead of an SSE stream.
+            // Parse it directly so we never return an empty result.
+            if (finalContent.isEmpty() && !hasToolCalls) {
+                String raw = rawLines.toString().trim();
+                try {
+                    // Try parsing the whole body as one JSON object
+                    JSONObject plainResp = new JSONObject(raw);
+                    JSONArray plainChoices = plainResp.optJSONArray("choices");
+                    if (plainChoices != null && plainChoices.length() > 0) {
+                        JSONObject c0  = plainChoices.optJSONObject(0);
+                        JSONObject msg = c0 != null ? c0.optJSONObject("message") : null;
+                        if (msg != null) {
+                            if (!msg.isNull("content")) finalContent = msg.optString("content", "");
+                            JSONArray tcs = msg.optJSONArray("tool_calls");
+                            if (tcs != null && tcs.length() > 0) {
+                                // Return a ParsedLlmResponse with full tool_calls from plain JSON
+                                String fakeRaw = buildFakeResp(finalContent, tcs);
+                                return new ParsedLlmResponse(finalContent, tcs, fakeRaw);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // Build fakeResp for Rust's processLlmReply (tool dispatch, history push)
+            JSONArray toolCallsArray = null;
+            if (hasToolCalls && toolCallsRaw.length() > 0) {
+                toolCallsArray = buildToolCallsFromSse(toolCallsRaw.toString());
+                if (toolCallsArray.length() == 0) toolCallsArray = null;
+            }
+            String fakeRespJson = buildFakeResp(finalContent, toolCallsArray);
+            return new ParsedLlmResponse(finalContent, toolCallsArray, fakeRespJson);
 
         } catch (Exception e) {
             Log.e(TAG, "callLlmStreaming", e);
             if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "HTTP error");
             return null;
+        }
+    }
+
+    /** Build a fake non-streaming response JSON for Rust's processLlmReply. */
+    private String buildFakeResp(String content, JSONArray toolCalls) {
+        try {
+            JSONObject fakeMessage = new JSONObject();
+            fakeMessage.put("role", "assistant");
+            fakeMessage.put("content", content);
+            if (toolCalls != null && toolCalls.length() > 0) {
+                fakeMessage.put("tool_calls", toolCalls);
+            }
+            JSONObject fakeChoice = new JSONObject();
+            fakeChoice.put("message", fakeMessage);
+            fakeChoice.put("finish_reason", (toolCalls != null && toolCalls.length() > 0) ? "tool_calls" : "stop");
+            JSONArray fakeChoices = new JSONArray();
+            fakeChoices.put(fakeChoice);
+            JSONObject fakeResp = new JSONObject();
+            fakeResp.put("choices", fakeChoices);
+            return fakeResp.toString();
+        } catch (Exception e) {
+            return "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"" + content.replace("\"","\\\"") + "\"},\"finish_reason\":\"stop\"}]}";
         }
     }
 
@@ -478,6 +551,8 @@ public class KiraAI {
                     String toolName = cmd.contains(":") ? cmd.substring(0, cmd.indexOf(':')) : cmd;
                     cb.onTool(toolName, res.length() > 120 ? res.substring(0, 120) + "..." : res);
                 }
+                // Small gap prevents back-to-back gestures colliding
+                try { Thread.sleep(50); } catch (InterruptedException ignored) {}
             } catch (Throwable e) {
                 Log.w(TAG, "drainShellQueue: " + e.getMessage());
                 break;
@@ -490,22 +565,26 @@ public class KiraAI {
             if (cmd.startsWith("open_app:")) {
                 String pkg = cmd.substring(9).trim();
                 android.content.Intent intent = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
+                if (intent == null) {
+                    try {
+                        String resolved = RustBridge.appNameToPkg(pkg);
+                        if (!resolved.equals(pkg))
+                            intent = ctx.getPackageManager().getLaunchIntentForPackage(resolved);
+                        if (intent != null) pkg = resolved;
+                    } catch (Throwable ignored) {}
+                }
                 if (intent != null) {
                     intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
                     ctx.startActivity(intent);
-                    return "Opened " + pkg;
-                }
-                try {
-                    String resolved = RustBridge.appNameToPkg(pkg);
-                    if (!resolved.equals(pkg)) {
-                        intent = ctx.getPackageManager().getLaunchIntentForPackage(resolved);
-                        if (intent != null) {
-                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                            ctx.startActivity(intent);
-                            return "Opened " + resolved;
-                        }
+                    // Wait for app to load before next tool call
+                    try { Thread.sleep(2500); } catch (Exception ignored) {}
+                    // Return fresh screen snapshot so LLM knows what's visible
+                    KiraAccessibilityService acc2 = KiraAccessibilityService.instance;
+                    if (acc2 != null) {
+                        return "Opened " + pkg + ". Screen: " + acc2.getScreenSnapshot();
                     }
-                } catch (Throwable ignored) {}
+                    return "Opened " + pkg + " (wait complete)";
+                }
                 return "App not found: " + pkg;
             }
             if (cmd.startsWith("http_get:")) {
@@ -540,13 +619,27 @@ public class KiraAI {
                         try {
                             int x = Integer.parseInt(parts[0].trim());
                             int y = Integer.parseInt(parts[1].trim());
-                            return acc.tap(x, y) ? "Tapped (" + x + "," + y + ")" : "Tap failed";
+                            String tapRes = acc.tapBlocking(x, y);
+                            if (tapRes.startsWith("ok")) {
+                                Thread.sleep(1000);
+                                return tapRes + " | After: " + acc.getScreenSnapshot();
+                            }
+                            return tapRes;
                         } catch (Exception ignored) {}
                     }
                 }
                 if (cmd.startsWith("find_and_tap:")) {
                     String text = cmd.substring(13);
-                    return acc.tapText(text);
+                    String result = acc.tapText(text);
+                    // If tap succeeded, wait for screen to settle then return fresh snapshot
+                    try {
+                        org.json.JSONObject r = new org.json.JSONObject(result);
+                        if (r.optBoolean("ok", false)) {
+                            Thread.sleep(1200); // wait for UI transition
+                            return result + " | After: " + acc.getScreenSnapshot();
+                        }
+                    } catch (Exception ignored) {}
+                    return result;
                 }
                 if (cmd.startsWith("swipe:")) {
                     String[] p = cmd.substring(6).split(",");
@@ -555,13 +648,27 @@ public class KiraAI {
                             int x1 = Integer.parseInt(p[0].trim()), y1 = Integer.parseInt(p[1].trim());
                             int x2 = Integer.parseInt(p[2].trim()), y2 = Integer.parseInt(p[3].trim());
                             int dur = p.length >= 5 ? Integer.parseInt(p[4].trim()) : 300;
-                            return acc.swipe(x1, y1, x2, y2, dur) ? "Swiped" : "Swipe failed";
+                            String swRes = acc.swipeBlocking(x1, y1, x2, y2, dur);
+                            Thread.sleep(600); // settle after scroll
+                            return swRes + " | After: " + acc.getScreenSnapshot();
                         } catch (Exception ignored) {}
                     }
                 }
                 if (cmd.startsWith("type:")) {
                     String text = cmd.substring(5);
-                    return acc.typeText(text) ? "Typed: " + text : "Type failed (no focused field)";
+                    boolean typed = acc.typeText(text);
+                    if (!typed) {
+                        // No focused field - try tapping center of screen first
+                        android.view.Display d = ((android.view.WindowManager)
+                            ctx.getSystemService(android.content.Context.WINDOW_SERVICE)).getDefaultDisplay();
+                        android.graphics.Point size = new android.graphics.Point();
+                        d.getSize(size);
+                        acc.tapBlocking(size.x/2, size.y/2);
+                        Thread.sleep(500);
+                        typed = acc.typeText(text);
+                    }
+                    Thread.sleep(300);
+                    return typed ? "Typed: " + text : "Type failed - no text input field focused";
                 }
                 if (cmd.equals("back:")) {
                     acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
@@ -571,8 +678,25 @@ public class KiraAI {
                     acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
                     return "Home pressed";
                 }
+                if (cmd.equals("recents:")) {
+                    acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS);
+                    return "Recents opened";
+                }
+                if (cmd.startsWith("long_press:")) {
+                    String[] parts = cmd.substring(11).split(",");
+                    if (parts.length >= 2) {
+                        try {
+                            int x = Integer.parseInt(parts[0].trim());
+                            int y = Integer.parseInt(parts[1].trim());
+                            String lr = acc.tapBlocking(x, y); // uses 800ms duration
+                            Thread.sleep(400);
+                            return "Long-pressed (" + x + "," + y + "): " + lr + " | After: " + acc.getScreenSnapshot();
+                        } catch (Exception ignored) {}
+                    }
+                }
                 if (cmd.equals("screen_read:")) {
-                    return acc.getScreenText();
+                    // Always return fresh live snapshot, never stale cache
+                    return acc.getScreenSnapshot();
                 }
                 if (cmd.startsWith("clipboard_set:")) {
                     String text = cmd.substring(14);
@@ -594,6 +718,31 @@ public class KiraAI {
         }
     }
 
+    /**
+     * Last-resort content extraction from rawJson (the fake resp we build from SSE).
+     * Used when fullContent is empty but the LLM did respond — e.g. when a provider
+     * sends a plain JSON body instead of SSE, or the delta.content field was null-typed
+     * but choices[0].message.content is present.
+     */
+    private static String extractContentFromRaw(String rawJson) {
+        if (rawJson == null || rawJson.isEmpty()) return "";
+        try {
+            JSONObject j = new JSONObject(rawJson);
+            JSONArray choices = j.optJSONArray("choices");
+            if (choices != null && choices.length() > 0) {
+                JSONObject c0 = choices.optJSONObject(0);
+                if (c0 != null) {
+                    JSONObject msg = c0.optJSONObject("message");
+                    if (msg != null && !msg.isNull("content")) {
+                        String c = msg.optString("content", "").trim();
+                        if (!c.isEmpty()) return c;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
     private String legacyProcessReply(String raw) {
         try {
             JSONObject j = new JSONObject(raw);
@@ -602,13 +751,16 @@ public class KiraAI {
                 JSONObject c0 = choices.optJSONObject(0);
                 JSONObject msg = c0 != null ? c0.optJSONObject("message") : null;
                 if (msg != null) {
-                    String content = msg.optString("content", "Done.").trim();
+                    String content = "";
+                    if (!msg.isNull("content")) {
+                        content = msg.optString("content", "").trim();
+                    }
                     return new JSONObject().put("done", true).put("reply",
-                        content.isEmpty() ? "Done." : content).put("tools_used", "[]").toString();
+                        content.isEmpty() ? "(No response)" : content).put("tools_used", "[]").toString();
                 }
             }
         } catch (Exception ignored) {}
-        return "{\"done\":true,\"reply\":\"Done.\",\"tools_used\":\"[]\"}";
+        return "{\"done\":true,\"reply\":\"(No response)\",\"tools_used\":\"[]\"}";
     }
 
     /** Safely patch a string field in a JSON object without re-serializing the whole object. */

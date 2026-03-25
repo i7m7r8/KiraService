@@ -584,7 +584,7 @@ mod jni_bridge {
             if !has_tools || step_n >= max_steps {
                 // No tools or step limit hit  -  final reply
                 let final_reply = if reply.trim().is_empty() {
-                    if content.trim().is_empty() { "Done.".to_string() }
+                    if content.trim().is_empty() { "(No response)".to_string() }
                     else { content.trim().to_string() }
                 } else { reply };
                 {

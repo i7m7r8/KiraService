@@ -485,7 +485,7 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
         rs.thinking_log = vec![format!("Starting: {}", &cfg.user_message[..cfg.user_message.len().min(80)])];
     }
 
-    let mut loop_detector = LoopDetector::new(6);
+    let mut loop_detector = LoopDetector::new(10);
     let mut tools_used: Vec<String> = Vec::new();
     let mut total_tokens_in:  u32 = 0;
     let mut total_tokens_out: u32 = 0;
@@ -592,9 +592,11 @@ pub fn run_agent(cfg: AgentRunConfig) -> AiRunResult {
 
         let mut loop_detected = false;
         for tc in &json_tool_calls {
-            // Loop detection
+            // Loop detection  -  exempt UI observation tools (screen_read is always valid to repeat)
             let ph = hash_params(&tc.params);
-            if loop_detector.is_loop(&tc.name, ph) {
+            let exempt_from_loop = matches!(tc.name.as_str(),
+                "screen_read" | "get_device_state" | "get_foreground_app" | "think");
+            if !exempt_from_loop && loop_detector.is_loop(&tc.name, ph) {
                 loop_detected = true;
                 // Push a tool result telling the AI to stop repeating
                 turns.push(Turn::tool_result(

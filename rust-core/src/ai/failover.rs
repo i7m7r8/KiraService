@@ -5,7 +5,7 @@
 // Mirrors OpenClaw: src/agents/auth-profiles/usage.ts
 //                   src/agents/auth-profiles/order.ts
 //
-// S5: FailoverState — pick(), mark_failure(), mark_success(), next_cooldown_ms()
+// S5: FailoverState  -  pick(), mark_failure(), mark_success(), next_cooldown_ms()
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 use std::collections::HashMap;
@@ -15,17 +15,17 @@ use super::models::ProviderConfig;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FailureKind {
-    /// 401 / invalid API key — permanent cooldown for this session
+    /// 401 / invalid API key  -  permanent cooldown for this session
     AuthPermanent,
-    /// 402 / billing limit — long cooldown (hours)
+    /// 402 / billing limit  -  long cooldown (hours)
     Billing,
-    /// 429 / rate limited — medium cooldown (minutes, exponential)
+    /// 429 / rate limited  -  medium cooldown (minutes, exponential)
     RateLimit,
-    /// 500-503 / server overloaded — short cooldown (seconds)
+    /// 500-503 / server overloaded  -  short cooldown (seconds)
     Overloaded,
-    /// Network timeout — short cooldown
+    /// Network timeout  -  short cooldown
     Timeout,
-    /// Model not found / deprecated — permanent disable
+    /// Model not found / deprecated  -  permanent disable
     ModelNotFound,
     /// Any other error
     Unknown,
@@ -130,7 +130,7 @@ fn cooldown_ms_for_error(error_count: u32, kind: &FailureKind) -> u128 {
     }
 }
 
-// ── FailoverState — the main struct ──────────────────────────────────────────
+// ── FailoverState  -  the main struct ──────────────────────────────────────────
 
 /// Manages provider selection + failure tracking across multiple profiles.
 /// Mirrors OpenClaw: resolveAuthProfileOrder() + markAuthProfileCooldown()
@@ -173,7 +173,7 @@ impl FailoverState {
             .collect();
 
         if available.is_empty() {
-            // All in cooldown — return the one whose cooldown expires soonest
+            // All in cooldown  -  return the one whose cooldown expires soonest
             return self.profiles.iter()
                 .filter(|p| p.enabled)
                 .filter(|p| !self.stats.get(&p.id).map(|s| s.disabled).unwrap_or(false))
@@ -225,7 +225,7 @@ impl FailoverState {
 
     // ── Mark success ──────────────────────────────────────────────────────────
 
-    /// Record a successful call — reset error count and cooldown.
+    /// Record a successful call  -  reset error count and cooldown.
     pub fn mark_success(&mut self, profile_id: &str, now_ms: u128) {
         let stats = self.stats.entry(profile_id.to_string()).or_default();
         stats.error_count    = 0;
@@ -240,12 +240,12 @@ impl FailoverState {
     }
 
     // ── Expire stale cooldowns ────────────────────────────────────────────────
-    /// Mirrors: clearExpiredCooldowns() — resets profiles whose cooldown window passed.
+    /// Mirrors: clearExpiredCooldowns()  -  resets profiles whose cooldown window passed.
     /// Call this at the start of each pick cycle.
     pub fn clear_expired_cooldowns(&mut self, now_ms: u128) {
         for stats in self.stats.values_mut() {
             if !stats.disabled && stats.cooldown_until > 0 && stats.cooldown_until <= now_ms {
-                // Cooldown window passed — reset error count for a fresh start
+                // Cooldown window passed  -  reset error count for a fresh start
                 stats.error_count    = 0;
                 stats.cooldown_until = 0;
             }

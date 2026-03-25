@@ -417,7 +417,7 @@ impl StreamParser {
                 let frag = &body[obj_start..=obj_end];
                 let id   = str_field(frag, "id").unwrap_or_else(uuid_short);
                 let name = str_field(frag, "name").unwrap_or_default();
-                // input is an object — serialise it back
+                // input is an object  -  serialise it back
                 let args = extract_object_field(frag, "input").unwrap_or_else(|| "{}".to_string());
                 chunks.push(StreamChunk::ToolDone { id, name, args_json: args });
                 pos = obj_end + 1;

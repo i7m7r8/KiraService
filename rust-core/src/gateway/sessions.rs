@@ -33,6 +33,46 @@ pub struct Session {
     pub compacted:   bool,
     /// Summary of compacted turns, prepended as context
     pub compact_summary: String,
+
+    // ── OpenClaw SessionsPatch fields (S1) ───────────────────────────────
+    /// Human-readable label for this session (e.g. "work", "research")
+    pub label:               Option<String>,
+    /// Override model for this session (None = use global default)
+    pub model_override:      Option<String>,
+    /// Thinking level: off | minimal | low | medium | high | xhigh
+    pub thinking_level:      Option<String>,
+    /// Fast mode: skip tool calls, reply immediately
+    pub fast_mode:           Option<bool>,
+    /// Verbose level: off | on | full
+    pub verbose_level:       Option<String>,
+    /// Reasoning level: off | on | stream
+    pub reasoning_level:     Option<String>,
+    /// How to report token usage: off | tokens | full
+    pub response_usage:      Option<String>,
+    /// Elevated mode (owner-only capabilities)
+    pub elevated_level:      Option<String>,
+    /// Exec host: which node runs shell commands
+    pub exec_host:           Option<String>,
+    /// Exec security: strict | default | relaxed
+    pub exec_security:       Option<String>,
+    /// Exec ask: always | auto | never
+    pub exec_ask:            Option<String>,
+    /// Exec node: which Android node to use for device tools
+    pub exec_node:           Option<String>,
+    /// Session that spawned this one (sub-agent parent)
+    pub spawned_by:          Option<String>,
+    /// Working directory for spawned sub-agents
+    pub spawned_workspace:   Option<String>,
+    /// Spawn depth (0 = top-level, max 5)
+    pub spawn_depth:         u8,
+    /// Sub-agent role: orchestrator | leaf
+    pub subagent_role:       Option<String>,
+    /// Sub-agent control scope: children | none
+    pub subagent_ctrl_scope: Option<String>,
+    /// Send policy: allow | deny
+    pub send_policy:         Option<String>,
+    /// Group activation: mention | always
+    pub group_activation:    Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -69,51 +109,153 @@ impl Session {
             token_estimate:  0,
             compacted:       false,
             compact_summary: String::new(),
+            // OpenClaw SessionsPatch defaults  -  all None/false/0
+            label:               None,
+            model_override:      None,
+            thinking_level:      None,
+            fast_mode:           None,
+            verbose_level:       None,
+            reasoning_level:     None,
+            response_usage:      None,
+            elevated_level:      None,
+            exec_host:           None,
+            exec_security:       None,
+            exec_ask:            None,
+            exec_node:           None,
+            spawned_by:          None,
+            spawned_workspace:   None,
+            spawn_depth:         0,
+            subagent_role:       None,
+            subagent_ctrl_scope: None,
+            send_policy:         None,
+            group_activation:    None,
         }
     }
 
     pub fn to_json(&self) -> String {
+        let os = |v: &Option<String>| -> String {
+            match v { Some(s) => format!("\"{}\"", esc(s)), None => "null".into() }
+        };
+        let ob = |v: &Option<bool>| -> String {
+            match v { Some(b) => b.to_string(), None => "null".into() }
+        };
         format!(
-            r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"created_ms":{},"last_msg_ms":{},"agent":"{}","mode":"{}","token_estimate":{},"compacted":{},"has_summary":{}}}"#,
+            r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"created_ms":{},"last_msg_ms":{},"agent":"{}","mode":"{}","token_estimate":{},"compacted":{},"has_summary":{},"label":{},"model":{},"thinking_level":{},"fast_mode":{},"verbose_level":{},"reasoning_level":{},"response_usage":{},"elevated_level":{},"exec_host":{},"exec_security":{},"exec_ask":{},"exec_node":{},"spawned_by":{},"spawned_workspace":{},"spawn_depth":{},"subagent_role":{},"subagent_ctrl_scope":{},"send_policy":{},"group_activation":{}}}"#,
             esc(&self.id), esc(&self.channel), self.turns, self.tokens,
             self.created_ms, self.last_msg_ms, esc(&self.agent_id),
-            self.mode.as_str(), self.token_estimate, self.compacted,
-            !self.compact_summary.is_empty()
+            self.mode.as_str(), self.token_estimate,
+            self.compacted, !self.compact_summary.is_empty(),
+            os(&self.label),            os(&self.model_override),
+            os(&self.thinking_level),   ob(&self.fast_mode),
+            os(&self.verbose_level),    os(&self.reasoning_level),
+            os(&self.response_usage),   os(&self.elevated_level),
+            os(&self.exec_host),        os(&self.exec_security),
+            os(&self.exec_ask),         os(&self.exec_node),
+            os(&self.spawned_by),       os(&self.spawned_workspace),
+            self.spawn_depth,
+            os(&self.subagent_role),    os(&self.subagent_ctrl_scope),
+            os(&self.send_policy),      os(&self.group_activation),
         )
     }
 
-    /// Serialise to a JSON line for the session index file
+    /// Serialise to a JSON line for the session index file (S2: persists patch fields)
     fn to_index_json(&self) -> String {
+        let os = |v: &Option<String>| -> String {
+            match v { Some(s) => format!("\"{}\"", esc(s)), None => "null".into() }
+        };
+        let ob = |v: &Option<bool>| -> String {
+            match v { Some(b) => b.to_string(), None => "null".into() }
+        };
         format!(
-            r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"created_ms":{},"last_msg_ms":{},"agent":"{}","mode":"{}","compacted":{},"compact_summary":"{}"}}"#,
+            r#"{{"id":"{}","channel":"{}","turns":{},"tokens":{},"created_ms":{},"last_msg_ms":{},"agent":"{}","mode":"{}","compacted":{},"compact_summary":"{}","label":{},"model":{},"thinking_level":{},"fast_mode":{},"verbose_level":{},"reasoning_level":{},"response_usage":{},"elevated_level":{},"exec_host":{},"exec_security":{},"exec_ask":{},"exec_node":{},"spawned_by":{},"spawned_workspace":{},"spawn_depth":{},"subagent_role":{},"subagent_ctrl_scope":{},"send_policy":{},"group_activation":{}}}"#,
             esc(&self.id), esc(&self.channel), self.turns, self.tokens,
             self.created_ms, self.last_msg_ms, esc(&self.agent_id),
-            self.mode.as_str(), self.compacted,
-            esc(&self.compact_summary)
+            self.mode.as_str(), self.compacted, esc(&self.compact_summary),
+            os(&self.label),            os(&self.model_override),
+            os(&self.thinking_level),   ob(&self.fast_mode),
+            os(&self.verbose_level),    os(&self.reasoning_level),
+            os(&self.response_usage),   os(&self.elevated_level),
+            os(&self.exec_host),        os(&self.exec_security),
+            os(&self.exec_ask),         os(&self.exec_node),
+            os(&self.spawned_by),       os(&self.spawned_workspace),
+            self.spawn_depth,
+            os(&self.subagent_role),    os(&self.subagent_ctrl_scope),
+            os(&self.send_policy),      os(&self.group_activation),
         )
     }
 
     fn from_index_json(json: &str) -> Option<Self> {
-        let id      = extract_str(json, "id")?;
-        let channel = extract_str(json, "channel").unwrap_or_default();
-        let turns   = extract_u64(json, "turns") as u32;
-        let tokens  = extract_u64(json, "tokens");
-        let created = extract_u64(json, "created_ms") as u128;
-        let last    = extract_u64(json, "last_msg_ms") as u128;
-        let agent   = extract_str(json, "agent").unwrap_or_else(|| "default".to_string());
-        let mode    = SessionMode::from_str(&extract_str(json, "mode").unwrap_or_default());
+        let id        = extract_str(json, "id")?;
+        let channel   = extract_str(json, "channel").unwrap_or_default();
+        let turns     = extract_u64(json, "turns") as u32;
+        let tokens    = extract_u64(json, "tokens");
+        let created   = extract_u64(json, "created_ms") as u128;
+        let last      = extract_u64(json, "last_msg_ms") as u128;
+        let agent     = extract_str(json, "agent").unwrap_or_else(|| "default".to_string());
+        let mode      = SessionMode::from_str(&extract_str(json, "mode").unwrap_or_default());
         let compacted = json.contains(r#""compacted":true"#);
-        let summary = extract_str(json, "compact_summary").unwrap_or_default();
+        let summary   = extract_str(json, "compact_summary").unwrap_or_default();
         Some(Session {
             id, channel, turns, tokens,
-            created_ms:      created,
-            last_msg_ms:     last,
-            agent_id:        agent,
+            created_ms:       created,
+            last_msg_ms:      last,
+            agent_id:         agent,
             mode,
-            token_estimate:  tokens,
+            token_estimate:   tokens,
             compacted,
-            compact_summary: summary,
+            compact_summary:  summary,
+            label:               extract_opt_str(json, "label"),
+            model_override:      extract_opt_str(json, "model"),
+            thinking_level:      extract_opt_str(json, "thinking_level"),
+            fast_mode:           extract_opt_bool(json, "fast_mode"),
+            verbose_level:       extract_opt_str(json, "verbose_level"),
+            reasoning_level:     extract_opt_str(json, "reasoning_level"),
+            response_usage:      extract_opt_str(json, "response_usage"),
+            elevated_level:      extract_opt_str(json, "elevated_level"),
+            exec_host:           extract_opt_str(json, "exec_host"),
+            exec_security:       extract_opt_str(json, "exec_security"),
+            exec_ask:            extract_opt_str(json, "exec_ask"),
+            exec_node:           extract_opt_str(json, "exec_node"),
+            spawned_by:          extract_opt_str(json, "spawned_by"),
+            spawned_workspace:   extract_opt_str(json, "spawned_workspace"),
+            spawn_depth:         extract_u64(json, "spawn_depth") as u8,
+            subagent_role:       extract_opt_str(json, "subagent_role"),
+            subagent_ctrl_scope: extract_opt_str(json, "subagent_ctrl_scope"),
+            send_policy:         extract_opt_str(json, "send_policy"),
+            group_activation:    extract_opt_str(json, "group_activation"),
         })
+    }
+
+    // ── S2: Apply a SessionPatch (from ACP wire protocol) ──────────────────
+    /// Apply an OpenClaw-compatible SessionPatch to this session.
+    /// Some(value) = set field. None in patch = leave unchanged (true optional).
+    /// The patch uses "" or "null" string to mean "clear the field".
+    pub fn apply_patch(&mut self, patch: &crate::acp::SessionPatch) {
+        fn set(field: &mut Option<String>, v: &Option<String>) {
+            if let Some(s) = v {
+                if s.is_empty() { *field = None; }
+                else { *field = Some(s.clone()); }
+            }
+        }
+        set(&mut self.label,               &patch.label);
+        set(&mut self.model_override,      &patch.model);
+        set(&mut self.thinking_level,      &patch.thinking_level);
+        set(&mut self.verbose_level,       &patch.verbose_level);
+        set(&mut self.reasoning_level,     &patch.reasoning_level);
+        set(&mut self.response_usage,      &patch.response_usage);
+        set(&mut self.elevated_level,      &patch.elevated_level);
+        set(&mut self.exec_host,           &patch.exec_host);
+        set(&mut self.exec_security,       &patch.exec_security);
+        set(&mut self.exec_ask,            &patch.exec_ask);
+        set(&mut self.exec_node,           &patch.exec_node);
+        set(&mut self.spawned_by,          &patch.spawned_by);
+        set(&mut self.spawned_workspace,   &patch.spawned_workspace);
+        set(&mut self.subagent_role,       &patch.subagent_role);
+        set(&mut self.subagent_ctrl_scope, &patch.subagent_control_scope);
+        set(&mut self.send_policy,         &patch.send_policy);
+        set(&mut self.group_activation,    &patch.group_activation);
+        if let Some(fm) = patch.fast_mode   { self.fast_mode   = Some(fm); }
+        if let Some(d)  = patch.spawn_depth { self.spawn_depth = (d as u8).min(5); }
     }
 }
 
@@ -424,6 +566,49 @@ impl SessionStore {
         let items: Vec<String> = self.list().iter().map(|s| s.to_json()).collect();
         format!("[{}]", items.join(","))
     }
+
+    // ── S2: Patch + Persist ───────────────────────────────────────────────
+
+    /// Apply a SessionPatch to a session and immediately persist the index.
+    /// Returns the updated session JSON on success, error JSON on failure.
+    pub fn patch_session(&mut self, session_id: &str, patch: &crate::acp::SessionPatch) -> String {
+        match self.sessions.get_mut(session_id) {
+            Some(sess) => {
+                sess.apply_patch(patch);
+                let json = sess.to_json();
+                self.save_index();
+                json
+            }
+            None => format!(r#"{{"error":"session_not_found","id":"{}"}}"#,
+                esc(session_id)),
+        }
+    }
+
+    /// Reset a session: clear transcript and compaction state.
+    /// Mirrors OpenClaw: sessions.reset
+    pub fn reset_session(&mut self, session_id: &str, now_ms: u128) -> bool {
+        if let Some(sess) = self.sessions.get_mut(session_id) {
+            sess.turns           = 0;
+            sess.tokens          = 0;
+            sess.token_estimate  = 0;
+            sess.compacted       = false;
+            sess.compact_summary = String::new();
+            sess.last_msg_ms     = now_ms;
+        }
+        if let Some(buf) = self.transcripts.get_mut(session_id) {
+            buf.clear();
+        }
+        self.save_index();
+        self.sessions.contains_key(session_id)
+    }
+
+    /// Return session JSON by id or null-object if not found.
+    pub fn get_json(&self, session_id: &str) -> String {
+        match self.sessions.get(session_id) {
+            Some(s) => s.to_json(),
+            None    => "null".to_string(),
+        }
+    }
 }
 
 impl Default for SessionStore {
@@ -524,6 +709,26 @@ fn extract_u64(json: &str, key: &str) -> u64 {
     let end    = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
     rest[..end].parse().unwrap_or(0)
 }
+/// Extract an optional string field: returns None if key missing OR value is JSON null.
+fn extract_opt_str(json: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{}\":", key);
+    let start  = json.find(&needle)? + needle.len();
+    let rest   = json[start..].trim_start();
+    if rest.starts_with("null") { return None; }
+    extract_str(json, key)
+}
+
+/// Extract an optional bool field: returns None if key missing OR value is JSON null.
+fn extract_opt_bool(json: &str, key: &str) -> Option<bool> {
+    let needle = format!("\"{}\":", key);
+    let start  = json.find(&needle)? + needle.len();
+    let rest   = json[start..].trim_start();
+    if rest.starts_with("null")  { return None; }
+    if rest.starts_with("true")  { return Some(true); }
+    if rest.starts_with("false") { return Some(false); }
+    None
+}
+
 
 /// Split a JSON array string into individual element strings (shallow, bracket-aware).
 fn split_json_array(json: &str) -> Vec<String> {

@@ -163,36 +163,204 @@ public class KiraAccessibilityService extends AccessibilityService {
         for (int i = 0; i < node.getChildCount(); i++) collectNodes(node.getChild(i), arr, depth+1);
     }
 
-    public boolean tap(int x, int y) {
-        GestureDescription.Builder b = new GestureDescription.Builder();
-        Path p = new Path(); p.moveTo(x, y);
-        b.addStroke(new GestureDescription.StrokeDescription(p, 0, 50));
-        return dispatchGesture(b.build(), null, null);
+    // ── Rewritten UI automation: blocking gestures + structured results ─────
+    // ── UI Automation methods (rewritten for reliability) ────────────────────
+
+    /**
+     * Tap at coordinates. Uses a callback-based approach with a latch to confirm completion.
+     * Returns: "ok:x,y" or "failed:x,y"
+     */
+    public String tapBlocking(int x, int y) {
+        try {
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            final boolean[] success = {false};
+            GestureDescription.Builder b = new GestureDescription.Builder();
+            android.graphics.Path p = new android.graphics.Path(); p.moveTo(x, y);
+            b.addStroke(new GestureDescription.StrokeDescription(p, 0, 100));
+            dispatchGesture(b.build(), new GestureResultCallback() {
+                @Override public void onCompleted(GestureDescription g) { success[0] = true; latch.countDown(); }
+                @Override public void onCancelled(GestureDescription g) { latch.countDown(); }
+            }, null);
+            latch.await(2, java.util.concurrent.TimeUnit.SECONDS);
+            return success[0] ? "ok:" + x + "," + y : "failed:" + x + "," + y;
+        } catch (Exception e) { return "error:" + e.getMessage(); }
     }
+
+    public boolean tap(int x, int y) { return tapBlocking(x, y).startsWith("ok"); }
 
     public boolean longPress(int x, int y) {
         GestureDescription.Builder b = new GestureDescription.Builder();
-        Path p = new Path(); p.moveTo(x, y);
+        android.graphics.Path p = new android.graphics.Path(); p.moveTo(x, y);
         b.addStroke(new GestureDescription.StrokeDescription(p, 0, 800));
         return dispatchGesture(b.build(), null, null);
     }
 
-    public boolean swipe(int x1, int y1, int x2, int y2, int duration) {
-        GestureDescription.Builder b = new GestureDescription.Builder();
-        Path p = new Path(); p.moveTo(x1, y1); p.lineTo(x2, y2);
-        b.addStroke(new GestureDescription.StrokeDescription(p, 0, duration));
-        return dispatchGesture(b.build(), null, null);
+    /**
+     * Swipe with blocking gesture callback.
+     */
+    public String swipeBlocking(int x1, int y1, int x2, int y2, int duration) {
+        try {
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            final boolean[] success = {false};
+            GestureDescription.Builder b = new GestureDescription.Builder();
+            android.graphics.Path p = new android.graphics.Path();
+            p.moveTo(x1, y1); p.lineTo(x2, y2);
+            b.addStroke(new GestureDescription.StrokeDescription(p, 0, Math.max(duration, 100)));
+            dispatchGesture(b.build(), new GestureResultCallback() {
+                @Override public void onCompleted(GestureDescription g) { success[0] = true; latch.countDown(); }
+                @Override public void onCancelled(GestureDescription g) { latch.countDown(); }
+            }, null);
+            latch.await(3, java.util.concurrent.TimeUnit.SECONDS);
+            return success[0] ? "ok:swiped" : "failed:swipe cancelled";
+        } catch (Exception e) { return "error:" + e.getMessage(); }
     }
 
+    public boolean swipe(int x1, int y1, int x2, int y2, int duration) {
+        return swipeBlocking(x1, y1, x2, y2, duration).startsWith("ok");
+    }
+
+    /**
+     * Type text into focused field. Returns structured result.
+     */
     public boolean typeText(String text) {
         AccessibilityNodeInfo focus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
-        if (focus == null) return false;
+        if (focus == null) {
+            // Try clicking the center of screen to establish focus first
+            return false;
+        }
         Bundle args = new Bundle();
         args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
         return focus.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args);
     }
 
-    public String tapText(String text) {
+    /**
+     * Tap element by text label — with rich structured return value.
+     * Returns JSON: {"ok":true,"tapped":"Search YouTube","at":"540,120"}
+     * or:           {"ok":false,"error":"not found","visible":["Home","Shorts","Library"]}
+     */
+    public String tapText(String query) {
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) return "{\"ok\":false,\"error\":\"no window — accessibility service not connected\"}";
+            org.json.JSONArray nodes = new org.json.JSONArray();
+            collectNodes(root, nodes, 0);
+
+            // Build full visible-text list for LLM context on miss
+            java.util.List<String> visible = new java.util.ArrayList<>();
+            org.json.JSONObject bestMatch = null;
+            int bestScore = 0;
+
+            for (int i = 0; i < nodes.length(); i++) {
+                org.json.JSONObject n = nodes.getJSONObject(i);
+                String t = n.optString("text", "").trim();
+                if (t.isEmpty()) continue;
+                visible.add(t);
+
+                // Score match: exact > starts-with > contains (case-insensitive)
+                String tl = t.toLowerCase(), ql = query.toLowerCase();
+                int score = 0;
+                if (tl.equals(ql))             score = 3;
+                else if (tl.startsWith(ql))    score = 2;
+                else if (tl.contains(ql))      score = 1;
+
+                if (score > bestScore) { bestScore = score; bestMatch = n; }
+            }
+
+            if (bestMatch == null) {
+                // Return visible elements so LLM can pick the right one
+                org.json.JSONArray visArr = new org.json.JSONArray();
+                for (int i = 0; i < Math.min(visible.size(), 20); i++) visArr.put(visible.get(i));
+                return new org.json.JSONObject()
+                    .put("ok", false)
+                    .put("error", "\"" + query + "\" not found on screen")
+                    .put("visible_elements", visArr)
+                    .toString();
+            }
+
+            String[] parts = bestMatch.getString("bounds").split(",");
+            int cx = (Integer.parseInt(parts[0]) + Integer.parseInt(parts[2])) / 2;
+            int cy = (Integer.parseInt(parts[1]) + Integer.parseInt(parts[3])) / 2;
+            String tapResult = tapBlocking(cx, cy);
+
+            return new org.json.JSONObject()
+                .put("ok", tapResult.startsWith("ok"))
+                .put("tapped", bestMatch.optString("text"))
+                .put("at", cx + "," + cy)
+                .put("gesture", tapResult)
+                .toString();
+
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}";
+        }
+    }
+
+    /**
+     * Get fresh screen text — ALWAYS reads live from accessibility tree, never stale cache.
+     * Returns structured JSON with element list + plain text summary.
+     */
+    public String getScreenSnapshot() {
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) return "{\"ok\":false,\"error\":\"no window\",\"texts\":[]}";
+            org.json.JSONArray nodes = new org.json.JSONArray();
+            collectNodes(root, nodes, 0);
+            // Push fresh nodes to Rust STATE
+            RustBridge.updateScreenNodes(nodes.toString());
+            // Build plain text for LLM
+            java.util.List<String> texts = new java.util.ArrayList<>();
+            for (int i = 0; i < nodes.length(); i++) {
+                String t = nodes.getJSONObject(i).optString("text", "").trim();
+                if (!t.isEmpty()) texts.add(t);
+            }
+            // Build clickable list for LLM
+            java.util.List<String> clickable = new java.util.ArrayList<>();
+            for (int i = 0; i < nodes.length(); i++) {
+                org.json.JSONObject n = nodes.getJSONObject(i);
+                if (n.optBoolean("clickable", false)) {
+                    String t = n.optString("text", "").trim();
+                    if (!t.isEmpty()) clickable.add(t);
+                }
+            }
+            org.json.JSONObject result = new org.json.JSONObject();
+            result.put("ok", true);
+            result.put("element_count", nodes.length());
+            result.put("texts", new org.json.JSONArray(texts));
+            result.put("clickable", new org.json.JSONArray(clickable));
+            result.put("pkg", getCurrentPkg());
+            return result.toString();
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"" + e.getMessage() + "\",\"texts\":[]}";
+        }
+    }
+
+    /** For backwards compat */
+    public String getScreenText() {
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) return "";
+            java.util.List<String> texts = new java.util.ArrayList<>();
+            collectText(root, texts, 0);
+            return String.join(" | ", texts);
+        } catch (Exception e) { return ""; }
+    }
+
+    private String getCurrentPkg() {
+        try {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) return "unknown";
+            // Package is in root node info
+            return root.getPackageName() != null ? root.getPackageName().toString() : "unknown";
+        } catch (Exception e) { return "unknown"; }
+    }
+
+    /** Wait for screen to settle after an action (e.g. after open_app) */
+    public void waitForScreenChange(int timeoutMs) {
+        try { Thread.sleep(Math.min(timeoutMs, 3000)); } catch (Exception ignored) {}
+    }
+
+
+    // (legacy compat)
+    public String tapText_legacy_unused(String text) {
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root == null) return "no window";

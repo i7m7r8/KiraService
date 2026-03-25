@@ -158,7 +158,7 @@ pub fn https_post(
         .map_err(|e| format!("invalid hostname {}: {:?}", host, e))?;
     let mut conn = rustls::ClientConnection::new(config, server_name)
         .map_err(|e| format!("tls init: {}", e))?;
-    let mut tls_stream = rustls::Stream::new(&mut conn, stream);
+    let mut tls_stream = rustls::Stream::new(&mut conn, &mut stream);
 
     // Write HTTP/1.1 request
     let request = format!(
@@ -220,9 +220,9 @@ pub fn https_get(host: &str, port: u16, path: &str, timeout_s: u64) -> Result<St
         .map_err(|e| format!("hostname: {:?}", e))?;
     let mut conn   = rustls::ClientConnection::new(config, server_name)
         .map_err(|e| format!("tls: {}", e))?;
-    let mut stream = rustls::Stream::new(&mut conn,
-        std::net::TcpStream::connect(format!("{}:{}", host, port))
-            .map_err(|e| e.to_string())?);
+    let mut tcp = std::net::TcpStream::connect(format!("{}:{}", host, port))
+        .map_err(|e| e.to_string())?;
+    let mut stream = rustls::Stream::new(&mut conn, &mut tcp);
 
     let request = format!(
         "GET {} HTTP/1.1

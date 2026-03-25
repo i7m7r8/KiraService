@@ -146,7 +146,7 @@ pub fn https_post(
 
     // Establish TCP connection
     let addr   = format!("{}:{}", host, port);
-    let stream = std::net::TcpStream::connect(&addr)
+    let mut stream = std::net::TcpStream::connect(&addr)
         .map_err(|e| format!("tcp connect {}: {}", addr, e))?;
     stream.set_read_timeout(Some(std::time::Duration::from_secs(timeout_s)))
         .map_err(|e| e.to_string())?;

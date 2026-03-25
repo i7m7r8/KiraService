@@ -1365,7 +1365,7 @@ fn queue_and_wait_shell(cmd: &str, timeout_ms: u64) -> String {
             timeout: timeout_ms, created: now_ms(),
         });
     }
-    let deadline = now_ms() + timeout_ms;
+    let deadline = now_ms() + timeout_ms as u128;
     let (lock, cvar) = &*SHELL_READY;
     loop {
         {
@@ -1377,7 +1377,7 @@ fn queue_and_wait_shell(cmd: &str, timeout_ms: u64) -> String {
         let remaining = deadline.saturating_sub(now_ms());
         if remaining == 0 { return format!("(timeout after {}ms for: {})", timeout_ms, &cmd[..cmd.len().min(40)]); }
         let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
-        let _ = cvar.wait_timeout(guard, std::time::Duration::from_millis(remaining.min(50)));
+        let _ = cvar.wait_timeout(guard, std::time::Duration::from_millis(remaining.min(50) as u64));
     }
 }
 
@@ -4785,8 +4785,10 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         // POST /sessions/chat  -  push user message into session run queue (S3)
         ("POST", "/sessions/chat") => {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            crate::gateway::routing::handle_sessions_chat(
-                &mut s.session_store, &mut s.acp_bus, body)
+            let store = &mut s.session_store as *mut _;
+            let bus   = &mut s.acp_bus       as *mut _;
+            // SAFETY: session_store and acp_bus are distinct fields; no aliasing.
+            unsafe { crate::gateway::routing::handle_sessions_chat(&mut *store, &mut *bus, body) }
         }
         // POST /sessions/compact  -  compact a session now (S3)
         ("POST", "/sessions/compact") => {
@@ -4802,8 +4804,10 @@ fn route_http(method: &str, path: &str, body: &str) -> String {
         // DELETE /sessions/delete  -  delete session + transcript (S3)
         ("DELETE", "/sessions/delete") => {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            crate::gateway::routing::handle_sessions_delete(
-                &mut s.session_store, &mut s.acp_bus, body)
+            let store = &mut s.session_store as *mut _;
+            let bus   = &mut s.acp_bus       as *mut _;
+            // SAFETY: session_store and acp_bus are distinct fields; no aliasing.
+            unsafe { crate::gateway::routing::handle_sessions_delete(&mut *store, &mut *bus, body) }
         }
         // GET /acp/sessions/:id/transcript  -  get session transcript as JSON
         ("GET", p) if p.starts_with("/acp/sessions/") && p.ends_with("/transcript") => {

@@ -219,7 +219,7 @@ pub fn handle_sessions_chat(
     // We store a pending run marker in the ACP bus as a Command event.
     bus.emit(crate::acp::AcpEvent::Error {
         session: key.clone(),
-        code:    crate::acp::ErrorCode::Processing,
+        code:    crate::acp::ErrorCode::InternalError,
         message: format!("run_queued:{}", esc(&content)),
     });
 

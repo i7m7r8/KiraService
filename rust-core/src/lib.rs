@@ -24,6 +24,7 @@ pub mod skills;
 pub mod gateway;
 pub mod tools;
 pub mod automation;
+pub mod utils;
 
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 
@@ -2461,7 +2462,7 @@ CLICKABLE ELEMENTS:
             std::thread::sleep(std::time::Duration::from_millis(200));
             if result.contains("failed") || result.contains("error") || result.is_empty() {
                 format!("TYPE FAILED: {} — use screen_tap_and_type(field=<label>, text=<text>)", result)
-            } else { format!("TYPED "{}" — {}", &text[..text.len().min(50)], result) }
+            } else { format!("TYPED \"{}\" - {}", &text[..text.len().min(50)], result) }
         }
         "screen_tap_and_type" => {
             // Atomic: tap a field then type. Handles focus automatically.
@@ -2473,11 +2474,11 @@ CLICKABLE ELEMENTS:
             let tap_result = queue_and_wait_shell(&format!("find_and_tap:{}", field), 5_000);
             std::thread::sleep(std::time::Duration::from_millis(400));
             if tap_result.contains("not found") || tap_result.contains("error") {
-                return format!("FIELD NOT FOUND: "{}" — call screen_read to see elements", field);
+                return format!("FIELD NOT FOUND: \"{}\" - call screen_read to see elements", field);
             }
             let type_result = queue_and_wait_shell(&format!("type:{}", text), 5_000);
             std::thread::sleep(std::time::Duration::from_millis(200));
-            format!("TAPPED "{}" then TYPED "{}" — {}", field, &text[..text.len().min(50)], type_result)
+            format!("TAPPED \"{}\" then TYPED \"{}\" - {}", field, &text[..text.len().min(50)], type_result)
         }
         "screen_back" => {
             let r = queue_and_wait_shell("back:", 3_000);

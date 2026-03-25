@@ -1,4 +1,5 @@
-fn now_ms() -> u128 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() }
+use std::time::{SystemTime, UNIX_EPOCH};
+pub fn now_ms() -> u128 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() }
 fn gen_id()  -> String { format!("k{}", now_ms()) }
 fn estimate_tokens(s: &str) -> u32 { (s.len()/4).max(1) as u32 }
 fn esc(s: &str) -> String { s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\r', "") }

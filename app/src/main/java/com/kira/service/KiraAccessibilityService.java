@@ -333,17 +333,6 @@ public class KiraAccessibilityService extends AccessibilityService {
         }
     }
 
-    /** For backwards compat */
-    public String getScreenText() {
-        try {
-            AccessibilityNodeInfo root = getRootInActiveWindow();
-            if (root == null) return "";
-            java.util.List<String> texts = new java.util.ArrayList<>();
-            collectText(root, texts, 0);
-            return String.join(" | ", texts);
-        } catch (Exception e) { return ""; }
-    }
-
     private String getCurrentPkg() {
         try {
             AccessibilityNodeInfo root = getRootInActiveWindow();
